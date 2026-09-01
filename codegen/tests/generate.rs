@@ -95,7 +95,7 @@ fn interface_from_protocol() {
             FrozenUnit::Function {
                 docstring: String::new(),
                 name: "get_user".to_string(),
-                synchronous: true,
+                parameters: vec![],
                 arguments: vec![FrozenArgument {
                     name: "id".to_string(),
                     kind: KindValue::Primitive(Primitive::S32(None)),
@@ -108,7 +108,7 @@ fn interface_from_protocol() {
             FrozenUnit::Function {
                 docstring: String::new(),
                 name: "ping".to_string(),
-                synchronous: true,
+                parameters: vec![],
                 arguments: vec![],
                 _return: None,
                 throws: vec![],

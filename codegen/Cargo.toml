@@ -7,7 +7,7 @@ edition = "2021"
 # Consumed by git rev (see ComlineProject/docs → Design → Runtime & generation
 # repository structure — no crates.io publishing at this stage). Local
 # iteration: add a `[patch]` onto a sibling checkout.
-comline-codegen = { git = "https://github.com/ComlineProject/generation", rev = "4f29f4fce4e2e0b3775e4d687a7188112eaf58e3" }
-comline-core = { git = "https://github.com/ComlineProject/core", rev = "aa84d970d3295df59cc3e620bdb71bf96382f97b" }
+comline-codegen = { git = "https://github.com/ComlineProject/generation", rev = "1f8c5e290eba72a578860ebb6dc33453a2f0726b" }
+comline-core = { git = "https://github.com/ComlineProject/core", rev = "47ac5f10a36b587d14d1b9672fba65d8f3712962" }
 
 eyre = "0.6.8"
