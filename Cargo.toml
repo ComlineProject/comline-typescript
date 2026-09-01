@@ -1,0 +1,10 @@
+[workspace]
+resolver = "2"
+members = [
+    "codegen",   # comline-codegen-typescript — the TypeScript `code` generator
+]
+# Room for `libgen/`, `runtime/`, `std-extra/`, `conformance/` as they land.
+# See ComlineProject/docs → Design → Runtime & generation repository structure.
+
+[profile.release]
+opt-level = 2

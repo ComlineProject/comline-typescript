@@ -1,0 +1,13 @@
+[package]
+name = "comline-codegen-typescript"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Consumed by git rev (see ComlineProject/docs → Design → Runtime & generation
+# repository structure — no crates.io publishing at this stage). Local
+# iteration: add a `[patch]` onto a sibling checkout.
+comline-codegen = { git = "https://github.com/ComlineProject/generation", rev = "4f29f4fce4e2e0b3775e4d687a7188112eaf58e3" }
+comline-core = { git = "https://github.com/ComlineProject/core", rev = "aa84d970d3295df59cc3e620bdb71bf96382f97b" }
+
+eyre = "0.6.8"
