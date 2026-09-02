@@ -1,8 +1,11 @@
-//! TypeScript code generator. `code` mode only: `export interface` per struct /
+//! TypeScript code generator. Per schema: `export interface` per struct /
 //! `error` (+ a `<Name>Error` throwable), `export enum` (string values) per
 //! enum, and per `protocol` the full RPC shape against `@comline/runtime` — an
 //! `IR_HASH`, params interfaces, a provider interface, a `<Proto>Dispatcher`, a
-//! `<Proto>Client`, and a `serve<Proto>` helper. `lib` mode is not implemented.
+//! `<Proto>Client`, and a `serve<Proto>` helper.
+//!
+//! `code` mode emits bare `<namespace>.ts` files; `lib` mode wraps them in an
+//! npm package (`package.json` + `tsconfig.json` + `src/index.ts` barrel).
 //! See `design/generation.md`.
 
 mod generator;

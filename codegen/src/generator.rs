@@ -1,4 +1,4 @@
-//! TypeScript `code`-mode generation: frozen IR -> `.ts` source.
+//! TypeScript generation: frozen IR -> `.ts` source.
 //!
 //! Per schema file:
 //! - `struct`   -> `export interface`
@@ -11,7 +11,9 @@
 //!   `<Proto>Dispatcher` (`implements Dispatch`), a `<Proto>Client`, and a
 //!   `serve<Proto>` helper. Framing follows `@framing` / the package default.
 //!
-//! `lib` mode (an npm package) is not built yet. See design/generation.md.
+//! `code` mode emits bare `<namespace>.ts`; `lib` mode adds a `package.json`
+//! (declaring `@comline/runtime`), a `tsconfig.json`, and a `src/index.ts`
+//! barrel. See design/generation.md.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -22,22 +24,126 @@ use comline_core::schema::ir::frozen::unit::FrozenUnit;
 
 use eyre::{bail, Result};
 
-use comline_codegen::{GenRequest, GeneratedFile, Mode};
+use comline_codegen::{GenRequest, GeneratedFile, Mode, PackageMeta};
+
+/// The npm package generated RPC code imports from. Not published yet — a
+/// generated `lib` package declares this range and expects it resolvable
+/// (`npm link`, a local registry, or a future publish). See
+/// `ComlineProject/comline-typescript/runtime`.
+const RUNTIME_PACKAGE: &str = "@comline/runtime";
+const RUNTIME_VERSION: &str = "^0.1.0";
 
 pub fn generate_typescript(req: &GenRequest) -> Result<Vec<GeneratedFile>> {
-    if req.mode == Mode::Lib {
-        bail!("typescript lib mode is not implemented yet (de-rot G2)");
-    }
-
     let default_framing = req.default_framing.as_deref();
-    Ok(req
-        .schemas
-        .iter()
-        .map(|(namespace, units)| GeneratedFile {
-            path: PathBuf::from(format!("{namespace}.ts")),
-            contents: schema_source(units, default_framing),
-        })
-        .collect())
+
+    match req.mode {
+        Mode::Code => Ok(req
+            .schemas
+            .iter()
+            .map(|(namespace, units)| GeneratedFile {
+                path: PathBuf::from(format!("{namespace}.ts")),
+                contents: schema_source(units, default_framing),
+            })
+            .collect()),
+
+        Mode::Lib => {
+            require_flat_namespaces(req.schemas)?;
+
+            let has_protocol = req
+                .schemas
+                .iter()
+                .any(|(_, units)| units.iter().any(|u| matches!(u, FrozenUnit::Protocol { .. })));
+
+            let mut files = vec![
+                GeneratedFile {
+                    path: PathBuf::from("package.json"),
+                    contents: package_json(&req.package, has_protocol),
+                },
+                GeneratedFile {
+                    path: PathBuf::from("tsconfig.json"),
+                    contents: TSCONFIG.to_string(),
+                },
+                GeneratedFile {
+                    path: PathBuf::from("src/index.ts"),
+                    contents: index_ts(req.schemas),
+                },
+            ];
+            for (namespace, units) in req.schemas {
+                files.push(GeneratedFile {
+                    path: PathBuf::from(format!("src/{namespace}.ts")),
+                    contents: schema_source(units, default_framing),
+                });
+            }
+            Ok(files)
+        }
+    }
+}
+
+/// `lib` mode emits a flat `export * from "./<ns>.js"` list; a `/`-joined
+/// namespace would need a nested `src/` tree — a follow-up, shared with the
+/// Rust generator.
+fn require_flat_namespaces(schemas: &[(String, Vec<FrozenUnit>)]) -> Result<()> {
+    for (namespace, _) in schemas {
+        if namespace.contains('/') {
+            bail!(
+                "typescript lib mode does not support nested namespaces yet \
+                 (namespace `{namespace}`)"
+            );
+        }
+    }
+    Ok(())
+}
+
+const TSCONFIG: &str = "{\n\
+    \x20 \"compilerOptions\": {\n\
+    \x20   \"target\": \"ES2022\",\n\
+    \x20   \"module\": \"NodeNext\",\n\
+    \x20   \"moduleResolution\": \"NodeNext\",\n\
+    \x20   \"outDir\": \"dist\",\n\
+    \x20   \"rootDir\": \"src\",\n\
+    \x20   \"declaration\": true,\n\
+    \x20   \"strict\": true,\n\
+    \x20   \"skipLibCheck\": true\n\
+    \x20 },\n\
+    \x20 \"include\": [\"src/**/*.ts\"]\n\
+    }\n";
+
+fn package_json(pkg: &PackageMeta, has_protocol: bool) -> String {
+    let name = pkg.name.to_lowercase();
+    let dep = if has_protocol {
+        format!("\n  \"dependencies\": {{\n    \"{RUNTIME_PACKAGE}\": \"{RUNTIME_VERSION}\"\n  }},")
+    } else {
+        String::new()
+    };
+    format!(
+        "{{\n\
+        \x20 \"name\": \"{name}\",\n\
+        \x20 \"version\": \"{}\",\n\
+        \x20 \"type\": \"module\",\n\
+        \x20 \"exports\": {{\n\
+        \x20   \".\": {{\n\
+        \x20     \"types\": \"./dist/index.d.ts\",\n\
+        \x20     \"import\": \"./dist/index.js\"\n\
+        \x20   }}\n\
+        \x20 }},\n\
+        \x20 \"files\": [\"dist\", \"src\"],\n\
+        \x20 \"scripts\": {{\n\
+        \x20   \"build\": \"tsc\"\n\
+        \x20 }},{dep}\n\
+        \x20 \"devDependencies\": {{\n\
+        \x20   \"typescript\": \"^5.6.0\"\n\
+        \x20 }}\n\
+        }}\n",
+        pkg.version
+    )
+}
+
+fn index_ts(schemas: &[(String, Vec<FrozenUnit>)]) -> String {
+    let mut s = String::from("// Generated by Comline\n\n");
+    for (namespace, _) in schemas {
+        s.push_str(&format!("export * from \"./{namespace}.js\";\n"));
+    }
+    s
 }
 
 fn schema_source(units: &[FrozenUnit], default_framing: Option<&str>) -> String {
