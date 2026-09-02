@@ -8,6 +8,7 @@ fn code_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenRequest<'_> {
         mode: Mode::Code,
         schemas,
         package: PackageMeta { name: "test".into(), version: "0.1.0".into() },
+        default_framing: None,
     }
 }
 
@@ -16,6 +17,7 @@ fn lib_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenRequest<'_> {
         mode: Mode::Lib,
         schemas,
         package: PackageMeta { name: "chat".into(), version: "0.3.0".into() },
+        default_framing: None,
     }
 }
 
