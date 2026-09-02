@@ -4,22 +4,36 @@ The **TypeScript target** for [Comline](https://github.com/ComlineProject) — o
 repo per language, holding that language's codegen, libgen, runtime and
 std-extra together.
 
-Today: just `codegen/` (`comline-codegen-typescript`), the `code`-mode generator,
-extracted from `ComlineProject/generation`. `lib` mode, a runtime, and
-std-extra follow.
+Today: `codegen/` (`comline-codegen-typescript`, the `code`-mode generator,
+extracted from `ComlineProject/generation`) and `runtime/` (`@comline/runtime`,
+the contract layer so far). `lib` mode, the rest of the runtime, and std-extra
+follow.
 
 ## `codegen/`
 
 `comline-codegen-typescript` — frozen IR → `.ts` source: `export interface` per
-struct, `export enum` (string values) per enum, `export interface` per protocol.
-It depends on `comline-codegen` (the language-neutral contract + `Registry`) and
-`comline-core` (the IR), both by git rev.
+struct / `error`, `export enum` (string values) per enum, and per `protocol` the
+RPC shape (an `IR_HASH`, params interfaces, discriminated-union error types, and
+an `export interface` of `Promise`-returning methods). It depends on
+`comline-codegen` (the language-neutral contract + `Registry`) and `comline-core`
+(the IR), both by git rev.
 
 `register(&mut Registry)` contributes the generator under `typescript` / `ts` at
 version `5.0`; the Comline CLI composes it into its `Registry` at startup.
 
 ```sh
 cargo test
+```
+
+## `runtime/`
+
+`@comline/runtime` — the package generated bindings link against. So far the
+framing-agnostic contract (`RuntimeError`, `Kind`, `Envelope`, `Reply`,
+`CallError`, `Dispatch`), a `Handshake` byte-compatible with the Rust
+`comline-runtime`, and a `JsonCodec`. Node, zero runtime dependencies.
+
+```sh
+cd runtime && npm ci && npm test
 ```
 
 ## Design
