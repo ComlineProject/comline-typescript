@@ -266,10 +266,48 @@ fn generated_chat_matches_the_runtime_test_fixture() {
 }
 
 #[test]
-fn lib_mode_is_not_implemented() {
-    let schemas = vec![("account".to_string(), vec![])];
+fn lib_mode_emits_an_npm_package() {
+    let schemas = vec![
+        ("chat".to_string(), chat_units()),
+        ("billing".to_string(), vec![]),
+    ];
+    let files = generate_typescript(&lib_req(&schemas)).unwrap();
+    let by_path =
+        |p: &str| &files.iter().find(|f| f.path.to_str().unwrap() == p).unwrap().contents;
+
+    let pkg = by_path("package.json");
+    assert!(pkg.contains("\"name\": \"chat\""));
+    assert!(pkg.contains("\"version\": \"0.3.0\""));
+    assert!(pkg.contains("\"type\": \"module\""));
+    assert!(pkg.contains("\"@comline/runtime\": \"^0.1.0\"")); // a protocol pulls it in
+
+    assert!(by_path("tsconfig.json").contains("\"NodeNext\""));
+
+    let index = by_path("src/index.ts");
+    assert!(index.contains("export * from \"./chat.js\";"));
+    assert!(index.contains("export * from \"./billing.js\";"));
+
+    assert!(by_path("src/chat.ts").contains("export class ChatClient {"));
+    assert!(files.iter().any(|f| f.path.to_str().unwrap() == "src/billing.ts"));
+}
+
+#[test]
+fn lib_mode_omits_the_runtime_dep_without_a_protocol() {
+    let schemas = vec![("data".to_string(), vec![])];
+    let files = generate_typescript(&lib_req(&schemas)).unwrap();
+    let pkg = &files
+        .iter()
+        .find(|f| f.path.to_str().unwrap() == "package.json")
+        .unwrap()
+        .contents;
+    assert!(!pkg.contains("@comline/runtime"));
+}
+
+#[test]
+fn lib_mode_rejects_nested_namespaces() {
+    let schemas = vec![("account/user".to_string(), vec![])];
     let err = generate_typescript(&lib_req(&schemas))
         .unwrap_err()
         .to_string();
-    assert!(err.contains("lib mode"));
+    assert!(err.contains("nested namespaces"));
 }

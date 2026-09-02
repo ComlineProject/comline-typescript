@@ -4,10 +4,10 @@ The **TypeScript target** for [Comline](https://github.com/ComlineProject) — o
 repo per language, holding that language's codegen, libgen, runtime and
 std-extra together.
 
-Today: `codegen/` (`comline-codegen-typescript`, the `code`-mode generator,
-extracted from `ComlineProject/generation`) and `runtime/` (`@comline/runtime`,
-the contract layer so far). `lib` mode, the rest of the runtime, and std-extra
-follow.
+Today: `codegen/` (`comline-codegen-typescript` — `code` and `lib` modes,
+extracted from `ComlineProject/generation`) and `runtime/` (`@comline/runtime`
+— contract, framing, transport, `Client` / `Server`). std-extra follows; the
+runtime is not published to npm yet.
 
 ## `codegen/`
 
@@ -18,6 +18,10 @@ per enum, and per `protocol` the full RPC shape against `@comline/runtime` — a
 `<Proto>Client`, and a `serve<Proto>` helper (framing from `@framing` / the
 package default). It depends on `comline-codegen` (the language-neutral contract
 + `Registry`) and `comline-core` (the IR), both by git rev.
+
+`code` mode writes bare `<namespace>.ts`; `lib` mode wraps them in an npm
+package — `package.json` (declaring `@comline/runtime`), `tsconfig.json`, and a
+`src/index.ts` barrel.
 
 `register(&mut Registry)` contributes the generator under `typescript` / `ts` at
 version `5.0`; the Comline CLI composes it into its `Registry` at startup.
