@@ -141,3 +141,37 @@ export interface Dispatch {
   calls(): readonly string[];
   dispatch(call: Kind, params: Uint8Array, codec: Codec, reply: Reply): Promise<void>;
 }
+
+/** Whichever call address a framing put on the wire. */
+export type RequestCall = { readonly id: number } | { readonly name: string };
+
+/** A decoded request frame. */
+export interface DecodedRequest {
+  readonly call: RequestCall;
+  readonly requestId: bigint;
+  /** The params sub-frame, independently decodable with the peer's {@link Codec}. */
+  readonly params: Uint8Array;
+}
+
+/** A decoded response frame: the correlation id and its {@link Envelope}. */
+export interface DecodedResponse {
+  readonly requestId: bigint;
+  readonly envelope: Envelope;
+}
+
+/**
+ * How a call becomes bytes and back — the axis orthogonal to {@link Codec}
+ * (which serializes the *parts*). {@link DatagramFraming} is the default;
+ * {@link JsonRpcFraming} is the name-oriented alternative. `params` / `payload`
+ * / `body` arrive already {@link Codec}-encoded; the framing only positions
+ * them. Both ends of a connection must agree — the {@link Handshake} carries
+ * `name`, hashed.
+ */
+export interface Framing {
+  readonly name: string;
+  encodeRequest(call: Call, requestId: bigint, params: Uint8Array): Uint8Array;
+  decodeRequest(frame: Uint8Array): DecodedRequest | undefined;
+  encodeResponseOk(requestId: bigint, payload: Uint8Array): Uint8Array;
+  encodeResponseErr(requestId: bigint, id: number, body: Uint8Array): Uint8Array;
+  decodeResponse(frame: Uint8Array): DecodedResponse | undefined;
+}
