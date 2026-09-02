@@ -1,13 +1,16 @@
 use comline_codegen::{GenRequest, Mode, PackageMeta};
 use comline_codegen_typescript::generate_typescript;
-use comline_core::schema::ir::frozen::unit::{FrozenUnit, FrozenArgument};
 use comline_core::schema::ir::compiler::interpreted::kind_search::{KindValue, Primitive};
+use comline_core::schema::ir::frozen::unit::{FrozenArgument, FrozenUnit};
 
 fn code_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenRequest<'_> {
     GenRequest {
         mode: Mode::Code,
         schemas,
-        package: PackageMeta { name: "test".into(), version: "0.1.0".into() },
+        package: PackageMeta {
+            name: "test".into(),
+            version: "0.1.0".into(),
+        },
         default_framing: None,
     }
 }
@@ -16,7 +19,10 @@ fn lib_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenRequest<'_> {
     GenRequest {
         mode: Mode::Lib,
         schemas,
-        package: PackageMeta { name: "chat".into(), version: "0.3.0".into() },
+        package: PackageMeta {
+            name: "chat".into(),
+            version: "0.3.0".into(),
+        },
         default_framing: None,
     }
 }
@@ -29,6 +35,42 @@ fn one(units: Vec<FrozenUnit>) -> String {
     files.remove(0).contents
 }
 
+fn field(name: &str, ty: &str) -> FrozenUnit {
+    FrozenUnit::Field {
+        docstring: None,
+        parameters: vec![],
+        optional: false,
+        name: name.into(),
+        kind_value: KindValue::Namespaced(ty.into(), None),
+        span: (0, 0),
+    }
+}
+
+fn arg(name: &str, kind: KindValue) -> FrozenArgument {
+    FrozenArgument {
+        name: name.into(),
+        kind,
+        span: (0, 0),
+    }
+}
+
+fn function(
+    name: &str,
+    args: Vec<FrozenArgument>,
+    ret: Option<KindValue>,
+    throws: Vec<u16>,
+) -> FrozenUnit {
+    FrozenUnit::Function {
+        docstring: String::new(),
+        parameters: vec![],
+        name: name.into(),
+        arguments: args,
+        _return: ret,
+        throws,
+        span: (0, 0),
+    }
+}
+
 #[test]
 fn interface_from_struct() {
     let out = one(vec![FrozenUnit::Struct {
@@ -36,22 +78,8 @@ fn interface_from_struct() {
         parameters: vec![],
         name: "User".to_string(),
         fields: vec![
-            FrozenUnit::Field {
-                docstring: None,
-                parameters: vec![],
-                optional: false,
-                name: "id".to_string(),
-                kind_value: KindValue::Namespaced("s32".to_string(), None),
-                span: (0, 0),
-            },
-            FrozenUnit::Field {
-                docstring: None,
-                parameters: vec![],
-                optional: false,
-                name: "username".to_string(),
-                kind_value: KindValue::Namespaced("string".to_string(), None),
-                span: (0, 0),
-            },
+            field("id", "s32"),
+            field("username", "string"),
             FrozenUnit::Field {
                 docstring: None,
                 parameters: vec![],
@@ -87,123 +115,121 @@ fn string_enum_from_enum() {
     assert!(out.contains("Inactive = \"Inactive\","));
 }
 
-#[test]
-fn interface_from_protocol() {
-    let out = one(vec![FrozenUnit::Protocol {
-        docstring: "A user service".to_string(),
-        name: "UserService".to_string(),
-        parameters: vec![],
-        functions: vec![
-            FrozenUnit::Function {
-                docstring: String::new(),
-                name: "get_user".to_string(),
-                parameters: vec![],
-                arguments: vec![FrozenArgument {
-                    name: "id".to_string(),
-                    kind: KindValue::Primitive(Primitive::S32(None)),
-                    span: (0, 0),
-                }],
-                _return: Some(KindValue::Namespaced("User".to_string(), None)),
-                throws: vec![],
-                span: (0, 0),
-            },
-            FrozenUnit::Function {
-                docstring: String::new(),
-                name: "ping".to_string(),
-                parameters: vec![],
-                arguments: vec![],
-                _return: None,
-                throws: vec![],
-                span: (0, 0),
-            },
-        ],
-        span: (0, 0),
-    }]);
-
-    // a protocol makes the file carry the handshake digest
-    assert!(out.contains("export const IR_HASH = 0x"));
-    assert!(out.contains("n;\n"));
-    // a params interface per function that takes arguments
-    assert!(out.contains("export interface UserServiceGetUserParams {\n    id: number;\n}"));
-    // every call is async; args arrive as one `params` object
-    assert!(out.contains("export interface UserService {"));
-    assert!(out.contains("    get_user(params: UserServiceGetUserParams): Promise<User>;"));
-    // a one-way / no-arg call: no params, `Promise<void>`
-    assert!(out.contains("    ping(): Promise<void>;"));
-}
-
-#[test]
-fn error_interfaces_and_discriminated_unions_from_throws() {
-    let out = one(vec![
+/// A struct, an `error`, and a protocol exercising: a throwing call with args, a
+/// non-throwing call returning a list, a `()` return, and a one-way call.
+fn chat_units() -> Vec<FrozenUnit> {
+    vec![
+        FrozenUnit::Struct {
+            docstring: None,
+            parameters: vec![],
+            name: "Message".into(),
+            fields: vec![field("body", "string"), field("seq", "u64")],
+            span: (0, 0),
+        },
         FrozenUnit::Error {
             docstring: None,
             parameters: vec![],
             ordinal: 0,
             imported_from: None,
-            name: "Rejected".to_string(),
-            message: "no".to_string(),
-            fields: vec![FrozenUnit::Field {
-                docstring: None,
-                parameters: vec![],
-                optional: false,
-                name: "why".to_string(),
-                kind_value: KindValue::Namespaced("string".to_string(), None),
-                span: (0, 0),
-            }],
+            name: "Rejected".into(),
+            message: "rejected: {self.reason}".into(),
+            fields: vec![field("reason", "string")],
         },
         FrozenUnit::Protocol {
-            docstring: String::new(),
-            name: "Chat".to_string(),
+            docstring: "Chat".into(),
+            name: "Chat".into(),
             parameters: vec![],
             functions: vec![
-                FrozenUnit::Function {
-                    docstring: String::new(),
-                    name: "send".to_string(),
-                    parameters: vec![],
-                    arguments: vec![FrozenArgument {
-                        name: "body".to_string(),
-                        kind: KindValue::Namespaced("string".to_string(), None),
-                        span: (0, 0),
-                    }],
-                    _return: Some(KindValue::Unit),
-                    throws: vec![0],
-                    span: (0, 0),
-                },
-                // one-way: a `!` here is dropped
-                FrozenUnit::Function {
-                    docstring: String::new(),
-                    name: "poke".to_string(),
-                    parameters: vec![],
-                    arguments: vec![],
-                    _return: None,
-                    throws: vec![0],
-                    span: (0, 0),
-                },
+                function(
+                    "send",
+                    vec![arg("text", KindValue::Namespaced("string".into(), None))],
+                    Some(KindValue::Namespaced("Message".into(), None)),
+                    vec![0],
+                ),
+                function(
+                    "history",
+                    vec![arg("limit", KindValue::Primitive(Primitive::U32(None)))],
+                    Some(KindValue::Namespaced("Message[]".into(), None)),
+                    vec![],
+                ),
+                function("wipe", vec![], Some(KindValue::Unit), vec![]),
+                function(
+                    "note",
+                    vec![arg("text", KindValue::Namespaced("string".into(), None))],
+                    None,
+                    vec![],
+                ),
             ],
             span: (0, 0),
         },
-    ]);
-
-    // the `error` becomes an interface
-    assert!(out.contains("export interface Rejected {\n    why: string;\n}"));
-    // per-function union carries the wire ordinal, the name, and the payload
-    assert!(out.contains(
-        "export type ChatSendError =\n    | { code: 0; name: \"Rejected\"; data: Rejected };"
-    ));
-    // per-protocol union, and the method advertises what it throws
-    assert!(out.contains(
-        "export type ChatError =\n    | { code: 0; name: \"Rejected\"; data: Rejected };"
-    ));
-    assert!(out.contains("    /** @throws {ChatSendError} */"));
-    assert!(out.contains("    send(params: ChatSendParams): Promise<void>;"));
-    // `-> ()` is request/response with an empty ack, not one-way
-    assert!(out.contains("    poke(): Promise<void>;"));
-    // a `!` on a one-way call is dropped — no poke error type
-    assert!(!out.contains("ChatPokeError"));
+    ]
 }
 
 #[test]
-fn a_schema_without_a_protocol_has_no_ir_hash() {
+fn protocol_emits_the_rpc_shape() {
+    let out = one(chat_units());
+
+    // handshake digest + the runtime import
+    assert!(out.contains("export const IR_HASH = 0x"));
+    assert!(out.contains("} from \"@comline/runtime\";"));
+
+    // the wire payload interface + the throwable class, keyed by ordinal
+    assert!(out.contains("export interface Rejected {\n    reason: string;\n}"));
+    assert!(out.contains("export class RejectedError extends Error {"));
+    assert!(out.contains("static readonly ordinal = 0;"));
+
+    // params interfaces + provider interface
+    assert!(out.contains("export interface ChatSendParams {\n    text: string;\n}"));
+    assert!(out.contains("    /** @throws {RejectedError} */"));
+    assert!(out.contains("    send(params: ChatSendParams): Promise<Message>;"));
+    assert!(out.contains("    wipe(): Promise<void>;"));
+    assert!(out.contains("    note(params: ChatNoteParams): Promise<void>;"));
+
+    // call table + dispatcher
+    assert!(out.contains(
+        "export const CHAT_CALLS = [\"send\", \"history\", \"wipe\", \"note\"] as const;"
+    ));
+    assert!(out.contains("export class ChatDispatcher implements Dispatch {"));
+    assert!(out.contains("if (e instanceof RejectedError) { reply.err(RejectedError.ordinal, codec.encode(e.data)); return; }"));
+    assert!(out.contains("await this.impl.note(p);")); // one-way: no reply
+
+    // client + serve helper, both wired to the datagram framing by default
+    assert!(out.contains("export class ChatClient {"));
+    assert!(out.contains("framing: Framing = new DatagramFraming()"));
+    assert!(out.contains("case RejectedError.ordinal:"));
+    assert!(out.contains("await this.client.notify({ id: 3, name: \"note\" }, params);"));
+    assert!(out.contains(
+        "export function serveChat(impl: Chat, transport: Transport, codec: Codec, framing: Framing = new DatagramFraming()): Promise<void> {"
+    ));
+}
+
+#[test]
+fn framing_annotation_and_package_default_pick_jsonrpc() {
+    // @framing = "jsonrpc" on the protocol
+    let mut units = chat_units();
+    if let FrozenUnit::Protocol { parameters, .. } = &mut units[2] {
+        parameters.push(FrozenUnit::Property {
+            name: "framing".into(),
+            expression: Some("jsonrpc".into()),
+        });
+    }
+    let out = one(units);
+    assert!(out.contains("    JsonRpcFraming,"));
+    assert!(out.contains("framing: Framing = new JsonRpcFraming()"));
+    assert!(!out.contains("new DatagramFraming()"));
+
+    // …or the package default reaches an unannotated protocol
+    let schemas = vec![("account".to_string(), chat_units())];
+    let req = GenRequest {
+        default_framing: Some("jsonrpc".to_string()),
+        ..code_req(&schemas)
+    };
+    let out = generate_typescript(&req).unwrap().remove(0).contents;
+    assert!(out.contains("framing: Framing = new JsonRpcFraming()"));
+}
+
+#[test]
+fn a_schema_without_a_protocol_has_no_ir_hash_or_runtime_import() {
     let out = one(vec![FrozenUnit::Enum {
         docstring: None,
         name: "Status".to_string(),
@@ -214,11 +240,36 @@ fn a_schema_without_a_protocol_has_no_ir_hash() {
         span: (0, 0),
     }]);
     assert!(!out.contains("IR_HASH"));
+    assert!(!out.contains("@comline/runtime"));
+}
+
+/// The generated `Chat` client / dispatcher, kept in
+/// `runtime/test/generated/chat.ts` so the Node job type-checks and runs it.
+/// Regenerate with `TS_BLESS=1 cargo test -p comline-codegen-typescript`.
+#[test]
+fn generated_chat_matches_the_runtime_test_fixture() {
+    let generated = one(chat_units());
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../runtime/test/generated/chat.ts"
+    );
+    if std::env::var_os("TS_BLESS").is_some() {
+        std::fs::write(path, &generated).unwrap();
+        return;
+    }
+    let committed = std::fs::read_to_string(path).unwrap_or_default();
+    assert_eq!(
+        generated, committed,
+        "generated Chat drifted from runtime/test/generated/chat.ts — \
+         re-bless with TS_BLESS=1 cargo test -p comline-codegen-typescript"
+    );
 }
 
 #[test]
 fn lib_mode_is_not_implemented() {
     let schemas = vec![("account".to_string(), vec![])];
-    let err = generate_typescript(&lib_req(&schemas)).unwrap_err().to_string();
+    let err = generate_typescript(&lib_req(&schemas))
+        .unwrap_err()
+        .to_string();
     assert!(err.contains("lib mode"));
 }
