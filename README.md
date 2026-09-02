@@ -12,11 +12,12 @@ follow.
 ## `codegen/`
 
 `comline-codegen-typescript` — frozen IR → `.ts` source: `export interface` per
-struct / `error`, `export enum` (string values) per enum, and per `protocol` the
-RPC shape (an `IR_HASH`, params interfaces, discriminated-union error types, and
-an `export interface` of `Promise`-returning methods). It depends on
-`comline-codegen` (the language-neutral contract + `Registry`) and `comline-core`
-(the IR), both by git rev.
+struct / `error` (plus a `<Name>Error` throwable), `export enum` (string values)
+per enum, and per `protocol` the full RPC shape against `@comline/runtime` — an
+`IR_HASH`, params interfaces, a provider interface, a `<Proto>Dispatcher`, a
+`<Proto>Client`, and a `serve<Proto>` helper (framing from `@framing` / the
+package default). It depends on `comline-codegen` (the language-neutral contract
++ `Registry`) and `comline-core` (the IR), both by git rev.
 
 `register(&mut Registry)` contributes the generator under `typescript` / `ts` at
 version `5.0`; the Comline CLI composes it into its `Registry` at startup.
