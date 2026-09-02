@@ -4,8 +4,10 @@
 
 /**
  * `@comline/runtime` — the TypeScript runtime that Comline-generated RPC
- * bindings link against. This first cut is the framing-agnostic contract plus
- * a JSON codec; `Framing`, `Transport`, `Client`, and `Server` follow.
+ * bindings link against. The framing-agnostic contract, two framings, an
+ * in-memory transport, and a `Client` / `Server`. The generator emitting a
+ * `<Proto>Client` / dispatcher against this package, and a stream transport,
+ * follow.
  */
 
 export {
@@ -21,6 +23,10 @@ export {
   type CallError,
   type Codec,
   type Dispatch,
+  type RequestCall,
+  type DecodedRequest,
+  type DecodedResponse,
+  type Framing,
 } from "./contract.js";
 
 export {
@@ -31,3 +37,13 @@ export {
 } from "./handshake.js";
 
 export { JsonCodec } from "./codec.js";
+
+export { encodeEnvelopeOk, encodeEnvelopeErr, decodeEnvelope } from "./envelope.js";
+
+export { DatagramFraming } from "./framing/datagram.js";
+export { JsonRpcFraming } from "./framing/jsonrpc.js";
+
+export { type Transport, type InMemoryTransport, duplex } from "./transport.js";
+
+export { Client } from "./client.js";
+export { Server } from "./server.js";
