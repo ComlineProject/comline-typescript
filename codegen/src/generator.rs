@@ -216,6 +216,9 @@ fn schema_source(units: &[FrozenUnit], default_framing: Option<&str>) -> String 
             FrozenUnit::Enum { name, variants, .. } => {
                 output.push_str(&string_enum(name, variants));
             }
+            FrozenUnit::TypeAlias { name, target, .. } => {
+                output.push_str(&type_alias(name, target));
+            }
             FrozenUnit::Protocol {
                 name,
                 functions,
@@ -248,6 +251,15 @@ fn error_type_names(units: &[FrozenUnit]) -> HashMap<u16, String> {
 }
 
 // ── data types ─────────────────────────────────────────────────────────────
+
+/// `export type NAME = TARGET;` - transparent like Rust's own `type` (not a
+/// newtype): `ts_type` already maps any `KindValue` to a real TS type
+/// expression, named or primitive, so this is the same mapping every field
+/// already goes through, just at the top level of the file instead of
+/// inside an interface.
+fn type_alias(name: &str, target: &KindValue) -> String {
+    format!("export type {name} = {};\n\n", ts_type(target))
+}
 
 fn interface(name: &str, fields: &[FrozenUnit]) -> String {
     let mut s = format!("export interface {name} {{\n");
