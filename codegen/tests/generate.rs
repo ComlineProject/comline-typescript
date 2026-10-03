@@ -99,6 +99,28 @@ fn interface_from_struct() {
 }
 
 #[test]
+fn type_alias_emits_and_fields_reference_it_by_name() {
+    let out = one(vec![
+        FrozenUnit::TypeAlias {
+            docstring: None,
+            name: "UserId".to_string(),
+            target: KindValue::Namespaced("u64".to_string(), None),
+            span: (0, 0),
+        },
+        FrozenUnit::Struct {
+            docstring: None,
+            parameters: vec![],
+            name: "Greeting".to_string(),
+            fields: vec![field("sender", "UserId")],
+            span: (0, 0),
+        },
+    ]);
+
+    assert!(out.contains("export type UserId = number;"), "got: {out}");
+    assert!(out.contains("sender: UserId;"), "got: {out}");
+}
+
+#[test]
 fn string_enum_from_enum() {
     let out = one(vec![FrozenUnit::Enum {
         docstring: None,
