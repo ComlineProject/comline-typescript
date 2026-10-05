@@ -8,7 +8,7 @@ license = "GPL-3.0-only"
 # Consumed by git rev (see ComlineProject/docs → Design → Runtime & generation
 # repository structure — no crates.io publishing at this stage). Local
 # iteration: add a `[patch]` onto a sibling checkout.
-comline-codegen = { git = "https://github.com/ComlineProject/generation", rev = "0774121d9f2fe325c9a3601bd5e7c843625ba346" }
-comline-core = { git = "https://github.com/ComlineProject/core", rev = "16b6e305ad663c376ae8062bb510713d441ae5e0" }
+comline-codegen = { git = "https://github.com/ComlineProject/generation", rev = "e9420c64705013ff5d507bfee3a6691e1bccf152" }
+comline-core = { git = "https://github.com/ComlineProject/core", rev = "3c9d299f6967008eec505f0950c2590a0b9ffb08" }
 
 eyre = "0.6.8"
