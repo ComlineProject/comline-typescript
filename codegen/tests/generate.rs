@@ -12,6 +12,7 @@ fn code_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenRequest<'_> {
             version: "0.1.0".into(),
         },
         default_framing: None,
+        external_std: false,
     }
 }
 
@@ -24,6 +25,7 @@ fn lib_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenRequest<'_> {
             version: "0.3.0".into(),
         },
         default_framing: None,
+        external_std: false,
     }
 }
 
