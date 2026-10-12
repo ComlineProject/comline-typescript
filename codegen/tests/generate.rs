@@ -1,7 +1,7 @@
 use comline_codegen::{GenRequest, Mode, PackageMeta};
 use comline_codegen_typescript::generate_typescript;
 use comline_core::schema::ir::compiler::interpreted::kind_search::{KindValue, Primitive};
-use comline_core::schema::ir::frozen::unit::{FrozenArgument, FrozenUnit};
+use comline_core::schema::ir::frozen::unit::{ConfigValue, FrozenArgument, FrozenUnit};
 
 fn code_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenRequest<'_> {
     GenRequest {
@@ -234,7 +234,7 @@ fn framing_annotation_and_package_default_pick_jsonrpc() {
     if let FrozenUnit::Protocol { parameters, .. } = &mut units[2] {
         parameters.push(FrozenUnit::Property {
             name: "framing".into(),
-            expression: Some("jsonrpc".into()),
+            value: ConfigValue::Str("jsonrpc".into()),
         });
     }
     let out = one(units);
