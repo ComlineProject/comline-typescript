@@ -11,6 +11,7 @@ fn code_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenRequest<'_> {
             name: "test".into(),
             version: "0.1.0".into(),
         },
+        lang_version: comline_codegen_typescript::LANG_VERSION.into(),
         default_framing: None,
         external_std: false,
     }
@@ -24,6 +25,7 @@ fn lib_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenRequest<'_> {
             name: "chat".into(),
             version: "0.3.0".into(),
         },
+        lang_version: comline_codegen_typescript::LANG_VERSION.into(),
         default_framing: None,
         external_std: false,
     }

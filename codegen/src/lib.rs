@@ -13,7 +13,11 @@ mod generator;
 pub use generator::generate_typescript;
 
 /// Contribute the TypeScript generator to a CLI's [`Registry`](comline_codegen::Registry).
+/// The language version this generator registers under - what a
+/// congregation names as `typescript#5.0`.
+pub const LANG_VERSION: &str = "5.0";
+
 pub fn register(registry: &mut comline_codegen::Registry) {
-    registry.register("typescript", "ts", "5.0", generate_typescript);
-    registry.register("ts", "ts", "5.0", generate_typescript);
+    registry.register("typescript", "ts", LANG_VERSION, generate_typescript);
+    registry.register("ts", "ts", LANG_VERSION, generate_typescript);
 }
