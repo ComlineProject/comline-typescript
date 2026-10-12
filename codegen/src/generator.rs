@@ -15,6 +15,7 @@
 //! (declaring `@comline/runtime`), a `tsconfig.json`, and a `src/index.ts`
 //! barrel. See design/generation.md.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -317,13 +318,16 @@ struct FramingChoice {
     jsonrpc: bool,
 }
 
+/// The accepted spellings and their aliases come from core, not from a
+/// copy kept here - this generator, the Rust one and the playground each
+/// used to maintain their own, and they had drifted.
 fn framing_for(name: &str) -> Option<FramingChoice> {
-    match name {
-        "jsonrpc" | "json-rpc" | "jsonrpc-2.0" => Some(FramingChoice {
+    match comline_core::schema::idl::annotations::canonical_value("framing", name)? {
+        "jsonrpc" => Some(FramingChoice {
             ctor: "JsonRpcFraming",
             jsonrpc: true,
         }),
-        "datagram" | "comline.datagram" => Some(FramingChoice {
+        "datagram" => Some(FramingChoice {
             ctor: "DatagramFraming",
             jsonrpc: false,
         }),
@@ -335,7 +339,7 @@ fn framing_for(name: &str) -> Option<FramingChoice> {
 /// package `default_framing`, then datagram.
 fn framing_choice(parameters: &[FrozenUnit], default_framing: Option<&str>) -> FramingChoice {
     annotation(parameters, "framing")
-        .and_then(framing_for)
+        .and_then(|name| framing_for(&name))
         .or_else(|| default_framing.and_then(framing_for))
         .unwrap_or(FramingChoice {
             ctor: "DatagramFraming",
@@ -343,10 +347,15 @@ fn framing_choice(parameters: &[FrozenUnit], default_framing: Option<&str>) -> F
         })
 }
 
-/// The value of a scalar `@key = value` annotation (a `FrozenUnit::Property`).
-fn annotation<'a>(parameters: &'a [FrozenUnit], key: &str) -> Option<&'a str> {
+/// The text of a scalar `@key = value` annotation (a
+/// `FrozenUnit::Property`).
+///
+/// The frozen value is typed now, so this renders it back to text for the
+/// callers that only interpolate it. A caller that cares *which kind* of
+/// value it got should match `ConfigValue` instead.
+fn annotation<'a>(parameters: &'a [FrozenUnit], key: &str) -> Option<Cow<'a, str>> {
     parameters.iter().find_map(|p| match p {
-        FrozenUnit::Property { name, expression } if name == key => expression.as_deref(),
+        FrozenUnit::Property { name, value } if name == key => value.as_text(),
         _ => None,
     })
 }
