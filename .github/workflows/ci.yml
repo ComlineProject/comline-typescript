@@ -16,6 +16,10 @@ jobs:
       - run: rustup update stable && rustup default stable
       - run: cargo build --verbose
       - run: cargo test --verbose
+      # `std-extra/` is generated and committed; this fails if it was edited
+      # by hand, or if a generator change moved its output without it being
+      # regenerated.
+      - run: cargo run -p xtask -- --check
 
   runtime:
     name: runtime - Node
@@ -31,3 +35,20 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+
+  std_extra:
+    name: std-extra - Node
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: std-extra
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      # Compiling `@comline/std` is what catches a generator change that
+      # emits TypeScript which doesn't typecheck - in CI rather than in
+      # someone's project.
+      - run: npm run build

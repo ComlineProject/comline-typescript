@@ -31,6 +31,13 @@ fn lib_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenRequest<'_> {
     }
 }
 
+fn external_std_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenRequest<'_> {
+    GenRequest {
+        external_std: true,
+        ..lib_req(schemas)
+    }
+}
+
 fn one(units: Vec<FrozenUnit>) -> String {
     let schemas = vec![("account".to_string(), units)];
     let mut files = generate_typescript(&code_req(&schemas)).unwrap();
@@ -629,4 +636,188 @@ fn a_reference_to_a_schema_the_package_does_not_carry_stays_bare() {
     let out = code_file(&schemas, "none");
     assert!(!out.contains("import type"), "got: {out}");
     assert!(out.contains("thing: Thing;"), "got: {out}");
+}
+
+// ── external std ───────────────────────────────────────────────────────────
+
+/// A package whose own schema uses a std type, with std present as it always
+/// is - the shape every real project has.
+fn package_using_std() -> Vec<(String, Vec<FrozenUnit>)> {
+    vec![
+        (
+            "none".to_string(),
+            vec![
+                import("std::http::Request", None),
+                struct_with("Test", vec![field("req", "Request")]),
+            ],
+        ),
+        (
+            "std/http".to_string(),
+            vec![struct_with("Request", vec![field("uri", "str")])],
+        ),
+        (
+            "std/validators".to_string(),
+            vec![struct_with("StringBounds", vec![field("max", "u32")])],
+        ),
+    ]
+}
+
+#[test]
+fn external_std_emits_no_std_files() {
+    let schemas = package_using_std();
+    let files = generate_typescript(&external_std_req(&schemas)).unwrap();
+    let paths: Vec<&str> = files.iter().map(|f| f.path.to_str().unwrap()).collect();
+
+    assert!(paths.contains(&"src/none.ts"), "{paths:?}");
+    assert!(
+        !paths.iter().any(|p| p.contains("std")),
+        "std comes from its own package, so nothing here: {paths:?}"
+    );
+
+    // ... and the barrel doesn't name a module that was never written.
+    let index = &files
+        .iter()
+        .find(|f| f.path.to_str().unwrap() == "src/index.ts")
+        .unwrap()
+        .contents;
+    assert!(!index.contains("std"), "got: {index}");
+}
+
+/// The regression this is most at risk of: std is filtered out of the emitted
+/// set, and if references were resolved against *that* list instead of the
+/// whole request, every std import would vanish and the bare names would be
+/// back. Pairs with
+/// `a_reference_to_a_schema_the_package_does_not_carry_stays_bare`, which
+/// asserts the opposite case through the same code - together they pin the
+/// distinction between "not emitted" and "not known".
+#[test]
+fn external_std_is_still_imported_though_no_file_is_emitted() {
+    let schemas = package_using_std();
+    let files = generate_typescript(&external_std_req(&schemas)).unwrap();
+    let none = &files
+        .iter()
+        .find(|f| f.path.to_str().unwrap() == "src/none.ts")
+        .unwrap()
+        .contents;
+
+    assert!(
+        none.contains("import type { Request } from \"@comline/std/http\";"),
+        "the `std` segment is stripped - `@comline/std` is its own root: {none}"
+    );
+    assert!(none.contains("req: Request;"), "got: {none}");
+}
+
+#[test]
+fn external_std_declares_the_dependency() {
+    let schemas = package_using_std();
+    let files = generate_typescript(&external_std_req(&schemas)).unwrap();
+    let pkg = &files
+        .iter()
+        .find(|f| f.path.to_str().unwrap() == "package.json")
+        .unwrap()
+        .contents;
+    assert!(pkg.contains("\"@comline/std\": \"^0.1.0\""), "got: {pkg}");
+}
+
+#[test]
+fn external_std_declares_nothing_when_there_was_no_std() {
+    // A request with no std schemas at all: the flag is on, but there is
+    // nothing it applied to, so the dependency would be a lie.
+    let schemas = vec![(
+        "none".to_string(),
+        vec![struct_with("Test", vec![field("message", "string")])],
+    )];
+    let files = generate_typescript(&external_std_req(&schemas)).unwrap();
+    let pkg = &files
+        .iter()
+        .find(|f| f.path.to_str().unwrap() == "package.json")
+        .unwrap()
+        .contents;
+    assert!(!pkg.contains("@comline/std"), "got: {pkg}");
+}
+
+#[test]
+fn inlined_std_imports_by_relative_path() {
+    // The default: std is part of this package, so it is reached the same way
+    // any other schema is.
+    let schemas = package_using_std();
+    let files = generate_typescript(&lib_req(&schemas)).unwrap();
+    let none = &files
+        .iter()
+        .find(|f| f.path.to_str().unwrap() == "src/none.ts")
+        .unwrap()
+        .contents;
+    assert!(
+        none.contains("import type { Request } from \"./std/http.js\";"),
+        "got: {none}"
+    );
+    assert!(
+        files
+            .iter()
+            .any(|f| f.path.to_str().unwrap() == "src/std/http.ts"),
+        "and the file is written"
+    );
+
+    let pkg = &files
+        .iter()
+        .find(|f| f.path.to_str().unwrap() == "package.json")
+        .unwrap()
+        .contents;
+    assert!(
+        !pkg.contains("@comline/std"),
+        "nothing external to declare: {pkg}"
+    );
+}
+
+#[test]
+fn external_std_in_code_mode_says_what_to_install() {
+    // `code` mode has no manifest to put the dependency in, so the file does
+    // the telling.
+    let schemas = package_using_std();
+    let req = GenRequest {
+        external_std: true,
+        ..code_req(&schemas)
+    };
+    let files = generate_typescript(&req).unwrap();
+    let none = &files
+        .iter()
+        .find(|f| f.path.to_str().unwrap() == "none.ts")
+        .unwrap()
+        .contents;
+
+    assert!(
+        none.contains("npm install @comline/std@^0.1.0"),
+        "got: {none}"
+    );
+    assert!(
+        none.contains("import type { Request } from \"@comline/std/http\";"),
+        "got: {none}"
+    );
+    assert!(
+        !files
+            .iter()
+            .any(|f| f.path.to_str().unwrap().contains("std")),
+        "still no std files in code mode"
+    );
+}
+
+#[test]
+fn a_file_not_touching_std_gets_no_install_note() {
+    // `none` uses std; `plain` doesn't, and only `none` should carry the note.
+    let mut schemas = package_using_std();
+    schemas.push((
+        "plain".to_string(),
+        vec![struct_with("Plain", vec![field("message", "string")])],
+    ));
+    let req = GenRequest {
+        external_std: true,
+        ..code_req(&schemas)
+    };
+    let files = generate_typescript(&req).unwrap();
+    let plain = &files
+        .iter()
+        .find(|f| f.path.to_str().unwrap() == "plain.ts")
+        .unwrap()
+        .contents;
+    assert!(!plain.contains("npm install"), "got: {plain}");
 }
