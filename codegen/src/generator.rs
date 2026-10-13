@@ -13,11 +13,14 @@
 //!
 //! A type another schema declares is imported from that schema by relative
 //! specifier (`import type { Greeting } from "./types.js"`), so the output
-//! compiles in both modes. See [`build_import_map`].
+//! compiles in both modes. See [`build_import_map`]. With `external_std`,
+//! `std`'s own schemas are not emitted at all and their types come from
+//! [`STD_PACKAGE`] instead.
 //!
 //! `code` mode emits bare `<namespace>.ts`; `lib` mode adds a `package.json`
-//! (declaring `@comline/runtime`), a `tsconfig.json`, and an `index.ts` barrel
-//! per namespace level ([`NamespaceTree`]). See design/generation.md.
+//! (declaring `@comline/runtime` and `@comline/std` as needed), a
+//! `tsconfig.json`, and an `index.ts` barrel per namespace level
+//! ([`NamespaceTree`]). See design/generation.md.
 
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -39,23 +42,80 @@ use comline_codegen::{GenRequest, GeneratedFile, Mode, PackageMeta};
 const RUNTIME_PACKAGE: &str = "@comline/runtime";
 const RUNTIME_VERSION: &str = "^0.1.0";
 
+/// `std`'s own pre-generated bindings, referenced instead of inlined when
+/// `external_std` is on — the npm counterpart of `comline_std`.
+///
+/// A semver range rather than the git pin `comline_std` uses: npm can't
+/// install from a repository subdirectory, and `@comline/std` lives in
+/// `comline-typescript/std-extra/`. So, like [`RUNTIME_PACKAGE`], this
+/// resolves once published and through `npm link` until then.
+const STD_PACKAGE: &str = "@comline/std";
+const STD_VERSION: &str = "^0.1.0";
+
+/// Whether a namespace belongs to the standard library — `std` itself, or
+/// anything under it.
+fn is_std_namespace(namespace: &str) -> bool {
+    namespace == "std" || namespace.starts_with("std/")
+}
+
 pub fn generate_typescript(req: &GenRequest) -> Result<Vec<GeneratedFile>> {
     let default_framing = req.default_framing.as_deref();
+    let external_std = req.external_std;
 
-    match req.mode {
-        Mode::Code => Ok(req
+    // With `external_std`, std's schemas aren't this package's to emit - it
+    // references `@comline/std` for them instead. Borrowed when the flag is
+    // off, so the common path still clones nothing.
+    //
+    // Only *emission* is narrowed. `req.schemas` stays the list every
+    // reference is resolved against, because a schema that isn't emitted is
+    // still a schema whose types can be named - that is the whole point of
+    // `external_std`. Resolving against the narrowed list instead would drop
+    // every std import and silently restore the bare, uncompilable names
+    // that `import type` headers exist to prevent.
+    let owned: Vec<(String, Vec<FrozenUnit>)>;
+    let emitted: &[(String, Vec<FrozenUnit>)] = if external_std {
+        owned = req
             .schemas
             .iter()
-            .map(|(namespace, units)| GeneratedFile {
-                path: PathBuf::from(format!("{namespace}.ts")),
-                contents: schema_source(namespace, units, req.schemas, default_framing),
+            .filter(|(namespace, _)| !is_std_namespace(namespace))
+            .cloned()
+            .collect();
+        &owned
+    } else {
+        req.schemas
+    };
+
+    // Only declare the dependency if std was actually there to be dropped.
+    let needs_std_dep = external_std && req.schemas.iter().any(|(ns, _)| is_std_namespace(ns));
+
+    match req.mode {
+        Mode::Code => Ok(emitted
+            .iter()
+            .map(|(namespace, units)| {
+                let source =
+                    schema_source(namespace, units, req.schemas, default_framing, external_std);
+                // `code` mode has no manifest to add the dependency to, so
+                // the file says what it needs - the same courtesy the Rust
+                // generator extends for `Cargo.toml`.
+                let contents = if source.contains(&format!("\"{STD_PACKAGE}/")) {
+                    format!(
+                        "// This file imports `{STD_PACKAGE}` - add it to your package.json:\n\
+                         //   npm install {STD_PACKAGE}@{STD_VERSION}\n{source}"
+                    )
+                } else {
+                    source
+                };
+                GeneratedFile {
+                    path: PathBuf::from(format!("{namespace}.ts")),
+                    contents,
+                }
             })
             .collect()),
 
         Mode::Lib => {
-            let tree = NamespaceTree::build(req.schemas)?;
+            let tree = NamespaceTree::build(emitted)?;
 
-            let has_protocol = req.schemas.iter().any(|(_, units)| {
+            let has_protocol = emitted.iter().any(|(_, units)| {
                 units
                     .iter()
                     .any(|u| matches!(u, FrozenUnit::Protocol { .. }))
@@ -64,14 +124,20 @@ pub fn generate_typescript(req: &GenRequest) -> Result<Vec<GeneratedFile>> {
             let mut files = vec![
                 GeneratedFile {
                     path: PathBuf::from("package.json"),
-                    contents: package_json(&req.package, has_protocol),
+                    contents: package_json(&req.package, has_protocol, needs_std_dep),
                 },
                 GeneratedFile {
                     path: PathBuf::from("tsconfig.json"),
                     contents: TSCONFIG.to_string(),
                 },
             ];
-            tree.emit_files("src", req.schemas, default_framing, &mut files);
+            tree.emit_files(
+                "src",
+                req.schemas,
+                default_framing,
+                external_std,
+                &mut files,
+            );
             Ok(files)
         }
     }
@@ -163,11 +229,15 @@ impl<'a> NamespaceTree<'a> {
 
     /// This node's `index.ts` and everything below it, under `dir`
     /// (`"src"` for the root).
+    /// `lookup` is every schema in the request, not just the ones in this
+    /// tree: a reference resolves against all of them, including an external
+    /// `std` that this package deliberately emits no file for.
     fn emit_files(
         &self,
         dir: &str,
-        schemas: &'a [(String, Vec<FrozenUnit>)],
+        lookup: &'a [(String, Vec<FrozenUnit>)],
         default_framing: Option<&str>,
+        external_std: bool,
         files: &mut Vec<GeneratedFile>,
     ) {
         files.push(GeneratedFile {
@@ -178,11 +248,21 @@ impl<'a> NamespaceTree<'a> {
             match child.schema {
                 Some((namespace, units)) => files.push(GeneratedFile {
                     path: PathBuf::from(format!("{dir}/{segment}.ts")),
-                    contents: schema_source(namespace, units, schemas, default_framing),
+                    contents: schema_source(
+                        namespace,
+                        units,
+                        lookup,
+                        default_framing,
+                        external_std,
+                    ),
                 }),
-                None => {
-                    child.emit_files(&format!("{dir}/{segment}"), schemas, default_framing, files)
-                }
+                None => child.emit_files(
+                    &format!("{dir}/{segment}"),
+                    lookup,
+                    default_framing,
+                    external_std,
+                    files,
+                ),
             }
         }
     }
@@ -202,12 +282,19 @@ const TSCONFIG: &str = "{\n\
     \x20 \"include\": [\"src/**/*.ts\"]\n\
     }\n";
 
-fn package_json(pkg: &PackageMeta, has_protocol: bool) -> String {
+fn package_json(pkg: &PackageMeta, has_protocol: bool, needs_std_dep: bool) -> String {
     let name = pkg.name.to_lowercase();
-    let dep = if has_protocol {
-        format!("\n  \"dependencies\": {{\n    \"{RUNTIME_PACKAGE}\": \"{RUNTIME_VERSION}\"\n  }},")
-    } else {
+    let mut entries: Vec<String> = Vec::new();
+    if has_protocol {
+        entries.push(format!("    \"{RUNTIME_PACKAGE}\": \"{RUNTIME_VERSION}\""));
+    }
+    if needs_std_dep {
+        entries.push(format!("    \"{STD_PACKAGE}\": \"{STD_VERSION}\""));
+    }
+    let dep = if entries.is_empty() {
         String::new()
+    } else {
+        format!("\n  \"dependencies\": {{\n{}\n  }},", entries.join(",\n"))
     };
     format!(
         "{{\n\
@@ -247,8 +334,9 @@ fn schema_source(
     units: &[FrozenUnit],
     schemas: &[(String, Vec<FrozenUnit>)],
     default_framing: Option<&str>,
+    external_std: bool,
 ) -> String {
-    let types = TypeMapper::new(units, schemas);
+    let types = TypeMapper::new(units, schemas, external_std);
     let has_protocol = units
         .iter()
         .any(|u| matches!(u, FrozenUnit::Protocol { .. }));
@@ -741,13 +829,21 @@ struct TypeMapper {
     /// Bound name -> (namespace, the name as that schema declares it).
     imports: HashMap<String, (String, String)>,
     used: RefCell<BTreeSet<String>>,
+    /// Whether a std namespace resolves to `@comline/std` instead of a file
+    /// in this package.
+    external_std: bool,
 }
 
 impl TypeMapper {
-    fn new(units: &[FrozenUnit], schemas: &[(String, Vec<FrozenUnit>)]) -> Self {
+    fn new(
+        units: &[FrozenUnit],
+        schemas: &[(String, Vec<FrozenUnit>)],
+        external_std: bool,
+    ) -> Self {
         Self {
             imports: build_import_map(units, schemas),
             used: RefCell::new(BTreeSet::new()),
+            external_std,
         }
     }
 
@@ -787,13 +883,30 @@ impl TypeMapper {
                 .join(", ");
             s.push_str(&format!(
                 "import type {{ {list} }} from \"{}\";\n",
-                relative_specifier(namespace, module)
+                self.specifier_for(namespace, module)
             ));
         }
         if !s.is_empty() {
             s.push('\n');
         }
         s
+    }
+
+    /// Where `to` is imported from: `@comline/std/<rest>` when it is std and
+    /// std is external, otherwise a path relative to `from`.
+    fn specifier_for(&self, from: &str, to: &str) -> String {
+        if self.external_std && is_std_namespace(to) {
+            // `@comline/std` is its own package root, not a `std` directory
+            // inside one, so the leading segment goes - exactly as
+            // `comline_std::http::Request` drops it on the Rust side.
+            let rest = to.strip_prefix("std/").unwrap_or("");
+            return if rest.is_empty() {
+                STD_PACKAGE.to_string()
+            } else {
+                format!("{STD_PACKAGE}/{rest}")
+            };
+        }
+        relative_specifier(from, to)
     }
 
     fn ts_type(&self, kind: &KindValue) -> String {
@@ -890,7 +1003,7 @@ fn build_import_map(
 
         if let Some(namespace) = path.strip_suffix("::*") {
             let namespace = namespace.replace("::", "/");
-            // Nothing to import from a schema this package doesn't carry.
+            // Nothing to import from a schema this request doesn't carry.
             if let Some(units) = declares(&namespace) {
                 for name in declared_names(units) {
                     map.insert(name.clone(), (namespace.clone(), name));

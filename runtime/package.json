@@ -1,6 +1,6 @@
 {
   "name": "@comline/runtime",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "TypeScript runtime that Comline-generated RPC bindings link against.",
   "license": "MPL-2.0",
   "type": "module",

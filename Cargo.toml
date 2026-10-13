@@ -2,9 +2,12 @@
 resolver = "2"
 members = [
     "codegen",   # comline-codegen-typescript — the TypeScript `code` generator
+    "xtask",     # regenerates `std-extra/` (`@comline/std`) from std's schemas
 ]
-# Room for `libgen/`, `runtime/`, `std-extra/`, `conformance/` as they land.
-# See ComlineProject/docs → Design → Runtime & generation repository structure.
+# `std-extra/` is generated output, not a workspace member - it's an npm
+# package, built by `xtask` above. Room for `libgen/`, `conformance/` as they
+# land. See ComlineProject/docs → Design → Runtime & generation repository
+# structure.
 
 [profile.release]
 opt-level = 2
