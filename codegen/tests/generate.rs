@@ -299,8 +299,13 @@ fn lib_mode_emits_an_npm_package() {
         ("billing".to_string(), vec![]),
     ];
     let files = generate_typescript(&lib_req(&schemas)).unwrap();
-    let by_path =
-        |p: &str| &files.iter().find(|f| f.path.to_str().unwrap() == p).unwrap().contents;
+    let by_path = |p: &str| {
+        &files
+            .iter()
+            .find(|f| f.path.to_str().unwrap() == p)
+            .unwrap()
+            .contents
+    };
 
     let pkg = by_path("package.json");
     assert!(pkg.contains("\"name\": \"chat\""));
@@ -308,14 +313,21 @@ fn lib_mode_emits_an_npm_package() {
     assert!(pkg.contains("\"type\": \"module\""));
     assert!(pkg.contains("\"@comline/runtime\": \"^0.1.0\"")); // a protocol pulls it in
 
+    assert!(
+        pkg.contains("\"./*\""),
+        "subpath exports, for `chat/billing`: {pkg}"
+    );
+
     assert!(by_path("tsconfig.json").contains("\"NodeNext\""));
 
     let index = by_path("src/index.ts");
-    assert!(index.contains("export * from \"./chat.js\";"));
-    assert!(index.contains("export * from \"./billing.js\";"));
+    assert!(index.contains("export * as chat from \"./chat.js\";"));
+    assert!(index.contains("export * as billing from \"./billing.js\";"));
 
     assert!(by_path("src/chat.ts").contains("export class ChatClient {"));
-    assert!(files.iter().any(|f| f.path.to_str().unwrap() == "src/billing.ts"));
+    assert!(files
+        .iter()
+        .any(|f| f.path.to_str().unwrap() == "src/billing.ts"));
 }
 
 #[test]
@@ -330,11 +342,291 @@ fn lib_mode_omits_the_runtime_dep_without_a_protocol() {
     assert!(!pkg.contains("@comline/runtime"));
 }
 
+/// `use <path>` as core freezes it: one leaf entry per bound name.
+fn import(path: &str, alias: Option<&str>) -> FrozenUnit {
+    FrozenUnit::Import(path.into(), alias.map(Into::into), (0, 0))
+}
+
+fn struct_with(name: &str, fields: Vec<FrozenUnit>) -> FrozenUnit {
+    FrozenUnit::Struct {
+        docstring: None,
+        parameters: vec![],
+        name: name.into(),
+        fields,
+        span: (0, 0),
+    }
+}
+
+/// A package shaped like a real one: the consumer's own schemas plus the
+/// implicit std library, which is nested and present in *every* package -
+/// the reason flat-only `lib` mode could never generate anything.
+fn nested_package() -> Vec<(String, Vec<FrozenUnit>)> {
+    vec![
+        (
+            "none".to_string(),
+            vec![
+                import("types::Greeting", None),
+                struct_with("Test", vec![field("greeting", "Greeting")]),
+            ],
+        ),
+        (
+            "types".to_string(),
+            vec![struct_with("Greeting", vec![field("message", "string")])],
+        ),
+        (
+            "std/http".to_string(),
+            vec![struct_with("Request", vec![field("uri", "str")])],
+        ),
+        (
+            "std/validators".to_string(),
+            vec![struct_with("StringBounds", vec![field("max", "u32")])],
+        ),
+    ]
+}
+
 #[test]
-fn lib_mode_rejects_nested_namespaces() {
-    let schemas = vec![("account/user".to_string(), vec![])];
+fn lib_mode_mirrors_nested_namespaces() {
+    let schemas = nested_package();
+    let files = generate_typescript(&lib_req(&schemas)).unwrap();
+    let paths: Vec<&str> = files.iter().map(|f| f.path.to_str().unwrap()).collect();
+
+    for expected in [
+        "src/index.ts",
+        "src/none.ts",
+        "src/types.ts",
+        "src/std/index.ts",
+        "src/std/http.ts",
+        "src/std/validators.ts",
+    ] {
+        assert!(paths.contains(&expected), "missing {expected}: {paths:?}");
+    }
+
+    let by_path = |p: &str| {
+        &files
+            .iter()
+            .find(|f| f.path.to_str().unwrap() == p)
+            .unwrap()
+            .contents
+    };
+
+    // Each level names its children, so nothing is flattened into the
+    // package root and `std/http`'s `Request` can't collide with yours.
+    let root = by_path("src/index.ts");
+    assert!(
+        root.contains("export * as none from \"./none.js\";"),
+        "got: {root}"
+    );
+    assert!(
+        root.contains("export * as types from \"./types.js\";"),
+        "got: {root}"
+    );
+    assert!(
+        root.contains("export * as std from \"./std/index.js\";"),
+        "a grouping node points at its own barrel: {root}"
+    );
+    assert!(
+        !root.contains("std/http"),
+        "the root names `std`, not its children: {root}"
+    );
+
+    let std_index = by_path("src/std/index.ts");
+    assert!(
+        std_index.contains("export * as http from \"./http.js\";"),
+        "got: {std_index}"
+    );
+    assert!(
+        std_index.contains("export * as validators from \"./validators.js\";"),
+        "got: {std_index}"
+    );
+}
+
+#[test]
+fn lib_mode_refuses_a_schema_that_is_also_a_namespace() {
+    let schemas = vec![
+        ("std".to_string(), vec![]),
+        ("std/http".to_string(), vec![]),
+    ];
     let err = generate_typescript(&lib_req(&schemas))
         .unwrap_err()
         .to_string();
-    assert!(err.contains("nested namespaces"));
+    assert!(err.contains("both a schema and a namespace"), "got: {err}");
+    assert!(
+        err.contains("export * as std"),
+        "names the line it can't write: {err}"
+    );
+}
+
+// ── cross-schema references ────────────────────────────────────────────────
+
+/// The file a schema generates, by namespace, in `code` mode.
+fn code_file(schemas: &[(String, Vec<FrozenUnit>)], namespace: &str) -> String {
+    let files = generate_typescript(&code_req(schemas)).unwrap();
+    files
+        .iter()
+        .find(|f| f.path.to_str().unwrap() == format!("{namespace}.ts"))
+        .unwrap_or_else(|| panic!("no file for {namespace}"))
+        .contents
+        .clone()
+}
+
+#[test]
+fn a_cross_schema_reference_is_imported() {
+    let schemas = nested_package();
+    let out = code_file(&schemas, "none");
+    assert!(
+        out.contains("import type { Greeting } from \"./types.js\";"),
+        "a referenced type from another schema must be imported: {out}"
+    );
+    assert!(out.contains("greeting: Greeting;"), "got: {out}");
+}
+
+#[test]
+fn a_cross_schema_import_is_imported_in_lib_mode_too() {
+    let schemas = nested_package();
+    let files = generate_typescript(&lib_req(&schemas)).unwrap();
+    let none = &files
+        .iter()
+        .find(|f| f.path.to_str().unwrap() == "src/none.ts")
+        .unwrap()
+        .contents;
+    assert!(
+        none.contains("import type { Greeting } from \"./types.js\";"),
+        "got: {none}"
+    );
+}
+
+#[test]
+fn an_import_specifier_is_relative_to_the_importing_schema() {
+    // `std/http` sits a directory down, so reaching a root-level schema is
+    // `../`, and a sibling under `std/` is `./`.
+    let schemas = vec![
+        (
+            "std/http".to_string(),
+            vec![
+                import("types::Greeting", None),
+                import("std::validators::StringBounds", None),
+                struct_with(
+                    "Request",
+                    vec![
+                        field("greeting", "Greeting"),
+                        field("bounds", "StringBounds"),
+                    ],
+                ),
+            ],
+        ),
+        (
+            "types".to_string(),
+            vec![struct_with("Greeting", vec![field("message", "string")])],
+        ),
+        (
+            "std/validators".to_string(),
+            vec![struct_with("StringBounds", vec![field("max", "u32")])],
+        ),
+    ];
+    let out = code_file(&schemas, "std/http");
+    assert!(
+        out.contains("import type { Greeting } from \"../types.js\";"),
+        "got: {out}"
+    );
+    assert!(
+        out.contains("import type { StringBounds } from \"./validators.js\";"),
+        "a sibling namespace is `./`, not `../std/`: {out}"
+    );
+}
+
+#[test]
+fn an_alias_imports_the_name_the_other_schema_declares() {
+    let schemas = vec![
+        (
+            "none".to_string(),
+            vec![
+                import("types::Greeting", Some("G")),
+                struct_with("Test", vec![field("greeting", "G")]),
+            ],
+        ),
+        (
+            "types".to_string(),
+            vec![struct_with("Greeting", vec![field("message", "string")])],
+        ),
+    ];
+    let out = code_file(&schemas, "none");
+    assert!(
+        out.contains("import type { Greeting as G } from \"./types.js\";"),
+        "`Greeting` is the only name the other module exports: {out}"
+    );
+    assert!(out.contains("greeting: G;"), "got: {out}");
+}
+
+#[test]
+fn a_glob_use_binds_the_names_the_other_schema_declares() {
+    let schemas = vec![
+        (
+            "none".to_string(),
+            vec![
+                import("types::*", None),
+                struct_with("Test", vec![field("greeting", "Greeting")]),
+            ],
+        ),
+        (
+            "types".to_string(),
+            vec![
+                struct_with("Greeting", vec![field("message", "string")]),
+                struct_with("Unused", vec![]),
+            ],
+        ),
+    ];
+    let out = code_file(&schemas, "none");
+    assert!(
+        out.contains("import type { Greeting } from \"./types.js\";"),
+        "got: {out}"
+    );
+    assert!(
+        !out.contains("Unused"),
+        "a glob still imports only what is used: {out}"
+    );
+}
+
+#[test]
+fn an_unused_use_emits_no_import() {
+    // `use std::http::HttpMethod` with nothing referring to it - common in
+    // real schemas, and an import for it would be dead weight.
+    let schemas = vec![
+        (
+            "none".to_string(),
+            vec![
+                import("std::http::HttpMethod", None),
+                struct_with("Test", vec![field("message", "string")]),
+            ],
+        ),
+        (
+            "std/http".to_string(),
+            vec![FrozenUnit::Enum {
+                docstring: None,
+                name: "HttpMethod".into(),
+                variants: vec![],
+                span: (0, 0),
+            }],
+        ),
+    ];
+    let out = code_file(&schemas, "none");
+    assert!(
+        !out.contains("import"),
+        "nothing is referenced, so nothing is imported: {out}"
+    );
+}
+
+#[test]
+fn a_reference_to_a_schema_the_package_does_not_carry_stays_bare() {
+    // A generator that doesn't inline some dependency emits no file for it,
+    // so an import pointing there would never resolve.
+    let schemas = vec![(
+        "none".to_string(),
+        vec![
+            import("elsewhere::Thing", None),
+            struct_with("Test", vec![field("thing", "Thing")]),
+        ],
+    )];
+    let out = code_file(&schemas, "none");
+    assert!(!out.contains("import type"), "got: {out}");
+    assert!(out.contains("thing: Thing;"), "got: {out}");
 }
