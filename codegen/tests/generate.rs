@@ -566,11 +566,22 @@ fn an_alias_imports_the_name_the_other_schema_declares() {
 
 #[test]
 fn a_glob_use_binds_the_names_the_other_schema_declares() {
+    // Core expands `use types::*` into the `::*` marker **plus** one leaf
+    // `Import` per name the target declares - the marker alone binds
+    // nothing. That is `resolve_use_declaration`, and it holds for `std` too:
+    // a real project with `use std::http::*` generates
+    // `crate::std::http::Request`, resolved from the leaves.
+    //
+    // The leaves were missing here, so this fixture was asserting against
+    // input core never produces. It is the generator's own glob expansion
+    // this used to exercise - redundant with core's, and now gone.
     let schemas = vec![
         (
             "none".to_string(),
             vec![
                 import("types::*", None),
+                import("types::Greeting", None),
+                import("types::Unused", None),
                 struct_with("Test", vec![field("greeting", "Greeting")]),
             ],
         ),

@@ -13,17 +13,17 @@
 //!
 //! A type another schema declares is imported from that schema by relative
 //! specifier (`import type { Greeting } from "./types.js"`), so the output
-//! compiles in both modes. See [`build_import_map`]. With `external_std`,
+//! compiles in both modes. Which name comes from where is
+//! [`comline_codegen::symbols`]'s answer, not this crate's. With `external_std`,
 //! `std`'s own schemas are not emitted at all and their types come from
 //! [`STD_PACKAGE`] instead.
 //!
 //! `code` mode emits bare `<namespace>.ts`; `lib` mode adds a `package.json`
 //! (declaring `@comline/runtime` and `@comline/std` as needed), a
 //! `tsconfig.json`, and an `index.ts` barrel per namespace level
-//! ([`NamespaceTree`]). See design/generation.md.
+//! ([`NamespaceTree`], laid out by [`TsLayout`]). See design/generation.md.
 
 use std::borrow::Cow;
-use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 
@@ -31,8 +31,12 @@ use comline_core::schema::ir::compiler::interpreted::kind_search::KindValue;
 use comline_core::schema::ir::frozen::schema_ir_hash;
 use comline_core::schema::ir::frozen::unit::FrozenUnit;
 
-use eyre::{bail, Result};
+use eyre::Result;
 
+use comline_codegen::modules::{NamespaceTree, TreeLayout};
+use comline_codegen::naming::{pascal, screaming_snake};
+use comline_codegen::stdlib::{self, is_std_namespace};
+use comline_codegen::symbols::{error_names, SymbolTable, UseTracker};
 use comline_codegen::{GenRequest, GeneratedFile, Mode, PackageMeta};
 
 /// The npm package generated RPC code imports from. Not published yet — a
@@ -52,41 +56,19 @@ const RUNTIME_VERSION: &str = "^0.1.0";
 const STD_PACKAGE: &str = "@comline/std";
 const STD_VERSION: &str = "^0.1.0";
 
-/// Whether a namespace belongs to the standard library — `std` itself, or
-/// anything under it.
-fn is_std_namespace(namespace: &str) -> bool {
-    namespace == "std" || namespace.starts_with("std/")
-}
-
 pub fn generate_typescript(req: &GenRequest) -> Result<Vec<GeneratedFile>> {
     let default_framing = req.default_framing.as_deref();
     let external_std = req.external_std;
 
     // With `external_std`, std's schemas aren't this package's to emit - it
-    // references `@comline/std` for them instead. Borrowed when the flag is
-    // off, so the common path still clones nothing.
+    // references `@comline/std` for them instead.
     //
-    // Only *emission* is narrowed. `req.schemas` stays the list every
-    // reference is resolved against, because a schema that isn't emitted is
-    // still a schema whose types can be named - that is the whole point of
-    // `external_std`. Resolving against the narrowed list instead would drop
-    // every std import and silently restore the bare, uncompilable names
-    // that `import type` headers exist to prevent.
-    let owned: Vec<(String, Vec<FrozenUnit>)>;
-    let emitted: &[(String, Vec<FrozenUnit>)] = if external_std {
-        owned = req
-            .schemas
-            .iter()
-            .filter(|(namespace, _)| !is_std_namespace(namespace))
-            .cloned()
-            .collect();
-        &owned
-    } else {
-        req.schemas
-    };
-
-    // Only declare the dependency if std was actually there to be dropped.
-    let needs_std_dep = external_std && req.schemas.iter().any(|(ns, _)| is_std_namespace(ns));
+    // Only *emission* is narrowed; `req.schemas` stays the list every
+    // reference is resolved against. `stdlib::split` carries that
+    // distinction, and the "declare the dependency only if std was actually
+    // there" subtlety with it.
+    let std = stdlib::split(req.schemas, external_std);
+    let emitted = std.emitted.as_ref();
 
     match req.mode {
         Mode::Code => Ok(emitted
@@ -113,7 +95,7 @@ pub fn generate_typescript(req: &GenRequest) -> Result<Vec<GeneratedFile>> {
             .collect()),
 
         Mode::Lib => {
-            let tree = NamespaceTree::build(emitted)?;
+            let tree = NamespaceTree::build(emitted, &TsLayout)?;
 
             let has_protocol = emitted.iter().any(|(_, units)| {
                 units
@@ -124,147 +106,68 @@ pub fn generate_typescript(req: &GenRequest) -> Result<Vec<GeneratedFile>> {
             let mut files = vec![
                 GeneratedFile {
                     path: PathBuf::from("package.json"),
-                    contents: package_json(&req.package, has_protocol, needs_std_dep),
+                    contents: package_json(&req.package, has_protocol, std.needs_std_dependency),
                 },
                 GeneratedFile {
                     path: PathBuf::from("tsconfig.json"),
                     contents: TSCONFIG.to_string(),
                 },
             ];
-            tree.emit_files(
-                "src",
-                req.schemas,
-                default_framing,
-                external_std,
-                &mut files,
-            );
+            // The render closure takes every schema in the request, not just
+            // the ones in this tree: a reference resolves against all of
+            // them, including an external `std` this package emits no file
+            // for.
+            files.extend(tree.emit("src", &TsLayout, &|namespace, units| {
+                schema_source(namespace, units, req.schemas, default_framing, external_std)
+            }));
             Ok(files)
         }
     }
 }
 
-/// The `src/` tree `lib` mode emits: each `/`-joined namespace segment becomes
-/// one directory level, and every level gets an `index.ts` re-exporting its
-/// children under their own names (`export * as http from "./http.js"`). A
-/// node is either a schema (leaf) or a grouping of deeper namespaces (`std`
-/// grouping `std/http` and `std/validators`) — never both, since
-/// `export * as std` would then have two candidates and no way to choose.
+/// What TypeScript decides differently about the `src/` tree
+/// ([`comline_codegen::modules`] holds the rest).
+///
+/// Four things, and no more: the extension, a barrel *inside* each directory
+/// rather than a file beside it (`src/std/index.ts`, not `src/std.ts`), the
+/// `export * as` line, and the specifier that line needs — which is the one
+/// place the child's own kind shows through, since a leaf is `./x.js` and a
+/// grouping is `./x/index.js`.
 ///
 /// Mirroring namespaces rather than flattening every name into the package
 /// root is what makes a collision between, say, your own `Request` and
 /// `std/http`'s impossible: TypeScript refuses ambiguous `export *`
-/// re-exports (TS2308), and `std` is implicit in every package.
-///
-/// Deliberately not shared with comline-rust's `ModuleTree`, which this
-/// parallels: that one encodes 2021-edition `mod.rs`-free rules and a
-/// reserved crate root, this one emits `index.ts` barrels and has neither.
-/// One type covering both would be parameterised until it was two
-/// implementations behind a single name.
-struct NamespaceTree<'a> {
-    schema: Option<(&'a str, &'a [FrozenUnit])>,
-    // Alphabetical, not first-seen order: deterministic output (stable for
-    // diffing and the CAS) matters more than mirroring schema order.
-    children: BTreeMap<String, NamespaceTree<'a>>,
-}
+/// re-exports (TS2308), and `std` is implicit in every package. Nothing is
+/// reserved at the root — TypeScript has no equivalent of Rust's crate root.
+struct TsLayout;
 
-impl<'a> NamespaceTree<'a> {
-    fn empty() -> Self {
-        Self {
-            schema: None,
-            children: BTreeMap::new(),
-        }
+impl TreeLayout for TsLayout {
+    fn ext(&self) -> &str {
+        "ts"
     }
 
-    fn build(schemas: &'a [(String, Vec<FrozenUnit>)]) -> Result<Self> {
-        let mut root = Self::empty();
-        for (namespace, units) in schemas {
-            let mut node = &mut root;
-            for segment in namespace.split('/') {
-                node = node
-                    .children
-                    .entry(segment.to_string())
-                    .or_insert_with(Self::empty);
-            }
-            node.schema = Some((namespace.as_str(), units));
-        }
-        root.check_no_schema_is_also_a_namespace("")?;
-        Ok(root)
+    /// Inside the directory, at every level: `src/index.ts`,
+    /// `src/std/index.ts`. The root is not a special case.
+    fn group_file(&self, prefix: &str, _is_root: bool) -> String {
+        format!("{prefix}/index.ts")
     }
 
-    fn check_no_schema_is_also_a_namespace(&self, path: &str) -> Result<()> {
-        if self.schema.is_some() && !self.children.is_empty() {
-            bail!(
-                "typescript lib mode can't generate `{path}`: it's both a \
-                 schema and a namespace of deeper schemas (e.g. `{path}/x`), \
-                 so the barrel's `export * as {}` has no single module to \
-                 name - rename one of them",
-                path.rsplit('/').next().unwrap_or(path)
-            )
-        }
-        for (segment, child) in &self.children {
-            let child_path = if path.is_empty() {
-                segment.clone()
-            } else {
-                format!("{path}/{segment}")
-            };
-            child.check_no_schema_is_also_a_namespace(&child_path)?;
-        }
-        Ok(())
+    fn declare_child(&self, segment: &str, child_is_leaf: bool) -> String {
+        let module = if child_is_leaf {
+            format!("./{segment}.js")
+        } else {
+            format!("./{segment}/index.js")
+        };
+        format!("export * as {segment} from \"{module}\";\n")
     }
 
-    /// `export * as <segment>` for each direct child — this node's own
-    /// `index.ts`, whether that is `src/index.ts` or `src/std/index.ts`.
-    fn barrel(&self) -> String {
-        let mut s = String::from("// Generated by Comline\n\n");
-        for (segment, child) in &self.children {
-            let module = if child.schema.is_some() {
-                format!("./{segment}.js")
-            } else {
-                format!("./{segment}/index.js")
-            };
-            s.push_str(&format!("export * as {segment} from \"{module}\";\n"));
-        }
-        s
-    }
-
-    /// This node's `index.ts` and everything below it, under `dir`
-    /// (`"src"` for the root).
-    /// `lookup` is every schema in the request, not just the ones in this
-    /// tree: a reference resolves against all of them, including an external
-    /// `std` that this package deliberately emits no file for.
-    fn emit_files(
-        &self,
-        dir: &str,
-        lookup: &'a [(String, Vec<FrozenUnit>)],
-        default_framing: Option<&str>,
-        external_std: bool,
-        files: &mut Vec<GeneratedFile>,
-    ) {
-        files.push(GeneratedFile {
-            path: PathBuf::from(format!("{dir}/index.ts")),
-            contents: self.barrel(),
-        });
-        for (segment, child) in &self.children {
-            match child.schema {
-                Some((namespace, units)) => files.push(GeneratedFile {
-                    path: PathBuf::from(format!("{dir}/{segment}.ts")),
-                    contents: schema_source(
-                        namespace,
-                        units,
-                        lookup,
-                        default_framing,
-                        external_std,
-                    ),
-                }),
-                None => child.emit_files(
-                    &format!("{dir}/{segment}"),
-                    lookup,
-                    default_framing,
-                    external_std,
-                    files,
-                ),
-            }
-        }
+    /// A node that is both a schema and a grouping would give
+    /// `export * as <name>` two candidate modules and no way to choose.
+    fn ambiguity_reason(&self, path: &str) -> String {
+        format!(
+            "the barrel's `export * as {}` has no single module to name",
+            path.rsplit('/').next().unwrap_or(path)
+        )
     }
 }
 
@@ -328,7 +231,7 @@ fn package_json(pkg: &PackageMeta, has_protocol: bool, needs_std_dep: bool) -> S
 ///
 /// `namespace` is this schema's own (`"std/http"`), needed to place the
 /// relative specifiers in the header; `schemas` is every schema in the
-/// package, which [`build_import_map`] needs to expand a glob `use`.
+/// request, which is what a reference resolves against.
 fn schema_source(
     namespace: &str,
     units: &[FrozenUnit],
@@ -340,7 +243,7 @@ fn schema_source(
     let has_protocol = units
         .iter()
         .any(|u| matches!(u, FrozenUnit::Protocol { .. }));
-    let errors = error_type_names(units);
+    let errors = error_names(units);
 
     // Which framings the protocols in this file reach for.
     let picks: Vec<FramingChoice> = units
@@ -437,17 +340,6 @@ fn schema_source(
     output.push_str(&ir_hash);
     output.push_str(&decls);
     output
-}
-
-/// Schema-global error ordinal -> the `error` interface's name.
-fn error_type_names(units: &[FrozenUnit]) -> HashMap<u16, String> {
-    units
-        .iter()
-        .filter_map(|u| match u {
-            FrozenUnit::Error { ordinal, name, .. } => Some((*ordinal, name.clone())),
-            _ => None,
-        })
-        .collect()
 }
 
 // ── data types ─────────────────────────────────────────────────────────────
@@ -826,9 +718,7 @@ fn protocol(
 /// (`interface`, `type_alias`, `protocol`) only ever reads, and the
 /// alternative is a `&mut` parameter on each of them for no gain.
 struct TypeMapper {
-    /// Bound name -> (namespace, the name as that schema declares it).
-    imports: HashMap<String, (String, String)>,
-    used: RefCell<BTreeSet<String>>,
+    uses: UseTracker,
     /// Whether a std namespace resolves to `@comline/std` instead of a file
     /// in this package.
     external_std: bool,
@@ -840,9 +730,14 @@ impl TypeMapper {
         schemas: &[(String, Vec<FrozenUnit>)],
         external_std: bool,
     ) -> Self {
+        // With `external_std`, std is nameable even though no file is
+        // emitted for it - the one case where a namespace resolves without
+        // being in the output.
+        let table = SymbolTable::with_external(units, schemas, |namespace| {
+            external_std && is_std_namespace(namespace)
+        });
         Self {
-            imports: build_import_map(units, schemas),
-            used: RefCell::new(BTreeSet::new()),
+            uses: UseTracker::new(table),
             external_std,
         }
     }
@@ -850,40 +745,33 @@ impl TypeMapper {
     /// `import type` lines for every imported name the rendering reached for,
     /// one per source module, relative to `namespace`.
     fn import_header(&self, namespace: &str) -> String {
-        // (original, bound) pairs per namespace; sorted, so output is stable.
-        let mut by_module: BTreeMap<&str, BTreeSet<(&str, &str)>> = BTreeMap::new();
-        let used = self.used.borrow();
-        for bound in used.iter() {
-            let Some((ns, original)) = self.imports.get(bound) else {
-                continue;
-            };
-            // A schema never imports from itself; a `use` resolving back here
-            // would otherwise emit a circular self-import.
-            if ns == namespace {
-                continue;
-            }
+        // (declared, bound) pairs per source namespace; sorted, so output is
+        // stable. `reached` has already dropped anything resolving back to
+        // this schema, which would otherwise be a circular self-import.
+        let mut by_module: BTreeMap<String, BTreeSet<(String, String)>> = BTreeMap::new();
+        for (bound, origin) in self.uses.reached(namespace) {
             by_module
-                .entry(ns.as_str())
+                .entry(origin.namespace)
                 .or_default()
-                .insert((original.as_str(), bound.as_str()));
+                .insert((origin.declared, bound));
         }
 
         let mut s = String::new();
         for (module, names) in by_module {
             let list = names
                 .iter()
-                .map(|(original, bound)| {
-                    if original == bound {
-                        (*original).to_string()
+                .map(|(declared, bound)| {
+                    if declared == bound {
+                        declared.clone()
                     } else {
-                        format!("{original} as {bound}")
+                        format!("{declared} as {bound}")
                     }
                 })
                 .collect::<Vec<_>>()
                 .join(", ");
             s.push_str(&format!(
                 "import type {{ {list} }} from \"{}\";\n",
-                self.specifier_for(namespace, module)
+                self.specifier_for(namespace, &module)
             ));
         }
         if !s.is_empty() {
@@ -926,12 +814,10 @@ impl TypeMapper {
         if let Some(mapped) = primitive_ts_type(s) {
             return mapped;
         }
-        // A named type. If one of this schema's `use` declarations bound the
-        // name, record it so the header imports it; the emitted name is the
-        // same either way (the binding, aliased or not).
-        if self.imports.contains_key(s) {
-            self.used.borrow_mut().insert(s.to_string());
-        }
+        // A named type. Resolving is what records it for the header; the
+        // emitted name is the same either way (the binding, aliased or not),
+        // because an alias is this schema's own name for it.
+        self.uses.resolve(s);
         s.to_string()
     }
 }
@@ -970,76 +856,6 @@ fn relative_specifier(from: &str, to: &str) -> String {
     s
 }
 
-/// Bound name -> (namespace, declared name), for every name this schema's
-/// `use` declarations bind to a type in another schema.
-///
-/// Core already expands every `use` form - plain, aliased, item-list - into
-/// one leaf `FrozenUnit::Import(path, alias, _)` per bound name
-/// (`resolve_use_declaration`), so a reference's origin is a flat entry right
-/// here and no other schema's units need consulting. The exception is a glob,
-/// which binds no name for core to list: `schemas` carries the target schema,
-/// so expand it here rather than leaving its references bare.
-///
-/// Keeping the *declared* name alongside the namespace is what makes an alias
-/// work: `use types::Greeting as G` has to emit
-/// `import type { Greeting as G }`, since `G` is this schema's name for it and
-/// `Greeting` is the only name the other module exports.
-fn build_import_map(
-    units: &[FrozenUnit],
-    schemas: &[(String, Vec<FrozenUnit>)],
-) -> HashMap<String, (String, String)> {
-    let declares = |namespace: &str| {
-        schemas
-            .iter()
-            .find(|(n, _)| n == namespace)
-            .map(|(_, units)| units)
-    };
-
-    let mut map = HashMap::new();
-    for unit in units {
-        let FrozenUnit::Import(path, alias, _) = unit else {
-            continue;
-        };
-
-        if let Some(namespace) = path.strip_suffix("::*") {
-            let namespace = namespace.replace("::", "/");
-            // Nothing to import from a schema this request doesn't carry.
-            if let Some(units) = declares(&namespace) {
-                for name in declared_names(units) {
-                    map.insert(name.clone(), (namespace.clone(), name));
-                }
-            }
-            continue;
-        }
-
-        let Some((namespace, name)) = path.rsplit_once("::") else {
-            continue; // a single-segment path binds no name here
-        };
-        let namespace = namespace.replace("::", "/");
-        if declares(&namespace).is_none() {
-            continue;
-        }
-        let bound = alias.clone().unwrap_or_else(|| name.to_string());
-        map.insert(bound, (namespace, name.to_string()));
-    }
-    map
-}
-
-/// The names a schema exports as types — what a glob `use` of it binds.
-fn declared_names(units: &[FrozenUnit]) -> Vec<String> {
-    units
-        .iter()
-        .filter_map(|u| match u {
-            FrozenUnit::Struct { name, .. }
-            | FrozenUnit::Error { name, .. }
-            | FrozenUnit::Enum { name, .. }
-            | FrozenUnit::TypeAlias { name, .. }
-            | FrozenUnit::Protocol { name, .. } => Some(name.clone()),
-            _ => None,
-        })
-        .collect()
-}
-
 /// The TypeScript type for an IDL primitive, or `None` if the name isn't one
 /// (a type some schema declares).
 fn primitive_ts_type(s: &str) -> Option<String> {
@@ -1054,30 +870,4 @@ fn primitive_ts_type(s: &str) -> Option<String> {
         _ => return None,
     };
     Some(ts.to_string())
-}
-
-/// `get_user` -> `GetUser`, for deriving a type name from a function name.
-fn pascal(s: &str) -> String {
-    s.split('_')
-        .filter(|w| !w.is_empty())
-        .map(|w| {
-            let mut c = w.chars();
-            match c.next() {
-                Some(first) => first.to_uppercase().collect::<String>() + c.as_str(),
-                None => String::new(),
-            }
-        })
-        .collect()
-}
-
-/// `UserService` -> `USER_SERVICE`, for the call-table const.
-fn screaming_snake(s: &str) -> String {
-    let mut out = String::new();
-    for (i, ch) in s.char_indices() {
-        if ch.is_uppercase() && i != 0 {
-            out.push('_');
-        }
-        out.extend(ch.to_uppercase());
-    }
-    out
 }
