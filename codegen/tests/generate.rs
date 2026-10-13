@@ -832,3 +832,51 @@ fn a_file_not_touching_std_gets_no_install_note() {
         .contents;
     assert!(!plain.contains("npm install"), "got: {plain}");
 }
+
+/// A schema of nothing but constants generated an empty file - the
+/// declarations were dropped on the floor.
+#[test]
+fn constants_are_emitted() {
+    use comline_core::schema::ir::compiler::interpreted::kind_search::Primitive;
+
+    let constant = |doc: Option<&str>, name: &str, kind: Primitive| FrozenUnit::Constant {
+        docstring: doc.map(str::to_string),
+        name: name.to_string(),
+        kind_value: KindValue::Primitive(kind),
+        span: (0, 0),
+    };
+    let schemas = vec![(
+        "limits".to_string(),
+        vec![
+            constant(
+                Some("How many times a client retries."),
+                "MAX_RETRIES",
+                Primitive::U8(Some(5)),
+            ),
+            constant(
+                None,
+                "SERVICE_NAME",
+                Primitive::String(Some("store".into())),
+            ),
+            constant(None, "DEBUG", Primitive::Boolean(Some(true))),
+            constant(None, "HUGE", Primitive::U128(Some(7))),
+        ],
+    )];
+    let out = code_file(&schemas, "limits");
+
+    assert!(
+        out.contains(
+            "/**\n * How many times a client retries.\n */\nexport const MAX_RETRIES = 5;"
+        ),
+        "got: {out}"
+    );
+    // No `: number` annotation - the inferred literal type says more.
+    assert!(!out.contains("MAX_RETRIES: number"), "got: {out}");
+    assert!(
+        out.contains("export const SERVICE_NAME = \"store\";"),
+        "got: {out}"
+    );
+    assert!(out.contains("export const DEBUG = true;"), "got: {out}");
+    // `bigint`, so the literal needs the suffix to actually be one.
+    assert!(out.contains("export const HUGE = 7n;"), "got: {out}");
+}
