@@ -27,7 +27,7 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 
-use comline_core::schema::ir::compiler::interpreted::kind_search::KindValue;
+use comline_core::schema::ir::compiler::interpreted::kind_search::{KindValue, Primitive};
 use comline_core::schema::ir::frozen::schema_ir_hash;
 use comline_core::schema::ir::frozen::unit::FrozenUnit;
 
@@ -314,6 +314,14 @@ fn schema_source(
             FrozenUnit::TypeAlias { name, target, .. } => {
                 decls.push_str(&type_alias(name, target, &types));
             }
+            FrozenUnit::Constant {
+                docstring,
+                name,
+                kind_value,
+                ..
+            } => {
+                decls.push_str(&constant(docstring.as_deref(), name, kind_value));
+            }
             FrozenUnit::Protocol {
                 name,
                 functions,
@@ -351,6 +359,50 @@ fn schema_source(
 /// inside an interface.
 fn type_alias(name: &str, target: &KindValue, types: &TypeMapper) -> String {
     format!("export type {name} = {};\n\n", types.ts_type(target))
+}
+
+/// `const MAX_RETRIES: u8 = 5` -> `export const MAX_RETRIES = 5;`.
+///
+/// Declarations used to vanish here: a schema of nothing but constants
+/// generated an empty file. Only safe to emit since core#92, which stopped
+/// inferring the primitive from the literal - before that a `u8` constant
+/// and a `u64` one were indistinguishable in the IR.
+///
+/// **No type annotation, deliberately.** TypeScript has no `u8`, so
+/// annotating would mean writing `number` and throwing away what the
+/// inferred literal type (`5`) already says more precisely. The exception is
+/// a 128-bit integer, which [`primitive_ts_type`] maps to `bigint` and which
+/// therefore needs the `n` suffix on the literal to *be* one.
+fn constant(docstring: Option<&str>, name: &str, kind_value: &KindValue) -> String {
+    let KindValue::Primitive(primitive) = kind_value else {
+        // Validation refuses a constant of a named type, so this is
+        // unreachable from a real build.
+        return String::new();
+    };
+    let Some(literal) = primitive.value_str() else {
+        return String::new();
+    };
+
+    let value = match primitive {
+        Primitive::String(_) => format!("{literal:?}"),
+        // `bigint` is a distinct type from `number`, and `7` is not one.
+        Primitive::U128(_) | Primitive::S128(_) => format!("{literal}n"),
+        _ => literal,
+    };
+
+    let mut s = String::new();
+    // A docstring is carried as JSDoc so editors show it. Note that structs,
+    // enums and protocols still drop theirs - a separate gap, not one this
+    // should quietly match.
+    if let Some(doc) = docstring.filter(|d| !d.trim().is_empty()) {
+        s.push_str("/**\n");
+        for line in doc.lines() {
+            s.push_str(&format!(" * {line}\n"));
+        }
+        s.push_str(" */\n");
+    }
+    s.push_str(&format!("export const {name} = {value};\n\n"));
+    s
 }
 
 fn interface(name: &str, fields: &[FrozenUnit], types: &TypeMapper) -> String {
