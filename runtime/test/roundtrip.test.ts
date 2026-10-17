@@ -83,6 +83,7 @@ class ChatClient {
   async send(text: string): Promise<Message> {
     const env: Envelope = await this.client.call({ id: 0, name: "send" }, { text });
     if ("ok" in env) return this.client.codec.decode<Message>(env.ok);
+    if ("fault" in env) throw RuntimeError.provider();
     if (env.err.id === 0) throw new RejectedError(this.client.codec.decode<Rejected>(env.err.body));
     throw RuntimeError.remote(env.err.id);
   }

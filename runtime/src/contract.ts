@@ -16,6 +16,7 @@ export type RuntimeErrorKind =
   | "timeout" // no response within the call's window
   | "unknownCall" // the peer addressed a call this side does not have
   | "remote" // the peer raised a schema error this side's code does not know
+  | "provider" // the peer's provider failed outside what its schema describes
   | "handshake"; // the connection handshake disagreed
 
 export class RuntimeError extends Error {
@@ -47,6 +48,9 @@ export class RuntimeError extends Error {
   }
   static remote(id: number): RuntimeError {
     return new RuntimeError("remote", id);
+  }
+  static provider(): RuntimeError {
+    return new RuntimeError("provider");
   }
   static handshake(): RuntimeError {
     return new RuntimeError("handshake");
@@ -85,18 +89,28 @@ export function call(id: number, name: string): Call {
 
 /**
  * A decoded response body: an `ok` payload for the stub to decode as its return
- * type, or an `err` payload keyed by the schema-global error ordinal for the
- * generated error table to map.
+ * type, an `err` payload keyed by the schema-global error ordinal for the
+ * generated error table to map, or a `fault` — the provider failed in a way its
+ * schema does not describe.
+ *
+ * A fault carries no body. There is no wire representation for arbitrary
+ * provider detail, and inventing one would leak an implementation's internals
+ * to every caller.
  */
 export type Envelope =
   | { readonly ok: Uint8Array }
-  | { readonly err: { readonly id: number; readonly body: Uint8Array } };
+  | { readonly err: { readonly id: number; readonly body: Uint8Array } }
+  | { readonly fault: true };
 
-/** What a dispatched handler recorded — nothing (one-way), an ok, or an error. */
+/**
+ * What a dispatched handler recorded — nothing (one-way), an ok, a schema
+ * error, or a fault.
+ */
 export type Outcome =
   | { readonly kind: "none" }
   | { readonly kind: "ok" }
-  | { readonly kind: "err"; readonly id: number };
+  | { readonly kind: "err"; readonly id: number }
+  | { readonly kind: "fault" };
 
 /**
  * The framing-agnostic sink a generated dispatcher writes its result into. The
@@ -115,6 +129,15 @@ export class Reply {
   err(id: number, body: Uint8Array): void {
     this.body = body;
     this.outcome = { kind: "err", id };
+  }
+
+  /**
+   * Record a failure the schema does not describe — a handler threw something
+   * it never declared, or the params would not decode. Writes no body.
+   */
+  fault(): void {
+    this.body = new Uint8Array(0);
+    this.outcome = { kind: "fault" };
   }
 }
 
@@ -173,5 +196,15 @@ export interface Framing {
   decodeRequest(frame: Uint8Array): DecodedRequest | undefined;
   encodeResponseOk(requestId: bigint, payload: Uint8Array): Uint8Array;
   encodeResponseErr(requestId: bigint, id: number, body: Uint8Array): Uint8Array;
+  /**
+   * Frame a `fault` response — no ordinal, no body.
+   *
+   * Deliberately required, with no default. A default would have to pick some
+   * wire shape and every framing written afterwards would inherit it silently,
+   * including ones whose wire already has a native way to say "internal
+   * error". Whatever it writes, {@link Framing.decodeResponse} must read back
+   * as a `fault` envelope.
+   */
+  encodeResponseFault(requestId: bigint): Uint8Array;
   decodeResponse(frame: Uint8Array): DecodedResponse | undefined;
 }

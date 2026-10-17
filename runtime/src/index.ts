@@ -38,7 +38,12 @@ export {
 
 export { JsonCodec } from "./codec.js";
 
-export { encodeEnvelopeOk, encodeEnvelopeErr, decodeEnvelope } from "./envelope.js";
+export {
+  encodeEnvelopeOk,
+  encodeEnvelopeErr,
+  encodeEnvelopeFault,
+  decodeEnvelope,
+} from "./envelope.js";
 
 export { DatagramFraming } from "./framing/datagram.js";
 export { JsonRpcFraming } from "./framing/jsonrpc.js";
