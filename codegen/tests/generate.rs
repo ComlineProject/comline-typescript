@@ -880,3 +880,115 @@ fn constants_are_emitted() {
     // `bigint`, so the literal needs the suffix to actually be one.
     assert!(out.contains("export const HUGE = 7n;"), "got: {out}");
 }
+
+/// `! A, B`. The IR has always modelled `throws` as a list, so this needed
+/// nothing — but nothing proved it either, because the grammar could only
+/// produce one.
+#[test]
+fn a_function_with_several_throws_documents_and_catches_each() {
+    let error = |ordinal: u16, name: &str| FrozenUnit::Error {
+        docstring: None,
+        parameters: vec![],
+        ordinal,
+        imported_from: None,
+        name: name.to_string(),
+        message: format!("{name} happened"),
+        fields: vec![],
+        span: None,
+    };
+    let proto = FrozenUnit::Protocol {
+        docstring: String::new(),
+        parameters: vec![],
+        name: "Vault".to_string(),
+        // The `!` clause's own order, which need not be ordinal order.
+        functions: vec![function("open", vec![], Some(KindValue::Unit), vec![1, 0])],
+        span: (0, 0),
+    };
+    let src = one(vec![error(0, "NotFound"), error(1, "Denied"), proto]);
+
+    // Both errors are documented on the interface, in clause order.
+    assert!(
+        src.contains("/** @throws {DeniedError | NotFoundError} */"),
+        "{src}"
+    );
+    // The dispatcher tests for each, and still faults on anything else.
+    assert!(
+        src.contains("if (e instanceof DeniedError) { reply.err(DeniedError.ordinal,"),
+        "{src}"
+    );
+    assert!(
+        src.contains("if (e instanceof NotFoundError) { reply.err(NotFoundError.ordinal,"),
+        "{src}"
+    );
+    assert!(src.contains("reply.fault();"), "{src}");
+    // And the client maps both ordinals back to their thrown class.
+    assert!(src.contains("case DeniedError.ordinal:"), "{src}");
+    assert!(src.contains("case NotFoundError.ordinal:"), "{src}");
+    // A peer's fault is a runtime error, taken off the union first.
+    assert!(
+        src.contains("if (\"fault\" in env) throw RuntimeError.provider();"),
+        "{src}"
+    );
+}
+
+/// `error Rude` becomes `class RudeError`, so a declared `RudeError` of any
+/// kind collides with it — the TypeScript route into the same bug Rust hits
+/// via `<Proto>Error`.
+#[test]
+fn an_error_suffix_that_collides_with_a_declaration_is_refused() {
+    let declared = FrozenUnit::Struct {
+        docstring: None,
+        parameters: vec![],
+        name: "RudeError".to_string(),
+        fields: vec![],
+        span: (0, 0),
+    };
+    let error = FrozenUnit::Error {
+        docstring: None,
+        parameters: vec![],
+        ordinal: 0,
+        imported_from: None,
+        name: "Rude".to_string(),
+        message: "no".into(),
+        fields: vec![],
+        span: None,
+    };
+    let schemas = vec![("chat".to_string(), vec![declared, error])];
+    let err = generate_typescript(&code_req(&schemas)).expect_err("the name is taken");
+    let message = err.to_string();
+    assert!(message.contains("declares struct `RudeError`"), "{message}");
+    assert!(message.contains("error `Rude`"), "{message}");
+}
+
+/// The protocol-derived names are checked too, not just the `Error` suffix.
+#[test]
+fn a_protocol_derived_name_collides_too() {
+    let declared = FrozenUnit::Struct {
+        docstring: None,
+        parameters: vec![],
+        name: "ChatDispatcher".to_string(),
+        fields: vec![],
+        span: (0, 0),
+    };
+    let proto = FrozenUnit::Protocol {
+        docstring: String::new(),
+        parameters: vec![],
+        name: "Chat".to_string(),
+        functions: vec![],
+        span: (0, 0),
+    };
+    let schemas = vec![("chat".to_string(), vec![declared, proto])];
+    let err = generate_typescript(&code_req(&schemas)).expect_err("the name is taken");
+    assert!(
+        err.to_string().contains("declares struct `ChatDispatcher`"),
+        "{err}"
+    );
+}
+
+/// The fixture schema must keep generating — this check is additive, not a
+/// new hurdle for schemas that were already fine.
+#[test]
+fn the_chat_fixture_has_no_collisions() {
+    let schemas = vec![("chat".to_string(), chat_units())];
+    assert!(generate_typescript(&code_req(&schemas)).is_ok());
+}

@@ -33,6 +33,7 @@ use comline_core::schema::ir::frozen::unit::FrozenUnit;
 
 use eyre::Result;
 
+use comline_codegen::collisions::{self, Derived};
 use comline_codegen::modules::{NamespaceTree, TreeLayout};
 use comline_codegen::naming::{pascal, screaming_snake};
 use comline_codegen::stdlib::{self, is_std_namespace};
@@ -69,6 +70,16 @@ pub fn generate_typescript(req: &GenRequest) -> Result<Vec<GeneratedFile>> {
     // there" subtlety with it.
     let std = stdlib::split(req.schemas, external_std);
     let emitted = std.emitted.as_ref();
+
+    // Before emitting anything: a name this generator is about to invent may
+    // already mean something in the schema. The `{name}Error` suffix is the
+    // easy one to hit - `error Foo` becomes `class FooError`, which collides
+    // with a declared `struct FooError`. Checked for every schema first, so a
+    // collision in the last one does not arrive after the earlier files are
+    // already written.
+    for (namespace, units) in emitted {
+        collisions::check(namespace, units, derived_names(units))?;
+    }
 
     match req.mode {
         Mode::Code => Ok(emitted
@@ -232,6 +243,73 @@ fn package_json(pkg: &PackageMeta, has_protocol: bool, needs_std_dep: bool) -> S
 /// `namespace` is this schema's own (`"std/http"`), needed to place the
 /// relative specifiers in the header; `schemas` is every schema in the
 /// request, which is what a reference resolves against.
+/// Every name this generator will invent for `units`, each described the way a
+/// person reading a build failure needs it.
+///
+/// This is the half of collision checking that cannot live in
+/// `comline-codegen`: what gets derived is a fact about *TypeScript* output.
+/// The shapes differ from Rust's - there is no per-function error type and no
+/// protocol-wide union here, but every `error` grows an `Error` suffix, which
+/// Rust has no equivalent of. Keep it in step with the emitters below.
+fn derived_names(units: &[FrozenUnit]) -> Vec<Derived> {
+    let mut derived = Vec::new();
+    let mut any_protocol = false;
+
+    for unit in units {
+        match unit {
+            // `error Rude` -> `export class RudeError extends Error`, which a
+            // declared `RudeError` of any kind would collide with.
+            FrozenUnit::Error { name, .. } => derived.push(Derived::new(
+                format!("{name}Error"),
+                format!("the thrown class for error `{name}`"),
+            )),
+            FrozenUnit::Protocol {
+                name: proto,
+                functions,
+                ..
+            } => {
+                any_protocol = true;
+                derived.push(Derived::new(
+                    format!("{proto}Dispatcher"),
+                    format!("protocol `{proto}`'s dispatcher"),
+                ));
+                derived.push(Derived::new(
+                    format!("{proto}Client"),
+                    format!("protocol `{proto}`'s client"),
+                ));
+                derived.push(Derived::new(
+                    format!("serve{proto}"),
+                    format!("protocol `{proto}`'s serve helper"),
+                ));
+                derived.push(Derived::new(
+                    format!("{}_CALLS", screaming_snake(proto)),
+                    format!("protocol `{proto}`'s call table"),
+                ));
+                for function in functions {
+                    let FrozenUnit::Function {
+                        name, arguments, ..
+                    } = function
+                    else {
+                        continue;
+                    };
+                    if !arguments.is_empty() {
+                        derived.push(Derived::new(
+                            format!("{proto}{}Params", pascal(name)),
+                            format!("protocol `{proto}`, function `{name}`'s params type"),
+                        ));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if any_protocol {
+        derived.push(Derived::new("IR_HASH", "the schema's IR hash constant"));
+    }
+    derived
+}
+
 fn schema_source(
     namespace: &str,
     units: &[FrozenUnit],
@@ -640,40 +718,50 @@ fn protocol(
     ));
     for (i, f) in fns.iter().enumerate() {
         s.push_str(&format!("            case {i}: {{\n"));
-        let call_arg = match &f.params_ty {
-            Some(ty) => {
-                s.push_str(&format!(
-                    "                const p = codec.decode<{ty}>(params);\n"
-                ));
-                "p"
-            }
-            None => "",
+        // Emitted *inside* the `try` below, so params that will not decode are
+        // handled with the same arity awareness as a handler that throws.
+        let decode_line = match &f.params_ty {
+            Some(ty) => format!("                    const p = codec.decode<{ty}>(params);\n"),
+            None => String::new(),
         };
+        let call_arg = if f.params_ty.is_some() { "p" } else { "" };
         if f.one_way {
-            s.push_str(&format!(
-                "                await this.impl.{}({call_arg});\n\
-                 \x20               return;\n",
-                f.name
-            ));
-        } else if f.throws.is_empty() {
-            s.push_str(&format!(
-                "                reply.ok(codec.encode((await this.impl.{}({call_arg})) ?? null));\n\
-                 \x20               return;\n",
-                f.name
-            ));
-        } else {
+            // No response frame, so nothing a failure could be reported in.
             s.push_str("                try {\n");
+            s.push_str(&decode_line);
+            s.push_str(&format!(
+                "                    await this.impl.{}({call_arg});\n",
+                f.name
+            ));
+            s.push_str("                } catch {\n");
+            s.push_str("                    /* one-way: nowhere to report this */\n");
+            s.push_str("                }\n");
+            s.push_str("                return;\n");
+        } else {
+            // Every request/response call answers, whatever the handler threw:
+            // a declared error at its ordinal, anything else as a fault. The
+            // arity is why this belongs here rather than in `Server` - the
+            // server cannot see it, and a stray frame sent after a one-way
+            // call would desynchronise the stream.
+            s.push_str("                try {\n");
+            s.push_str(&decode_line);
             s.push_str(&format!(
                 "                    reply.ok(codec.encode((await this.impl.{}({call_arg})) ?? null));\n",
                 f.name
             ));
-            s.push_str("                } catch (e) {\n");
+            // Only bind the exception when there is a declared error to test
+            // it against; an unused binding is a lint failure in the output.
+            if f.throws.is_empty() {
+                s.push_str("                } catch {\n");
+            } else {
+                s.push_str("                } catch (e) {\n");
+            }
             for (_, err) in &f.throws {
                 s.push_str(&format!(
                     "                    if (e instanceof {err}Error) {{ reply.err({err}Error.ordinal, codec.encode(e.data)); return; }}\n"
                 ));
             }
-            s.push_str("                    throw e;\n");
+            s.push_str("                    reply.fault();\n");
             s.push_str("                }\n");
             s.push_str("                return;\n");
         }
@@ -730,6 +818,10 @@ fn protocol(
                 f.ret
             ));
         }
+        // A fault is not an `err`, so it has to be taken off the union before
+        // anything reads `env.err` - and a peer can send one for any call,
+        // including one that declares no `!`.
+        s.push_str("        if (\"fault\" in env) throw RuntimeError.provider();\n");
         if f.throws.is_empty() {
             s.push_str("        throw RuntimeError.remote(env.err.id);\n");
         } else {

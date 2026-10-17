@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { JsonCodec, duplex } from "../src/index.js";
+import { JsonCodec, RuntimeError, duplex } from "../src/index.js";
 import {
   type Chat,
   ChatClient,
@@ -52,6 +52,42 @@ test("a generated client ⇆ provider round-trip", async () => {
   await chat.note({ text: "saved" }); // one-way
   await chat.wipe(); // `()` return
   assert.deepEqual(seen, []);
+
+  clientSide.close();
+  await provider;
+});
+
+/// A handler that throws something its schema never declared used to unwind
+/// out of the server loop: the connection died and the caller waited out its
+/// timeout. Now it answers, and the next call still works.
+test("a provider that fails outside its schema answers with a fault", async () => {
+  const [clientSide, providerSide] = duplex();
+
+  const impl: Chat = {
+    async send() {
+      throw new Error("the database is on fire");
+    },
+    async history() {
+      // `history` declares no `!` at all, and can still fail.
+      throw new Error("still on fire");
+    },
+    async wipe() {},
+    async note() {},
+  };
+
+  const provider = serveChat(impl, providerSide, new JsonCodec());
+  const chat = await ChatClient.connect(clientSide, new JsonCodec());
+
+  await assert.rejects(
+    chat.send({ text: "hi" }),
+    (e: unknown) => e instanceof RuntimeError && e.is("provider"),
+  );
+  await assert.rejects(
+    chat.history({ limit: 1 }),
+    (e: unknown) => e instanceof RuntimeError && e.is("provider"),
+  );
+  // The connection survived both.
+  await chat.wipe();
 
   clientSide.close();
   await provider;
