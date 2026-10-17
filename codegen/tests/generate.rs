@@ -930,3 +930,65 @@ fn a_function_with_several_throws_documents_and_catches_each() {
         "{src}"
     );
 }
+
+/// `error Rude` becomes `class RudeError`, so a declared `RudeError` of any
+/// kind collides with it — the TypeScript route into the same bug Rust hits
+/// via `<Proto>Error`.
+#[test]
+fn an_error_suffix_that_collides_with_a_declaration_is_refused() {
+    let declared = FrozenUnit::Struct {
+        docstring: None,
+        parameters: vec![],
+        name: "RudeError".to_string(),
+        fields: vec![],
+        span: (0, 0),
+    };
+    let error = FrozenUnit::Error {
+        docstring: None,
+        parameters: vec![],
+        ordinal: 0,
+        imported_from: None,
+        name: "Rude".to_string(),
+        message: "no".into(),
+        fields: vec![],
+        span: None,
+    };
+    let schemas = vec![("chat".to_string(), vec![declared, error])];
+    let err = generate_typescript(&code_req(&schemas)).expect_err("the name is taken");
+    let message = err.to_string();
+    assert!(message.contains("declares struct `RudeError`"), "{message}");
+    assert!(message.contains("error `Rude`"), "{message}");
+}
+
+/// The protocol-derived names are checked too, not just the `Error` suffix.
+#[test]
+fn a_protocol_derived_name_collides_too() {
+    let declared = FrozenUnit::Struct {
+        docstring: None,
+        parameters: vec![],
+        name: "ChatDispatcher".to_string(),
+        fields: vec![],
+        span: (0, 0),
+    };
+    let proto = FrozenUnit::Protocol {
+        docstring: String::new(),
+        parameters: vec![],
+        name: "Chat".to_string(),
+        functions: vec![],
+        span: (0, 0),
+    };
+    let schemas = vec![("chat".to_string(), vec![declared, proto])];
+    let err = generate_typescript(&code_req(&schemas)).expect_err("the name is taken");
+    assert!(
+        err.to_string().contains("declares struct `ChatDispatcher`"),
+        "{err}"
+    );
+}
+
+/// The fixture schema must keep generating — this check is additive, not a
+/// new hurdle for schemas that were already fine.
+#[test]
+fn the_chat_fixture_has_no_collisions() {
+    let schemas = vec![("chat".to_string(), chat_units())];
+    assert!(generate_typescript(&code_req(&schemas)).is_ok());
+}
