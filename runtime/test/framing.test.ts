@@ -7,6 +7,7 @@ import {
   call,
   decodeEnvelope,
   encodeEnvelopeErr,
+  encodeEnvelopeFault,
   encodeEnvelopeOk,
 } from "../src/index.js";
 
@@ -25,7 +26,42 @@ test("Envelope tag-byte form round-trips", () => {
   assert.equal(back.err.id, 0x0102);
   assert.equal(dec.decode(back.err.body), "fields");
 
+  const fault = encodeEnvelopeFault();
+  assert.deepEqual(fault, Uint8Array.of(2));
+  assert.deepEqual(decodeEnvelope(fault), { fault: true });
+
   assert.equal(decodeEnvelope(Uint8Array.of(9)), undefined); // unknown tag
+});
+
+test("datagram response round-trips a fault", () => {
+  const f = new DatagramFraming();
+  const frame = f.encodeResponseFault(7n);
+  assert.deepEqual(f.decodeResponse(frame), { requestId: 7n, envelope: { fault: true } });
+});
+
+/// JSON-RPC's own reserved code, not a Comline-shaped frame a peer must learn.
+/// An ordinal is a `u16`, so schema codes are non-negative and cannot collide.
+test("JSON-RPC sends a fault as the standard -32603 internal error", () => {
+  const f = new JsonRpcFraming();
+  const frame = f.encodeResponseFault(9n);
+  assert.equal(
+    dec.decode(frame),
+    '{"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error"},"id":9}',
+  );
+  assert.deepEqual(f.decodeResponse(frame), { requestId: 9n, envelope: { fault: true } });
+});
+
+test("a JSON-RPC code that cannot be an ordinal decodes as a fault", () => {
+  const f = new JsonRpcFraming();
+  for (const body of [
+    '{"jsonrpc":"2.0","error":{"code":-32700},"id":1}',
+    '{"jsonrpc":"2.0","error":{"code":70000},"id":1}',
+  ]) {
+    assert.deepEqual(f.decodeResponse(enc.encode(body)), {
+      requestId: 1n,
+      envelope: { fault: true },
+    });
+  }
 });
 
 test("datagram request: header layout matches the Rust framing", () => {

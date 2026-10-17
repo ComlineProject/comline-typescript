@@ -61,6 +61,17 @@ export class JsonRpcFraming implements Framing {
     );
   }
 
+  /**
+   * JSON-RPC's own reserved `-32603 Internal error`, which is what a
+   * non-Comline JSON-RPC peer already expects. An ordinal is a `u16`, so the
+   * schema's error codes are all non-negative and can never collide with it.
+   */
+  encodeResponseFault(requestId: bigint): Uint8Array {
+    return enc.encode(
+      `{"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error"},"id":${requestId}}`,
+    );
+  }
+
   decodeResponse(frame: Uint8Array): DecodedResponse | undefined {
     let r: { result?: unknown; error?: { code?: unknown; data?: unknown }; id?: unknown };
     try {
@@ -70,9 +81,17 @@ export class JsonRpcFraming implements Framing {
     }
     const requestId = r.id === undefined || r.id === null ? 0n : BigInt(r.id as number);
     if (r.error && typeof r.error === "object") {
+      // An ordinal is a `u16`, so it is always in `0..=65535`. Anything
+      // outside that — JSON-RPC's reserved negatives, `-32603` among them, or
+      // a code too wide to be an ordinal — is not a schema error this wire can
+      // name, so it is a fault.
+      const code = Number(r.error.code ?? 0);
+      if (!Number.isInteger(code) || code < 0 || code > 0xffff) {
+        return { requestId, envelope: { fault: true } };
+      }
       return {
         requestId,
-        envelope: { err: { id: Number(r.error.code ?? 0), body: jsonBytes(r.error.data) } },
+        envelope: { err: { id: code, body: jsonBytes(r.error.data) } },
       };
     }
     return { requestId, envelope: { ok: jsonBytes(r.result) } };

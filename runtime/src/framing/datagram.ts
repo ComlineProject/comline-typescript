@@ -4,7 +4,12 @@
 
 import type { Call, DecodedRequest, DecodedResponse, Framing } from "../contract.js";
 import { FRAMING_DATAGRAM } from "../handshake.js";
-import { decodeEnvelope, encodeEnvelopeErr, encodeEnvelopeOk } from "../envelope.js";
+import {
+  decodeEnvelope,
+  encodeEnvelopeErr,
+  encodeEnvelopeFault,
+  encodeEnvelopeOk,
+} from "../envelope.js";
 
 const HEAD = 10; // [call_id:u16][request_id:u64], both LE
 
@@ -42,6 +47,10 @@ export class DatagramFraming implements Framing {
 
   encodeResponseErr(requestId: bigint, id: number, body: Uint8Array): Uint8Array {
     return withRequestId(requestId, encodeEnvelopeErr(id, body));
+  }
+
+  encodeResponseFault(requestId: bigint): Uint8Array {
+    return withRequestId(requestId, encodeEnvelopeFault());
   }
 
   decodeResponse(frame: Uint8Array): DecodedResponse | undefined {
