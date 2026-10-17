@@ -32,11 +32,29 @@ export class Server {
     const req = this.framing.decodeRequest(frame);
     if (!req) throw RuntimeError.framing();
 
-    const idx = resolveKind(req.call, this.dispatch.calls());
-    if (idx === undefined) throw RuntimeError.unknownCall();
-
+    // An address this side doesn't have, or a dispatcher that threw, is a
+    // failure of *this call* — not of the connection. Answering with a fault
+    // keeps the caller from waiting out its timeout for a reply that was
+    // never coming, and keeps the loop alive for the next call. (Before this,
+    // both threw out of `serve`, so one bad frame took the server down and
+    // the caller hung.)
+    //
+    // This cannot see the call's arity: a one-way call that fails before the
+    // dispatcher records an outcome has no caller reading a response, so a
+    // fault frame it never consumes would sit in front of the next one. The
+    // dispatcher is the layer that knows — a generated one records a fault
+    // itself for a request/response call and stays silent for a one-way one.
     const reply = new Reply();
-    await this.dispatch.dispatch({ id: idx }, req.params, this.codec, reply);
+    const idx = resolveKind(req.call, this.dispatch.calls());
+    if (idx === undefined) {
+      reply.fault();
+    } else {
+      try {
+        await this.dispatch.dispatch({ id: idx }, req.params, this.codec, reply);
+      } catch {
+        reply.fault();
+      }
+    }
 
     switch (reply.outcome.kind) {
       case "none":
@@ -48,6 +66,9 @@ export class Server {
         await transport.send(
           this.framing.encodeResponseErr(req.requestId, reply.outcome.id, reply.body),
         );
+        return true;
+      case "fault":
+        await transport.send(this.framing.encodeResponseFault(req.requestId));
         return true;
     }
   }

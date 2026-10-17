@@ -68,27 +68,39 @@ export class ChatDispatcher implements Dispatch {
     async dispatch(call: Kind, params: Uint8Array, codec: Codec, reply: Reply): Promise<void> {
         switch (resolveKind(call, CHAT_CALLS)) {
             case 0: {
-                const p = codec.decode<ChatSendParams>(params);
                 try {
+                    const p = codec.decode<ChatSendParams>(params);
                     reply.ok(codec.encode((await this.impl.send(p)) ?? null));
                 } catch (e) {
                     if (e instanceof RejectedError) { reply.err(RejectedError.ordinal, codec.encode(e.data)); return; }
-                    throw e;
+                    reply.fault();
                 }
                 return;
             }
             case 1: {
-                const p = codec.decode<ChatHistoryParams>(params);
-                reply.ok(codec.encode((await this.impl.history(p)) ?? null));
+                try {
+                    const p = codec.decode<ChatHistoryParams>(params);
+                    reply.ok(codec.encode((await this.impl.history(p)) ?? null));
+                } catch {
+                    reply.fault();
+                }
                 return;
             }
             case 2: {
-                reply.ok(codec.encode((await this.impl.wipe()) ?? null));
+                try {
+                    reply.ok(codec.encode((await this.impl.wipe()) ?? null));
+                } catch {
+                    reply.fault();
+                }
                 return;
             }
             case 3: {
-                const p = codec.decode<ChatNoteParams>(params);
-                await this.impl.note(p);
+                try {
+                    const p = codec.decode<ChatNoteParams>(params);
+                    await this.impl.note(p);
+                } catch {
+                    /* one-way: nowhere to report this */
+                }
                 return;
             }
             default:
@@ -108,6 +120,7 @@ export class ChatClient {
     async send(params: ChatSendParams): Promise<Message> {
         const env = await this.client.call({ id: 0, name: "send" }, params);
         if ("ok" in env) return this.client.codec.decode<Message>(env.ok);
+        if ("fault" in env) throw RuntimeError.provider();
         switch (env.err.id) {
             case RejectedError.ordinal:
                 throw new RejectedError(this.client.codec.decode<Rejected>(env.err.body));
@@ -119,12 +132,14 @@ export class ChatClient {
     async history(params: ChatHistoryParams): Promise<Message[]> {
         const env = await this.client.call({ id: 1, name: "history" }, params);
         if ("ok" in env) return this.client.codec.decode<Message[]>(env.ok);
+        if ("fault" in env) throw RuntimeError.provider();
         throw RuntimeError.remote(env.err.id);
     }
 
     async wipe(): Promise<void> {
         const env = await this.client.call({ id: 2, name: "wipe" }, null);
         if ("ok" in env) return;
+        if ("fault" in env) throw RuntimeError.provider();
         throw RuntimeError.remote(env.err.id);
     }
 

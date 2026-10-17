@@ -640,40 +640,50 @@ fn protocol(
     ));
     for (i, f) in fns.iter().enumerate() {
         s.push_str(&format!("            case {i}: {{\n"));
-        let call_arg = match &f.params_ty {
-            Some(ty) => {
-                s.push_str(&format!(
-                    "                const p = codec.decode<{ty}>(params);\n"
-                ));
-                "p"
-            }
-            None => "",
+        // Emitted *inside* the `try` below, so params that will not decode are
+        // handled with the same arity awareness as a handler that throws.
+        let decode_line = match &f.params_ty {
+            Some(ty) => format!("                    const p = codec.decode<{ty}>(params);\n"),
+            None => String::new(),
         };
+        let call_arg = if f.params_ty.is_some() { "p" } else { "" };
         if f.one_way {
-            s.push_str(&format!(
-                "                await this.impl.{}({call_arg});\n\
-                 \x20               return;\n",
-                f.name
-            ));
-        } else if f.throws.is_empty() {
-            s.push_str(&format!(
-                "                reply.ok(codec.encode((await this.impl.{}({call_arg})) ?? null));\n\
-                 \x20               return;\n",
-                f.name
-            ));
-        } else {
+            // No response frame, so nothing a failure could be reported in.
             s.push_str("                try {\n");
+            s.push_str(&decode_line);
+            s.push_str(&format!(
+                "                    await this.impl.{}({call_arg});\n",
+                f.name
+            ));
+            s.push_str("                } catch {\n");
+            s.push_str("                    /* one-way: nowhere to report this */\n");
+            s.push_str("                }\n");
+            s.push_str("                return;\n");
+        } else {
+            // Every request/response call answers, whatever the handler threw:
+            // a declared error at its ordinal, anything else as a fault. The
+            // arity is why this belongs here rather than in `Server` - the
+            // server cannot see it, and a stray frame sent after a one-way
+            // call would desynchronise the stream.
+            s.push_str("                try {\n");
+            s.push_str(&decode_line);
             s.push_str(&format!(
                 "                    reply.ok(codec.encode((await this.impl.{}({call_arg})) ?? null));\n",
                 f.name
             ));
-            s.push_str("                } catch (e) {\n");
+            // Only bind the exception when there is a declared error to test
+            // it against; an unused binding is a lint failure in the output.
+            if f.throws.is_empty() {
+                s.push_str("                } catch {\n");
+            } else {
+                s.push_str("                } catch (e) {\n");
+            }
             for (_, err) in &f.throws {
                 s.push_str(&format!(
                     "                    if (e instanceof {err}Error) {{ reply.err({err}Error.ordinal, codec.encode(e.data)); return; }}\n"
                 ));
             }
-            s.push_str("                    throw e;\n");
+            s.push_str("                    reply.fault();\n");
             s.push_str("                }\n");
             s.push_str("                return;\n");
         }
@@ -730,6 +740,10 @@ fn protocol(
                 f.ret
             ));
         }
+        // A fault is not an `err`, so it has to be taken off the union before
+        // anything reads `env.err` - and a peer can send one for any call,
+        // including one that declares no `!`.
+        s.push_str("        if (\"fault\" in env) throw RuntimeError.provider();\n");
         if f.throws.is_empty() {
             s.push_str("        throw RuntimeError.remote(env.err.id);\n");
         } else {
