@@ -14,6 +14,7 @@ fn code_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenRequest<'_> {
         lang_version: comline_codegen_typescript::LANG_VERSION.into(),
         default_framing: None,
         external_std: false,
+        validate_on_decode: Default::default(),
     }
 }
 
@@ -28,6 +29,7 @@ fn lib_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenRequest<'_> {
         lang_version: comline_codegen_typescript::LANG_VERSION.into(),
         default_framing: None,
         external_std: false,
+        validate_on_decode: Default::default(),
     }
 }
 
@@ -131,6 +133,7 @@ fn type_alias_emits_and_fields_reference_it_by_name() {
     let out = one(vec![
         FrozenUnit::TypeAlias {
             docstring: None,
+            parameters: vec![],
             name: "UserId".to_string(),
             target: TypeRef::Primitive(PrimitiveType::U64),
             span: (0, 0),

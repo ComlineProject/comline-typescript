@@ -70,6 +70,7 @@ fn main() -> eyre::Result<()> {
         // package - `external_std` only matters to a consumer referencing
         // std, not to std's own generation.
         external_std: false,
+        validate_on_decode: Default::default(),
     };
 
     let files = generate_typescript(&req)?;
