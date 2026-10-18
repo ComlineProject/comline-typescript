@@ -1,6 +1,6 @@
 use comline_codegen::{GenRequest, Mode, PackageMeta};
 use comline_codegen_typescript::generate_typescript;
-use comline_core::schema::ir::compiler::interpreted::kind_search::{KindValue, Primitive};
+use comline_core::schema::ir::frozen::types::{Literal, PrimitiveType, TypeRef};
 use comline_core::schema::ir::frozen::unit::{ConfigValue, FrozenArgument, FrozenUnit};
 
 fn code_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenRequest<'_> {
@@ -46,21 +46,38 @@ fn one(units: Vec<FrozenUnit>) -> String {
     files.remove(0).contents
 }
 
+/// The type a schema spells `written` - a primitive name, a named type, or
+/// either followed by `[]` / `[N]`.
+fn type_of(written: &str) -> TypeRef {
+    if let Some(rest) = written.strip_suffix(']') {
+        let (element, length) = rest.rsplit_once('[').expect("an array type");
+        return TypeRef::Array {
+            element: Box::new(type_of(element)),
+            length: (!length.is_empty()).then(|| length.parse().expect("an array length")),
+        };
+    }
+    match PrimitiveType::from_name(written) {
+        Some(p) => TypeRef::Primitive(p),
+        None => TypeRef::Named(written.to_string()),
+    }
+}
+
 fn field(name: &str, ty: &str) -> FrozenUnit {
     FrozenUnit::Field {
         docstring: None,
         parameters: vec![],
         optional: false,
         name: name.into(),
-        kind_value: KindValue::Namespaced(ty.into(), None),
+        ty: type_of(ty),
+        default: None,
         span: (0, 0),
     }
 }
 
-fn arg(name: &str, kind: KindValue) -> FrozenArgument {
+fn arg(name: &str, ty: TypeRef) -> FrozenArgument {
     FrozenArgument {
         name: name.into(),
-        kind,
+        ty,
         span: (0, 0),
     }
 }
@@ -68,7 +85,7 @@ fn arg(name: &str, kind: KindValue) -> FrozenArgument {
 fn function(
     name: &str,
     args: Vec<FrozenArgument>,
-    ret: Option<KindValue>,
+    ret: Option<TypeRef>,
     throws: Vec<u16>,
 ) -> FrozenUnit {
     FrozenUnit::Function {
@@ -96,7 +113,7 @@ fn interface_from_struct() {
                 parameters: vec![],
                 optional: true,
                 name: "tags".to_string(),
-                kind_value: KindValue::Namespaced("string[]".to_string(), None),
+                ty: TypeRef::Array { element: Box::new(TypeRef::Primitive(PrimitiveType::String)), length: None }, default: None,
                 span: (0, 0),
             },
         ],
@@ -115,7 +132,7 @@ fn type_alias_emits_and_fields_reference_it_by_name() {
         FrozenUnit::TypeAlias {
             docstring: None,
             name: "UserId".to_string(),
-            target: KindValue::Namespaced("u64".to_string(), None),
+            target: TypeRef::Primitive(PrimitiveType::U64),
             span: (0, 0),
         },
         FrozenUnit::Struct {
@@ -137,8 +154,8 @@ fn string_enum_from_enum() {
         docstring: None,
         name: "Status".to_string(),
         variants: vec![
-            FrozenUnit::EnumVariant(KindValue::EnumVariant("Active".to_string(), None), (0, 0)),
-            FrozenUnit::EnumVariant(KindValue::EnumVariant("Inactive".to_string(), None), (0, 0)),
+            FrozenUnit::EnumVariant("Active".to_string(), (0, 0)),
+            FrozenUnit::EnumVariant("Inactive".to_string(), (0, 0)),
         ],
         span: (0, 0),
     }]);
@@ -176,20 +193,20 @@ fn chat_units() -> Vec<FrozenUnit> {
             functions: vec![
                 function(
                     "send",
-                    vec![arg("text", KindValue::Namespaced("string".into(), None))],
-                    Some(KindValue::Namespaced("Message".into(), None)),
+                    vec![arg("text", TypeRef::Primitive(PrimitiveType::String))],
+                    Some(TypeRef::Named("Message".to_string())),
                     vec![0],
                 ),
                 function(
                     "history",
-                    vec![arg("limit", KindValue::Primitive(Primitive::U32(None)))],
-                    Some(KindValue::Namespaced("Message[]".into(), None)),
+                    vec![arg("limit", TypeRef::Primitive(PrimitiveType::U32))],
+                    Some(TypeRef::Array { element: Box::new(TypeRef::Named("Message".to_string())), length: None }),
                     vec![],
                 ),
-                function("wipe", vec![], Some(KindValue::Unit), vec![]),
+                function("wipe", vec![], Some(TypeRef::Unit), vec![]),
                 function(
                     "note",
-                    vec![arg("text", KindValue::Namespaced("string".into(), None))],
+                    vec![arg("text", TypeRef::Primitive(PrimitiveType::String))],
                     None,
                     vec![],
                 ),
@@ -267,8 +284,7 @@ fn a_schema_without_a_protocol_has_no_ir_hash_or_runtime_import() {
     let out = one(vec![FrozenUnit::Enum {
         docstring: None,
         name: "Status".to_string(),
-        variants: vec![FrozenUnit::EnumVariant(
-            KindValue::EnumVariant("Active".to_string(), None),
+        variants: vec![FrozenUnit::EnumVariant("Active".to_string(),
             (0, 0),
         )],
         span: (0, 0),
@@ -837,13 +853,14 @@ fn a_file_not_touching_std_gets_no_install_note() {
 /// declarations were dropped on the floor.
 #[test]
 fn constants_are_emitted() {
-    use comline_core::schema::ir::compiler::interpreted::kind_search::Primitive;
-
-    let constant = |doc: Option<&str>, name: &str, kind: Primitive| FrozenUnit::Constant {
-        docstring: doc.map(str::to_string),
-        name: name.to_string(),
-        kind_value: KindValue::Primitive(kind),
-        span: (0, 0),
+    let constant = |doc: Option<&str>, name: &str, ty: PrimitiveType, value: Literal| {
+        FrozenUnit::Constant {
+            docstring: doc.map(str::to_string),
+            name: name.to_string(),
+            ty: TypeRef::Primitive(ty),
+            value: Some(value),
+            span: (0, 0),
+        }
     };
     let schemas = vec![(
         "limits".to_string(),
@@ -851,15 +868,17 @@ fn constants_are_emitted() {
             constant(
                 Some("How many times a client retries."),
                 "MAX_RETRIES",
-                Primitive::U8(Some(5)),
+                PrimitiveType::U8,
+                Literal::Integer(5),
             ),
             constant(
                 None,
                 "SERVICE_NAME",
-                Primitive::String(Some("store".into())),
+                PrimitiveType::String,
+                Literal::String("store".into()),
             ),
-            constant(None, "DEBUG", Primitive::Boolean(Some(true))),
-            constant(None, "HUGE", Primitive::U128(Some(7))),
+            constant(None, "DEBUG", PrimitiveType::Bool, Literal::Bool(true)),
+            constant(None, "HUGE", PrimitiveType::U128, Literal::Integer(7)),
         ],
     )];
     let out = code_file(&schemas, "limits");
@@ -901,7 +920,7 @@ fn a_function_with_several_throws_documents_and_catches_each() {
         parameters: vec![],
         name: "Vault".to_string(),
         // The `!` clause's own order, which need not be ordinal order.
-        functions: vec![function("open", vec![], Some(KindValue::Unit), vec![1, 0])],
+        functions: vec![function("open", vec![], Some(TypeRef::Unit), vec![1, 0])],
         span: (0, 0),
     };
     let src = one(vec![error(0, "NotFound"), error(1, "Denied"), proto]);
@@ -991,4 +1010,49 @@ fn a_protocol_derived_name_collides_too() {
 fn the_chat_fixture_has_no_collisions() {
     let schemas = vec![("chat".to_string(), chat_units())];
     assert!(generate_typescript(&code_req(&schemas)).is_ok());
+}
+
+/// Floats are `number`, a fixed array is `T[]` (TypeScript has no
+/// fixed-length array short of a tuple), and a union is `A | B` -
+/// parenthesised when it is an array's element. Unions rendered as
+/// `unknown` before core froze types structurally.
+#[test]
+fn floats_fixed_arrays_and_unions_render() {
+    let either = TypeRef::Union(vec![type_of("string"), type_of("u32")]);
+    let union_field = |name: &str, ty: TypeRef| FrozenUnit::Field {
+        docstring: None,
+        parameters: vec![],
+        optional: false,
+        name: name.into(),
+        ty,
+        default: None,
+        span: (0, 0),
+    };
+    let schemas = vec![(
+        "shapes".to_string(),
+        vec![FrozenUnit::Struct {
+            docstring: None,
+            parameters: vec![],
+            name: "Sample".to_string(),
+            fields: vec![
+                field("ratio", "f32"),
+                field("digest", "u8[64]"),
+                union_field("either", either.clone()),
+                union_field(
+                    "many",
+                    TypeRef::Array { element: Box::new(either), length: None },
+                ),
+            ],
+            span: (0, 0),
+        }],
+    )];
+    let out = code_file(&schemas, "shapes");
+    for line in [
+        "    ratio: number;\n",
+        "    digest: number[];\n",
+        "    either: string | number;\n",
+        "    many: (string | number)[];\n",
+    ] {
+        assert!(out.contains(line), "missing {line:?} in: {out}");
+    }
 }
