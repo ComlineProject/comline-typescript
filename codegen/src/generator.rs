@@ -1004,7 +1004,7 @@ fn relative_specifier(from: &str, to: &str) -> String {
 /// (a type some schema declares).
 fn primitive_ts_type(s: &str) -> Option<String> {
     let ts = match s {
-        "string" | "str" => "string",
+        "string" => "string",
         "bool" => "boolean",
         // 128-bit integers overflow `number`'s 2^53 exact range — use `bigint`.
         "u128" | "i128" | "s128" => "bigint",
