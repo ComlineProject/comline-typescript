@@ -1,0 +1,113 @@
+{
+  "feature": "framing-datagram",
+  "cases": [
+    {
+      "id": "framing-datagram/request",
+      "op": "request",
+      "input": {
+        "call_id": 3,
+        "format": "json",
+        "framing": "comline.datagram",
+        "method": "greet",
+        "params": {
+          "array": [
+            {
+              "u32": 7
+            },
+            {
+              "string": "x"
+            }
+          ]
+        },
+        "request_id": "42"
+      },
+      "bytes": "03002a000000000000005b372c2278225d"
+    },
+    {
+      "id": "framing-datagram/request-large-id",
+      "op": "request",
+      "input": {
+        "call_id": 65535,
+        "format": "json",
+        "framing": "comline.datagram",
+        "method": "ping",
+        "params": {
+          "array": []
+        },
+        "request_id": "18446744073709551615"
+      },
+      "bytes": "ffffffffffffffffffff5b5d"
+    },
+    {
+      "id": "framing-datagram/response-ok",
+      "op": "response",
+      "input": {
+        "framing": "comline.datagram",
+        "kind": "ok",
+        "payload": "7b22626f6479223a226869227d",
+        "request_id": "7"
+      },
+      "bytes": "0700000000000000007b22626f6479223a226869227d"
+    },
+    {
+      "id": "framing-datagram/response-ok-exact-numbers",
+      "op": "response",
+      "input": {
+        "framing": "comline.datagram",
+        "kind": "ok",
+        "payload": "7b226e223a393030373139393235343734303939332c2266223a312e307d",
+        "request_id": "8"
+      },
+      "bytes": "0800000000000000007b226e223a393030373139393235343734303939332c2266223a312e307d"
+    },
+    {
+      "id": "framing-datagram/response-err",
+      "op": "response",
+      "input": {
+        "body": "7b22776879223a226e6f227d",
+        "framing": "comline.datagram",
+        "id": 2,
+        "kind": "err",
+        "request_id": "7"
+      },
+      "bytes": "07000000000000000102007b22776879223a226e6f227d"
+    },
+    {
+      "id": "framing-datagram/response-fault",
+      "op": "response",
+      "input": {
+        "framing": "comline.datagram",
+        "kind": "fault",
+        "request_id": "9"
+      },
+      "bytes": "090000000000000002"
+    },
+    {
+      "id": "framing-datagram/reject-short-request",
+      "op": "request",
+      "input": {
+        "framing": "comline.datagram"
+      },
+      "bytes": "03002a000000000000",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-datagram/reject-short-response",
+      "op": "response",
+      "input": {
+        "framing": "comline.datagram"
+      },
+      "bytes": "07000000000000",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-datagram/reject-response-without-envelope",
+      "op": "response",
+      "input": {
+        "framing": "comline.datagram"
+      },
+      "bytes": "0700000000000000",
+      "expect": "reject"
+    }
+  ]
+}

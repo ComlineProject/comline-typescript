@@ -1,0 +1,407 @@
+{
+  "feature": "format-json",
+  "cases": [
+    {
+      "id": "format-json/bool-true",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "bool": true
+        }
+      },
+      "bytes": "74727565",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/bool-false",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "bool": false
+        }
+      },
+      "bytes": "66616c7365",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/u8-max",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "u8": 255
+        }
+      },
+      "bytes": "323535",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/u16-max",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "u16": 65535
+        }
+      },
+      "bytes": "3635353335",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/u32-max",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "u32": 4294967295
+        }
+      },
+      "bytes": "34323934393637323935",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/u64-small",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "u64": "7"
+        }
+      },
+      "bytes": "37",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/u64-above-2-53",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "u64": "9007199254740993"
+        }
+      },
+      "bytes": "39303037313939323534373430393933",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/u64-max",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "u64": "18446744073709551615"
+        }
+      },
+      "bytes": "3138343436373434303733373039353531363135",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/i8-min",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "i8": -128
+        }
+      },
+      "bytes": "2d313238",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/i16-min",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "i16": -32768
+        }
+      },
+      "bytes": "2d3332373638",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/i32-min",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "i32": -2147483648
+        }
+      },
+      "bytes": "2d32313437343833363438",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/i64-min",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "i64": "-9223372036854775808"
+        }
+      },
+      "bytes": "2d39323233333732303336383534373735383038",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/f64-fraction",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "f64": -0.25
+        }
+      },
+      "bytes": "2d302e3235",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/f64-integral",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "f64": 1.0
+        }
+      },
+      "bytes": "312e30",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/string-empty",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "string": ""
+        }
+      },
+      "bytes": "2222",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/string-unicode",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "string": "héllo \"wörld\" ✓\n"
+        }
+      },
+      "bytes": "2268c3a96c6c6f205c2277c3b6726c645c2220e29c935c6e22",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/array-empty",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "array": []
+        }
+      },
+      "bytes": "5b5d",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/array-u8",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "array": [
+            {
+              "u8": 1
+            },
+            {
+              "u8": 2
+            },
+            {
+              "u8": 3
+            }
+          ]
+        }
+      },
+      "bytes": "5b312c322c335d",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/option-none",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "option": null
+        }
+      },
+      "bytes": "6e756c6c",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/option-some",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "option": {
+            "u32": 5
+          }
+        }
+      },
+      "bytes": "35",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/struct",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "x",
+                {
+                  "i32": 1
+                }
+              ],
+              [
+                "y",
+                {
+                  "i32": -2
+                }
+              ]
+            ],
+            "name": "Point"
+          }
+        }
+      },
+      "bytes": "7b2278223a312c2279223a2d327d",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/struct-nested",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "from",
+                {
+                  "struct": {
+                    "fields": [
+                      [
+                        "x",
+                        {
+                          "i32": 0
+                        }
+                      ],
+                      [
+                        "y",
+                        {
+                          "i32": 0
+                        }
+                      ]
+                    ],
+                    "name": "Point"
+                  }
+                }
+              ],
+              [
+                "to",
+                {
+                  "struct": {
+                    "fields": [
+                      [
+                        "x",
+                        {
+                          "i32": 3
+                        }
+                      ],
+                      [
+                        "y",
+                        {
+                          "i32": 4
+                        }
+                      ]
+                    ],
+                    "name": "Point"
+                  }
+                }
+              ],
+              [
+                "label",
+                {
+                  "option": {
+                    "string": "diag"
+                  }
+                }
+              ],
+              [
+                "tags",
+                {
+                  "array": [
+                    {
+                      "string": "a"
+                    }
+                  ]
+                }
+              ]
+            ],
+            "name": "Line"
+          }
+        }
+      },
+      "bytes": "7b2266726f6d223a7b2278223a302c2279223a307d2c22746f223a7b2278223a332c2279223a347d2c226c6162656c223a2264696167222c2274616773223a5b2261225d7d",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/struct-optional-none",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "id",
+                {
+                  "u32": 1
+                }
+              ],
+              [
+                "label",
+                {
+                  "option": null
+                }
+              ]
+            ],
+            "name": "Tagged"
+          }
+        }
+      },
+      "bytes": "7b226964223a312c226c6162656c223a6e756c6c7d",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/enum-unit-variant",
+      "op": "encode",
+      "input": {
+        "format": "json",
+        "value": {
+          "unit_variant": {
+            "enum": "Color",
+            "index": 1,
+            "variant": "Green"
+          }
+        }
+      },
+      "bytes": "22477265656e22",
+      "compare": "json"
+    }
+  ]
+}

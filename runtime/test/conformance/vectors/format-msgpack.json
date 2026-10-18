@@ -1,0 +1,383 @@
+{
+  "feature": "format-msgpack",
+  "cases": [
+    {
+      "id": "format-msgpack/bool-true",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "bool": true
+        }
+      },
+      "bytes": "c3"
+    },
+    {
+      "id": "format-msgpack/bool-false",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "bool": false
+        }
+      },
+      "bytes": "c2"
+    },
+    {
+      "id": "format-msgpack/u8-max",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "u8": 255
+        }
+      },
+      "bytes": "ccff"
+    },
+    {
+      "id": "format-msgpack/u16-max",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "u16": 65535
+        }
+      },
+      "bytes": "cdffff"
+    },
+    {
+      "id": "format-msgpack/u32-max",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "u32": 4294967295
+        }
+      },
+      "bytes": "ceffffffff"
+    },
+    {
+      "id": "format-msgpack/u64-small",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "u64": "7"
+        }
+      },
+      "bytes": "07"
+    },
+    {
+      "id": "format-msgpack/u64-above-2-53",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "u64": "9007199254740993"
+        }
+      },
+      "bytes": "cf0020000000000001"
+    },
+    {
+      "id": "format-msgpack/u64-max",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "u64": "18446744073709551615"
+        }
+      },
+      "bytes": "cfffffffffffffffff"
+    },
+    {
+      "id": "format-msgpack/i8-min",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "i8": -128
+        }
+      },
+      "bytes": "d080"
+    },
+    {
+      "id": "format-msgpack/i16-min",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "i16": -32768
+        }
+      },
+      "bytes": "d18000"
+    },
+    {
+      "id": "format-msgpack/i32-min",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "i32": -2147483648
+        }
+      },
+      "bytes": "d280000000"
+    },
+    {
+      "id": "format-msgpack/i64-min",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "i64": "-9223372036854775808"
+        }
+      },
+      "bytes": "d38000000000000000"
+    },
+    {
+      "id": "format-msgpack/f64-fraction",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "f64": -0.25
+        }
+      },
+      "bytes": "cbbfd0000000000000"
+    },
+    {
+      "id": "format-msgpack/f64-integral",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "f64": 1.0
+        }
+      },
+      "bytes": "cb3ff0000000000000"
+    },
+    {
+      "id": "format-msgpack/string-empty",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "string": ""
+        }
+      },
+      "bytes": "a0"
+    },
+    {
+      "id": "format-msgpack/string-unicode",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "string": "héllo \"wörld\" ✓\n"
+        }
+      },
+      "bytes": "b468c3a96c6c6f202277c3b6726c642220e29c930a"
+    },
+    {
+      "id": "format-msgpack/array-empty",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "array": []
+        }
+      },
+      "bytes": "90"
+    },
+    {
+      "id": "format-msgpack/array-u8",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "array": [
+            {
+              "u8": 1
+            },
+            {
+              "u8": 2
+            },
+            {
+              "u8": 3
+            }
+          ]
+        }
+      },
+      "bytes": "93010203"
+    },
+    {
+      "id": "format-msgpack/option-none",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "option": null
+        }
+      },
+      "bytes": "c0"
+    },
+    {
+      "id": "format-msgpack/option-some",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "option": {
+            "u32": 5
+          }
+        }
+      },
+      "bytes": "05"
+    },
+    {
+      "id": "format-msgpack/struct",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "x",
+                {
+                  "i32": 1
+                }
+              ],
+              [
+                "y",
+                {
+                  "i32": -2
+                }
+              ]
+            ],
+            "name": "Point"
+          }
+        }
+      },
+      "bytes": "9201fe"
+    },
+    {
+      "id": "format-msgpack/struct-nested",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "from",
+                {
+                  "struct": {
+                    "fields": [
+                      [
+                        "x",
+                        {
+                          "i32": 0
+                        }
+                      ],
+                      [
+                        "y",
+                        {
+                          "i32": 0
+                        }
+                      ]
+                    ],
+                    "name": "Point"
+                  }
+                }
+              ],
+              [
+                "to",
+                {
+                  "struct": {
+                    "fields": [
+                      [
+                        "x",
+                        {
+                          "i32": 3
+                        }
+                      ],
+                      [
+                        "y",
+                        {
+                          "i32": 4
+                        }
+                      ]
+                    ],
+                    "name": "Point"
+                  }
+                }
+              ],
+              [
+                "label",
+                {
+                  "option": {
+                    "string": "diag"
+                  }
+                }
+              ],
+              [
+                "tags",
+                {
+                  "array": [
+                    {
+                      "string": "a"
+                    }
+                  ]
+                }
+              ]
+            ],
+            "name": "Line"
+          }
+        }
+      },
+      "bytes": "94920000920304a46469616791a161"
+    },
+    {
+      "id": "format-msgpack/struct-optional-none",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "id",
+                {
+                  "u32": 1
+                }
+              ],
+              [
+                "label",
+                {
+                  "option": null
+                }
+              ]
+            ],
+            "name": "Tagged"
+          }
+        }
+      },
+      "bytes": "9201c0"
+    },
+    {
+      "id": "format-msgpack/enum-unit-variant",
+      "op": "encode",
+      "input": {
+        "format": "msgpack",
+        "value": {
+          "unit_variant": {
+            "enum": "Color",
+            "index": 1,
+            "variant": "Green"
+          }
+        }
+      },
+      "bytes": "a5477265656e"
+    }
+  ]
+}

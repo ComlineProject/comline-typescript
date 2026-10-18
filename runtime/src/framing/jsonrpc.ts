@@ -3,13 +3,36 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import type { Call, DecodedRequest, DecodedResponse, Framing } from "../contract.js";
+import { type JsonNode, jsonInteger, parseJson } from "../json.js";
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
-/** JSON bytes of a value, or `null` for an empty sub-frame. */
-function jsonBytes(sub: unknown): Uint8Array {
-  return enc.encode(sub === undefined ? "null" : JSON.stringify(sub));
+const U64_MAX = (1n << 64n) - 1n;
+const I64_MIN = -(1n << 63n);
+const I64_MAX = (1n << 63n) - 1n;
+const NULL = enc.encode("null");
+
+/** `frame` as a JSON object's members, or `undefined` if it isn't one. */
+function members(frame: Uint8Array): { text: string; members: ReadonlyMap<string, JsonNode> } | undefined {
+  try {
+    const text = dec.decode(frame);
+    const root = parseJson(text);
+    return root.kind === "object" ? { text, members: root.members } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** A member's JSON exactly as written, or `null` when it's absent. */
+function raw(text: string, node: JsonNode | undefined): Uint8Array {
+  return node ? enc.encode(text.slice(node.start, node.end)) : NULL;
+}
+
+/** A `u64` id, or `undefined` if `node` isn't one. */
+function u64(node: JsonNode | undefined): bigint | undefined {
+  const n = jsonInteger(node);
+  return n !== undefined && n >= 0n && n <= U64_MAX ? n : undefined;
 }
 
 /**
@@ -22,7 +45,8 @@ function jsonBytes(sub: unknown): Uint8Array {
  * - err:     `{"jsonrpc":"2.0","error":{"code":<ordinal>,"message":...,"data":<body>},"id":<n>}`
  *
  * `params` / `payload` / `body` arrive as already-encoded JSON bytes and are
- * spliced in verbatim.
+ * spliced in verbatim; decoding hands them back as written, and reads the id
+ * exactly. A response must carry its id.
  */
 export class JsonRpcFraming implements Framing {
   readonly name = "jsonrpc-2.0";
@@ -35,17 +59,17 @@ export class JsonRpcFraming implements Framing {
   }
 
   decodeRequest(frame: Uint8Array): DecodedRequest | undefined {
-    let r: { method?: unknown; params?: unknown; id?: unknown };
-    try {
-      r = JSON.parse(dec.decode(frame));
-    } catch {
-      return undefined;
-    }
-    if (typeof r.method !== "string") return undefined;
+    const r = members(frame);
+    const method = r?.members.get("method");
+    if (!r || method?.kind !== "string") return undefined;
+    // A notification has no id (or a null one); it's request 0.
+    const id = r.members.get("id");
+    const requestId = !id || id.kind === "null" ? 0n : u64(id);
+    if (requestId === undefined) return undefined;
     return {
-      call: { name: r.method },
-      requestId: r.id === undefined || r.id === null ? 0n : BigInt(r.id as number),
-      params: jsonBytes(r.params),
+      call: { name: method.value },
+      requestId,
+      params: raw(r.text, r.members.get("params")),
     };
   }
 
@@ -73,27 +97,22 @@ export class JsonRpcFraming implements Framing {
   }
 
   decodeResponse(frame: Uint8Array): DecodedResponse | undefined {
-    let r: { result?: unknown; error?: { code?: unknown; data?: unknown }; id?: unknown };
-    try {
-      r = JSON.parse(dec.decode(frame));
-    } catch {
-      return undefined;
-    }
-    const requestId = r.id === undefined || r.id === null ? 0n : BigInt(r.id as number);
-    if (r.error && typeof r.error === "object") {
-      // An ordinal is a `u16`, so it is always in `0..=65535`. Anything
-      // outside that — JSON-RPC's reserved negatives, `-32603` among them, or
-      // a code too wide to be an ordinal — is not a schema error this wire can
-      // name, so it is a fault.
-      const code = Number(r.error.code ?? 0);
-      if (!Number.isInteger(code) || code < 0 || code > 0xffff) {
-        return { requestId, envelope: { fault: true } };
-      }
+    const r = members(frame);
+    const requestId = u64(r?.members.get("id"));
+    if (!r || requestId === undefined) return undefined;
+    const error = r.members.get("error");
+    if (error && error.kind !== "null") {
+      if (error.kind !== "object") return undefined;
+      const code = jsonInteger(error.members.get("code"));
+      if (code === undefined || code < I64_MIN || code > I64_MAX) return undefined;
+      // An ordinal is a u16; any other code (-32603 and the rest of
+      // JSON-RPC's own) is a provider fault.
+      if (code < 0n || code > 0xffffn) return { requestId, envelope: { fault: true } };
       return {
         requestId,
-        envelope: { err: { id: code, body: jsonBytes(r.error.data) } },
+        envelope: { err: { id: Number(code), body: raw(r.text, error.members.get("data")) } },
       };
     }
-    return { requestId, envelope: { ok: jsonBytes(r.result) } };
+    return { requestId, envelope: { ok: raw(r.text, r.members.get("result")) } };
   }
 }

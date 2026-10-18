@@ -35,6 +35,9 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      # The wire conformance vectors are vendored from ComlineProject/runtime
+      # at the commit in VECTORS_REV; this fails if the copy was edited.
+      - run: scripts/vendor-conformance.sh --check
 
   std_extra:
     name: std-extra - Node

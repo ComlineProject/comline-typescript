@@ -19,10 +19,26 @@ package, and a stream transport.
 | `Client` (`connect` / `call` / `notify`) and `Server` (`serve` / `serveHandshaked`) | ✅ |
 | A stream `Transport`; a MessagePack `Codec` | — |
 
-The `Handshake` and framing wire formats are cross-checked against
-`comline-runtime`'s reference vectors, so a TypeScript peer and a Rust peer
-generated from the same schema negotiate the same frame and speak the same
-request / response bytes.
+## Wire conformance
+
+The wire contract is checked against the byte-exact vectors that
+`ComlineProject/runtime` keeps in `runtime/conformance/`, so a TypeScript
+peer and a Rust peer generated from the same schema negotiate the same frame
+and speak the same request and response bytes.
+
+- [`conformance-support.json`](conformance-support.json) is what this runtime
+  claims per wire feature: supported, partial (naming the cases that fail) or
+  unsupported.
+- `test/conformance.test.ts` proves each claim against the vectors, and writes
+  [`conformance-report.json`](conformance-report.json) with the cases proving
+  it. The docs' language reference is rendered from the report.
+- The vectors are vendored in `test/conformance/` at the commit in
+  `VECTORS_REV`. CI checks that the copy is unedited.
+
+```sh
+scripts/vendor-conformance.sh <rev>   # take a newer corpus
+CONFORMANCE_BLESS=1 npm test          # rewrite conformance-report.json
+```
 
 ## Layout
 
@@ -31,6 +47,7 @@ src/
   contract.ts        RuntimeError, Kind, Call, Envelope, Reply, CallError, Codec, Dispatch, Framing
   handshake.ts       Handshake, nameHash, FRAMING_DATAGRAM
   codec.ts           JsonCodec
+  json.ts            exact JSON: digits kept, bigint written in full
   envelope.ts        the datagram tag-byte Envelope form
   framing/
     datagram.ts      DatagramFraming

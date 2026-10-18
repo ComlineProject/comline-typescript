@@ -9,26 +9,24 @@
  */
 
 import type { Codec } from "./contract.js";
+import { stringifyJson } from "./json.js";
 
 /**
- * UTF-8 JSON. `bigint` fields (only 128-bit IDL integers map to `bigint`) are
- * written as JSON numbers and read back as `number` — lossless below 2^53. A
- * precise `bigint` round-trip waits on the tagged binary codec.
+ * UTF-8 JSON, written as the Rust runtime's serde writes the same shape: a
+ * `bigint` with all its digits, and an absent optional as `null`. Reading
+ * gives `null` back as `undefined`, since the IDL has no null. Integers read
+ * back as `number`, exact below 2^53.
  */
 export class JsonCodec implements Codec {
   readonly name = "json";
 
   encode(value: unknown): Uint8Array {
-    const json = JSON.stringify(value, (_key, v) =>
-      typeof v === "bigint" ? Number(v) : v,
-    );
-    if (json === undefined) {
-      throw new TypeError("JsonCodec: value is not JSON-serializable");
-    }
-    return new TextEncoder().encode(json);
+    return new TextEncoder().encode(stringifyJson(value));
   }
 
   decode<T>(bytes: Uint8Array): T {
-    return JSON.parse(new TextDecoder().decode(bytes)) as T;
+    return JSON.parse(new TextDecoder().decode(bytes), (_key, v: unknown) =>
+      v === null ? undefined : v,
+    ) as T;
   }
 }

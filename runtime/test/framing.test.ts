@@ -127,3 +127,24 @@ test("JSON-RPC ok / err responses carry result / code+data", () => {
   assert.equal(back.envelope.err.id, 3);
   assert.equal(dec.decode(back.envelope.err.body), '{"why":"no"}');
 });
+
+test("JSON-RPC ids are read exactly, and a response must carry one", () => {
+  const f = new JsonRpcFraming();
+  const max = (1n << 64n) - 1n;
+  assert.equal(f.decodeResponse(f.encodeResponseFault(max))?.requestId, max);
+  assert.equal(f.decodeRequest(f.encodeRequest(call(0, "ping"), max, enc.encode("[]")))?.requestId, max);
+
+  assert.equal(f.decodeResponse(enc.encode('{"jsonrpc":"2.0","result":1}')), undefined);
+  assert.equal(f.decodeResponse(enc.encode('{"jsonrpc":"2.0","result":1,"id":-1}')), undefined);
+  assert.equal(f.decodeRequest(enc.encode('{"jsonrpc":"2.0","method":"m","id":1.5}')), undefined);
+  // A notification: no id is request 0.
+  assert.equal(f.decodeRequest(enc.encode('{"jsonrpc":"2.0","method":"m"}'))?.requestId, 0n);
+});
+
+test("JSON-RPC payloads pass through as written", () => {
+  const f = new JsonRpcFraming();
+  const payload = '{"n":9007199254740993,"f":1.0}';
+  const back = f.decodeResponse(f.encodeResponseOk(1n, enc.encode(payload)));
+  assert.ok(back && "ok" in back.envelope);
+  assert.equal(dec.decode(back.envelope.ok), payload);
+});
