@@ -9,13 +9,14 @@
  */
 
 import type { Codec } from "./contract.js";
-import { stringifyJson } from "./json.js";
+import { type Shape, decodeJson, parseJson, stringifyJson } from "./json.js";
 
 /**
  * UTF-8 JSON, written as the Rust runtime's serde writes the same shape: a
  * `bigint` with all its digits, and an absent optional as `null`. Reading
  * gives `null` back as `undefined`, since the IDL has no null. Integers read
- * back as `number`, exact below 2^53.
+ * as `number`, except where the {@link Shape} generated code passes says a
+ * `bigint` goes: those are read exactly.
  */
 export class JsonCodec implements Codec {
   readonly name = "json";
@@ -24,9 +25,9 @@ export class JsonCodec implements Codec {
     return new TextEncoder().encode(stringifyJson(value));
   }
 
-  decode<T>(bytes: Uint8Array): T {
-    return JSON.parse(new TextDecoder().decode(bytes), (_key, v: unknown) =>
-      v === null ? undefined : v,
-    ) as T;
+  decode<T>(bytes: Uint8Array, shape?: Shape): T {
+    const text = new TextDecoder().decode(bytes);
+    if (shape !== undefined) return decodeJson(parseJson(text), shape) as T;
+    return JSON.parse(text, (_key, v: unknown) => (v === null ? undefined : v)) as T;
   }
 }

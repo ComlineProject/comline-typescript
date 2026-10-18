@@ -147,8 +147,106 @@ fn type_alias_emits_and_fields_reference_it_by_name() {
         },
     ]);
 
-    assert!(out.contains("export type UserId = number;"), "got: {out}");
+    assert!(out.contains("export type UserId = bigint;"), "got: {out}");
     assert!(out.contains("sender: UserId;"), "got: {out}");
+    // A `u64` is a `bigint`, so both declarations carry a `Shape`.
+    assert!(out.contains("import type { Shape } from \"@comline/runtime\";"), "got: {out}");
+    assert!(out.contains("export const UserId: Shape = \"bigint\";"), "got: {out}");
+    assert!(
+        out.contains("export const Greeting: Shape = { fields: { sender: () => UserId } };"),
+        "got: {out}"
+    );
+}
+
+fn struct_of(name: &str, fields: Vec<FrozenUnit>) -> FrozenUnit {
+    FrozenUnit::Struct {
+        docstring: None,
+        parameters: vec![],
+        name: name.to_string(),
+        fields,
+        span: (0, 0),
+    }
+}
+
+/// Nothing wide, nothing extra: no `Shape`, no runtime import.
+#[test]
+fn a_type_without_a_bigint_has_no_shape() {
+    let out = one(vec![struct_of("Point", vec![field("x", "u32"), field("y", "f64")])]);
+    assert!(out.contains("x: number;"), "got: {out}");
+    assert!(!out.contains("Shape"), "got: {out}");
+    assert!(!out.contains("@comline/runtime"), "got: {out}");
+}
+
+/// Only the fields that hold a `bigint` are listed, however deep it is.
+#[test]
+fn a_shape_follows_arrays_and_named_types() {
+    let out = one(vec![
+        struct_of("Leaf", vec![field("id", "s64"), field("label", "string")]),
+        struct_of("Plain", vec![field("n", "u32")]),
+        struct_of(
+            "Tree",
+            vec![
+                field("leaves", "Leaf[]"),
+                field("plain", "Plain"),
+                field("big", "u128[4]"),
+                // Recursive: the function form is what makes this load.
+                field("children", "Tree[]"),
+            ],
+        ),
+    ]);
+    assert!(out.contains("export const Leaf: Shape = { fields: { id: \"bigint\" } };"), "got: {out}");
+    assert!(!out.contains("export const Plain"), "got: {out}");
+    assert!(
+        out.contains(
+            "export const Tree: Shape = { fields: { leaves: { array: () => Leaf }, \
+             big: { array: \"bigint\" }, children: { array: () => Tree } } };"
+        ),
+        "got: {out}"
+    );
+}
+
+/// A union's members are told apart by kind, so each member is described.
+#[test]
+fn a_union_with_a_bigint_names_every_member() {
+    let mut s = struct_of("Holder", vec![]);
+    if let FrozenUnit::Struct { fields, .. } = &mut s {
+        fields.push(FrozenUnit::Field {
+            docstring: None,
+            parameters: vec![],
+            optional: false,
+            name: "value".into(),
+            ty: TypeRef::Union(vec![type_of("string"), type_of("u64"), type_of("bool")]),
+            default: None,
+            span: (0, 0),
+        });
+    }
+    let out = one(vec![s]);
+    assert!(
+        out.contains("export const Holder: Shape = { fields: { value: { union: [\"string\", \"bigint\", \"boolean\"] } } };"),
+        "got: {out}"
+    );
+}
+
+/// The client decodes a result, and an error's data, with their shapes;
+/// the dispatcher decodes params with theirs.
+#[test]
+fn decoding_passes_each_shape() {
+    let mut units = chat_units();
+    if let FrozenUnit::Error { fields, .. } = &mut units[1] {
+        fields.push(field("retry_after", "u64"));
+    }
+    if let FrozenUnit::Protocol { functions, .. } = &mut units[2] {
+        if let FrozenUnit::Function { arguments, .. } = &mut functions[1] {
+            arguments[0].ty = TypeRef::Primitive(PrimitiveType::U64);
+        }
+    }
+    let out = one(units);
+    assert!(out.contains("export const ChatHistoryParams: Shape = { fields: { limit: \"bigint\" } };"), "got: {out}");
+    assert!(out.contains("codec.decode<ChatHistoryParams>(params, ChatHistoryParams)"), "got: {out}");
+    assert!(out.contains("codec.decode<ChatSendParams>(params);"), "got: {out}");
+    assert!(out.contains("decode<Message>(env.ok, Message)"), "got: {out}");
+    assert!(out.contains("decode<Message[]>(env.ok, { array: () => Message })"), "got: {out}");
+    assert!(out.contains("decode<Rejected>(env.err.body, Rejected)"), "got: {out}");
 }
 
 #[test]
@@ -882,6 +980,7 @@ fn constants_are_emitted() {
             ),
             constant(None, "DEBUG", PrimitiveType::Bool, Literal::Bool(true)),
             constant(None, "HUGE", PrimitiveType::U128, Literal::Integer(7)),
+            constant(None, "BIG", PrimitiveType::U64, Literal::Integer(9)),
         ],
     )];
     let out = code_file(&schemas, "limits");
@@ -901,6 +1000,7 @@ fn constants_are_emitted() {
     assert!(out.contains("export const DEBUG = true;"), "got: {out}");
     // `bigint`, so the literal needs the suffix to actually be one.
     assert!(out.contains("export const HUGE = 7n;"), "got: {out}");
+    assert!(out.contains("export const BIG = 9n;"), "got: {out}");
 }
 
 /// `! A, B`. The IR has always modelled `throws` as a list, so this needed
@@ -1058,4 +1158,51 @@ fn floats_fixed_arrays_and_unions_render() {
     ] {
         assert!(out.contains(line), "missing {line:?} in: {out}");
     }
+}
+
+fn wide_across_schemas() -> Vec<(String, Vec<FrozenUnit>)> {
+    vec![
+        (
+            "ids".to_string(),
+            vec![
+                struct_of("Stamp", vec![field("at", "u64")]),
+                struct_of("Tag", vec![field("n", "u8")]),
+            ],
+        ),
+        (
+            "events".to_string(),
+            vec![
+                import("ids::Stamp", None),
+                import("ids::Tag", None),
+                struct_of("Event", vec![field("stamp", "Stamp"), field("tag", "Tag")]),
+            ],
+        ),
+    ]
+}
+
+/// A shape from another schema is a value, so its name can't come in through
+/// `import type`; a name used only as a type still does.
+#[test]
+fn a_shape_from_another_schema_is_imported_as_a_value() {
+    let schemas = wide_across_schemas();
+    let out = code_file(&schemas, "events");
+    assert!(out.contains("import { Stamp } from \"./ids.js\";"), "got: {out}");
+    assert!(out.contains("import type { Tag } from \"./ids.js\";"), "got: {out}");
+    assert!(
+        out.contains("export const Event: Shape = { fields: { stamp: () => Stamp } };"),
+        "got: {out}"
+    );
+}
+
+/// A package of plain data needs the runtime once a type has a `Shape`.
+#[test]
+fn lib_mode_declares_the_runtime_dep_for_a_shape() {
+    let schemas = wide_across_schemas();
+    let files = generate_typescript(&lib_req(&schemas)).unwrap();
+    let pkg = &files
+        .iter()
+        .find(|f| f.path.to_str().unwrap() == "package.json")
+        .unwrap()
+        .contents;
+    assert!(pkg.contains("\"@comline/runtime\""), "got: {pkg}");
 }

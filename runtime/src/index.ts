@@ -37,6 +37,7 @@ export {
 } from "./handshake.js";
 
 export { JsonCodec } from "./codec.js";
+export { type Shape } from "./json.js";
 
 export {
   encodeEnvelopeOk,

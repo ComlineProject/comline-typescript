@@ -1,7 +1,10 @@
 //! TypeScript generation: frozen IR -> `.ts` source.
 //!
 //! Per schema file:
-//! - `struct`   -> `export interface`
+//! - `struct`   -> `export interface`, and beside it, when the struct holds a
+//!   64- or 128-bit integer (a `bigint`), an `export const` of the same name:
+//!   its `Shape`, which tells `@comline/runtime`'s decoder where the
+//!   `bigint`s are
 //! - `error`    -> `export interface` (the wire payload) + `export class
 //!   <Name>Error` (the throwable, carrying `.data` and a static `.ordinal`)
 //! - `enum`     -> `export enum` with string values (JSON interop)
@@ -24,7 +27,8 @@
 //! ([`NamespaceTree`], laid out by [`TsLayout`]). See design/generation.md.
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::cell::{Cell, RefCell};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 
 use comline_core::schema::ir::frozen::types::{Literal, PrimitiveType, TypeRef};
@@ -112,29 +116,29 @@ pub fn generate_typescript(req: &GenRequest) -> Result<Vec<GeneratedFile>> {
         Mode::Lib => {
             let tree = NamespaceTree::build(emitted, &TsLayout)?;
 
-            let has_protocol = emitted.iter().any(|(_, units)| {
-                units
-                    .iter()
-                    .any(|u| matches!(u, FrozenUnit::Protocol { .. }))
+            // The render closure takes every schema in the request, not just
+            // the ones in this tree: a reference resolves against all of
+            // them, including an external `std` this package emits no file
+            // for.
+            let sources = tree.emit("src", &TsLayout, &|namespace, units| {
+                schema_source(namespace, units, req.schemas, default_framing, external_std)
             });
+            // A protocol needs the runtime, and so does a type's `Shape`.
+            let needs_runtime = sources
+                .iter()
+                .any(|f| f.contents.contains(&format!("from \"{RUNTIME_PACKAGE}\"")));
 
             let mut files = vec![
                 GeneratedFile {
                     path: PathBuf::from("package.json"),
-                    contents: package_json(&req.package, has_protocol, std.needs_std_dependency),
+                    contents: package_json(&req.package, needs_runtime, std.needs_std_dependency),
                 },
                 GeneratedFile {
                     path: PathBuf::from("tsconfig.json"),
                     contents: TSCONFIG.to_string(),
                 },
             ];
-            // The render closure takes every schema in the request, not just
-            // the ones in this tree: a reference resolves against all of
-            // them, including an external `std` this package emits no file
-            // for.
-            files.extend(tree.emit("src", &TsLayout, &|namespace, units| {
-                schema_source(namespace, units, req.schemas, default_framing, external_std)
-            }));
+            files.extend(sources);
             Ok(files)
         }
     }
@@ -200,10 +204,10 @@ const TSCONFIG: &str = "{\n\
     \x20 \"include\": [\"src/**/*.ts\"]\n\
     }\n";
 
-fn package_json(pkg: &PackageMeta, has_protocol: bool, needs_std_dep: bool) -> String {
+fn package_json(pkg: &PackageMeta, needs_runtime: bool, needs_std_dep: bool) -> String {
     let name = pkg.name.to_lowercase();
     let mut entries: Vec<String> = Vec::new();
-    if has_protocol {
+    if needs_runtime {
         entries.push(format!("    \"{RUNTIME_PACKAGE}\": \"{RUNTIME_VERSION}\""));
     }
     if needs_std_dep {
@@ -321,11 +325,68 @@ fn schema_source(
     default_framing: Option<&str>,
     external_std: bool,
 ) -> String {
-    let types = TypeMapper::new(units, schemas, external_std);
+    let types = TypeMapper::new(namespace, units, schemas, external_std);
+    let errors = error_names(units);
+
+    // The declarations, built before the headers: rendering them is what
+    // tells `types` which imported names this file actually refers to, and
+    // whether it declares a `Shape`.
+    let mut decls = String::new();
+    for unit in units {
+        match unit {
+            FrozenUnit::Struct { name, fields, .. } => {
+                decls.push_str(&interface(name, fields, &types));
+                decls.push_str(&fields_shape(name, fields, &types));
+            }
+            FrozenUnit::Error {
+                name,
+                fields,
+                ordinal,
+                ..
+            } => {
+                decls.push_str(&interface(name, fields, &types));
+                decls.push_str(&fields_shape(name, fields, &types));
+                decls.push_str(&error_class(name, *ordinal));
+            }
+            FrozenUnit::Enum { name, variants, .. } => {
+                decls.push_str(&string_enum(name, variants));
+            }
+            FrozenUnit::TypeAlias { name, target, .. } => {
+                decls.push_str(&type_alias(name, target, &types));
+                if let Some(shape) = types.shape(target) {
+                    decls.push_str(&types.companion(name, &shape));
+                }
+            }
+            FrozenUnit::Constant {
+                docstring,
+                name,
+                ty,
+                value,
+                ..
+            } => {
+                decls.push_str(&constant(docstring.as_deref(), name, ty, value.as_ref()));
+            }
+            FrozenUnit::Protocol {
+                name,
+                functions,
+                parameters,
+                ..
+            } => {
+                decls.push_str(&protocol(
+                    name,
+                    functions,
+                    &framing_choice(parameters, default_framing),
+                    &errors,
+                    &types,
+                ));
+            }
+            _ => {}
+        }
+    }
+
     let has_protocol = units
         .iter()
         .any(|u| matches!(u, FrozenUnit::Protocol { .. }));
-    let errors = error_names(units);
 
     // Which framings the protocols in this file reach for.
     let picks: Vec<FramingChoice> = units
@@ -360,7 +421,12 @@ fn schema_source(
         for v in values {
             runtime_import.push_str(&format!("    {v},\n"));
         }
-        for t in ["Codec", "Dispatch", "Framing", "Kind", "Reply", "Transport"] {
+        let mut type_names = vec!["Codec", "Dispatch", "Framing", "Kind", "Reply"];
+        if types.declares_shapes() {
+            type_names.push("Shape");
+        }
+        type_names.push("Transport");
+        for t in type_names {
             runtime_import.push_str(&format!("    type {t},\n"));
         }
         runtime_import.push_str("} from \"@comline/runtime\";\n\n");
@@ -371,56 +437,8 @@ fn schema_source(
              export const IR_HASH = {:#018x}n;\n\n",
             schema_ir_hash(units)
         ));
-    }
-
-    // The declarations, built before the header: rendering them is what tells
-    // `types` which imported names this file actually refers to.
-    let mut decls = String::new();
-    for unit in units {
-        match unit {
-            FrozenUnit::Struct { name, fields, .. } => {
-                decls.push_str(&interface(name, fields, &types));
-            }
-            FrozenUnit::Error {
-                name,
-                fields,
-                ordinal,
-                ..
-            } => {
-                decls.push_str(&interface(name, fields, &types));
-                decls.push_str(&error_class(name, *ordinal));
-            }
-            FrozenUnit::Enum { name, variants, .. } => {
-                decls.push_str(&string_enum(name, variants));
-            }
-            FrozenUnit::TypeAlias { name, target, .. } => {
-                decls.push_str(&type_alias(name, target, &types));
-            }
-            FrozenUnit::Constant {
-                docstring,
-                name,
-                ty,
-                value,
-                ..
-            } => {
-                decls.push_str(&constant(docstring.as_deref(), name, ty, value.as_ref()));
-            }
-            FrozenUnit::Protocol {
-                name,
-                functions,
-                parameters,
-                ..
-            } => {
-                decls.push_str(&protocol(
-                    name,
-                    functions,
-                    &framing_choice(parameters, default_framing),
-                    &errors,
-                    &types,
-                ));
-            }
-            _ => {}
-        }
+    } else if types.declares_shapes() {
+        runtime_import.push_str(&format!("import type {{ Shape }} from \"{RUNTIME_PACKAGE}\";\n\n"));
     }
 
     // External package first, then relative imports, then the file's own
@@ -453,8 +471,8 @@ fn type_alias(name: &str, target: &TypeRef, types: &TypeMapper) -> String {
 /// **No type annotation, deliberately.** TypeScript has no `u8`, so
 /// annotating would mean writing `number` and throwing away what the
 /// inferred literal type (`5`) already says more precisely. The exception is
-/// a 128-bit integer, which [`primitive_ts_type`] maps to `bigint` and which
-/// therefore needs the `n` suffix on the literal to *be* one.
+/// a 64- or 128-bit integer, which [`primitive_ts_type`] maps to `bigint` and
+/// which therefore needs the `n` suffix on the literal to *be* one.
 fn constant(
     docstring: Option<&str>,
     name: &str,
@@ -469,7 +487,7 @@ fn constant(
     let value = match (primitive, value) {
         (_, Some(Literal::String(text))) => format!("{text:?}"),
         // `bigint` is a distinct type from `number`, and `7` is not one.
-        (PrimitiveType::U128 | PrimitiveType::S128, Some(Literal::Integer(i))) => format!("{i}n"),
+        (p, Some(Literal::Integer(i))) if is_wide(p) => format!("{i}n"),
         (_, Some(literal @ (Literal::Integer(_) | Literal::Bool(_)))) => literal.to_string(),
         _ => return String::new(),
     };
@@ -505,6 +523,39 @@ fn interface(name: &str, fields: &[FrozenUnit], types: &TypeMapper) -> String {
     }
     s.push_str("}\n\n");
     s
+}
+
+/// A shape as a decode call passes it: by then every module has loaded, so a
+/// named type's shape is passed as itself rather than through a function.
+fn at_call(shape: String) -> String {
+    match shape.strip_prefix("() => ") {
+        Some(name) if !name.contains(' ') => name.to_string(),
+        _ => shape,
+    }
+}
+
+/// The `Shape` of a struct, an `error` or a params interface, when any of its
+/// fields holds a `bigint`: just those fields. Empty otherwise.
+fn fields_shape(name: &str, fields: &[FrozenUnit], types: &TypeMapper) -> String {
+    let shapes: Vec<(&str, &TypeRef)> = fields
+        .iter()
+        .filter_map(|f| match f {
+            FrozenUnit::Field { name, ty, .. } => Some((name.as_str(), ty)),
+            _ => None,
+        })
+        .collect();
+    args_shape(name, &shapes, types)
+}
+
+fn args_shape(name: &str, fields: &[(&str, &TypeRef)], types: &TypeMapper) -> String {
+    let members: Vec<String> = fields
+        .iter()
+        .filter_map(|(field, ty)| Some(format!("{field}: {}", types.shape(ty)?)))
+        .collect();
+    if members.is_empty() {
+        return String::new();
+    }
+    types.companion(name, &format!("{{ fields: {{ {} }} }}", members.join(", ")))
 }
 
 /// The throwable for an `error`: a provider `throw`s `new <Name>Error(data)`;
@@ -589,11 +640,16 @@ struct FnInfo {
     name: String,
     params_ty: Option<String>,
     args: Vec<(String, String)>,
+    /// The params interface's `Shape`, when an argument holds a `bigint`.
+    params_shape: Option<String>,
     /// The declared return type; `void` for a one-way call or a `()` return.
     ret: String,
+    /// The return type's `Shape`, when it holds a `bigint`.
+    ret_shape: Option<String>,
     one_way: bool,
-    /// `(ordinal, error interface name)` for each `!`. Empty for a one-way call.
-    throws: Vec<(u16, String)>,
+    /// `(ordinal, error interface name, whether it has a Shape)` for each `!`.
+    /// Empty for a one-way call.
+    throws: Vec<(u16, String, bool)>,
 }
 
 fn protocol(
@@ -620,23 +676,27 @@ fn protocol(
                     .collect();
                 let params_ty =
                     (!args.is_empty()).then(|| format!("{proto}{}Params", pascal(name)));
-                let ret = match _return {
-                    None | Some(TypeRef::Unit) => "void".to_string(),
-                    Some(ty) => types.ts_type(ty),
+                let params_shape = params_ty.as_ref().map(|ty| {
+                    let fields: Vec<(&str, &TypeRef)> =
+                        arguments.iter().map(|a| (a.name.as_str(), &a.ty)).collect();
+                    args_shape(ty, &fields, types)
+                });
+                let (ret, ret_shape) = match _return {
+                    None | Some(TypeRef::Unit) => ("void".to_string(), None),
+                    Some(ty) => (types.ts_type(ty), types.shape(ty).map(at_call)),
                 };
-                let throws: Vec<(u16, String)> = if one_way {
+                let throws: Vec<(u16, String, bool)> = if one_way {
                     Vec::new()
                 } else {
                     throws
                         .iter()
                         .map(|o| {
-                            (
-                                *o,
-                                errors
-                                    .get(o)
-                                    .cloned()
-                                    .unwrap_or_else(|| format!("UnknownError{o}")),
-                            )
+                            let name = errors
+                                .get(o)
+                                .cloned()
+                                .unwrap_or_else(|| format!("UnknownError{o}"));
+                            let shaped = types.shape(&TypeRef::Named(name.clone())).is_some();
+                            (*o, name, shaped)
                         })
                         .collect()
                 };
@@ -644,7 +704,9 @@ fn protocol(
                     name: name.clone(),
                     params_ty,
                     args,
+                    params_shape: params_shape.filter(|decl| !decl.is_empty()),
                     ret,
+                    ret_shape,
                     one_way,
                     throws,
                 })
@@ -663,6 +725,9 @@ fn protocol(
                 s.push_str(&format!("    {name}: {tsty};\n"));
             }
             s.push_str("}\n\n");
+            if let Some(shape) = &f.params_shape {
+                s.push_str(shape);
+            }
         }
     }
 
@@ -678,7 +743,7 @@ fn protocol(
             let names = f
                 .throws
                 .iter()
-                .map(|(_, n)| format!("{n}Error"))
+                .map(|(_, n, _)| format!("{n}Error"))
                 .collect::<Vec<_>>()
                 .join(" | ");
             s.push_str(&format!("    /** @throws {{{names}}} */\n"));
@@ -720,7 +785,10 @@ fn protocol(
         // Emitted *inside* the `try` below, so params that will not decode are
         // handled with the same arity awareness as a handler that throws.
         let decode_line = match &f.params_ty {
-            Some(ty) => format!("                    const p = codec.decode<{ty}>(params);\n"),
+            Some(ty) => {
+                let shape = if f.params_shape.is_some() { format!(", {ty}") } else { String::new() };
+                format!("                    const p = codec.decode<{ty}>(params{shape});\n")
+            }
             None => String::new(),
         };
         let call_arg = if f.params_ty.is_some() { "p" } else { "" };
@@ -755,7 +823,7 @@ fn protocol(
             } else {
                 s.push_str("                } catch (e) {\n");
             }
-            for (_, err) in &f.throws {
+            for (_, err, _) in &f.throws {
                 s.push_str(&format!(
                     "                    if (e instanceof {err}Error) {{ reply.err({err}Error.ordinal, codec.encode(e.data)); return; }}\n"
                 ));
@@ -812,8 +880,9 @@ fn protocol(
         if f.ret == "void" {
             s.push_str("        if (\"ok\" in env) return;\n");
         } else {
+            let shape = f.ret_shape.as_ref().map_or(String::new(), |s| format!(", {s}"));
             s.push_str(&format!(
-                "        if (\"ok\" in env) return this.client.codec.decode<{}>(env.ok);\n",
+                "        if (\"ok\" in env) return this.client.codec.decode<{}>(env.ok{shape});\n",
                 f.ret
             ));
         }
@@ -825,10 +894,11 @@ fn protocol(
             s.push_str("        throw RuntimeError.remote(env.err.id);\n");
         } else {
             s.push_str("        switch (env.err.id) {\n");
-            for (_, err) in &f.throws {
+            for (_, err, shaped) in &f.throws {
+                let shape = if *shaped { format!(", {err}") } else { String::new() };
                 s.push_str(&format!(
                     "            case {err}Error.ordinal:\n\
-                     \x20               throw new {err}Error(this.client.codec.decode<{err}>(env.err.body));\n"
+                     \x20               throw new {err}Error(this.client.codec.decode<{err}>(env.err.body{shape}));\n"
                 ));
             }
             s.push_str("            default:\n");
@@ -860,17 +930,26 @@ fn protocol(
 /// Interior mutability rather than `&mut` threading: every caller
 /// (`interface`, `type_alias`, `protocol`) only ever reads, and the
 /// alternative is a `&mut` parameter on each of them for no gain.
-struct TypeMapper {
+struct TypeMapper<'a> {
+    /// The schema being rendered.
+    namespace: String,
     uses: UseTracker,
     /// Whether a std namespace resolves to `@comline/std` instead of a file
     /// in this package.
     external_std: bool,
+    wide: Wide<'a>,
+    /// Imported names used as values - a `Shape` - not only as types, so
+    /// their import can't be `import type`.
+    values: RefCell<BTreeSet<String>>,
+    /// Whether this file declares a `Shape`, and so imports the type.
+    shapes: Cell<bool>,
 }
 
-impl TypeMapper {
+impl<'a> TypeMapper<'a> {
     fn new(
+        namespace: &str,
         units: &[FrozenUnit],
-        schemas: &[(String, Vec<FrozenUnit>)],
+        schemas: &'a [(String, Vec<FrozenUnit>)],
         external_std: bool,
     ) -> Self {
         // With `external_std`, std is nameable even though no file is
@@ -880,9 +959,54 @@ impl TypeMapper {
             external_std && is_std_namespace(namespace)
         });
         Self {
+            namespace: namespace.to_string(),
             uses: UseTracker::new(table),
             external_std,
+            wide: Wide::new(schemas),
+            values: RefCell::new(BTreeSet::new()),
+            shapes: Cell::new(false),
         }
+    }
+
+    /// The `Shape` expression `@comline/runtime`'s decoder needs for a value
+    /// of `ty`, or `None` when nothing in it is a `bigint` and a plain
+    /// `JSON.parse` reading is right.
+    ///
+    /// A named type is referred to through a function, `() => Message`, so
+    /// the reference resolves when decoding rather than when the module
+    /// loads: types can name each other in any order, across files, and
+    /// recursively.
+    fn shape(&self, ty: &TypeRef) -> Option<String> {
+        match ty {
+            TypeRef::Primitive(p) if is_wide(*p) => Some("\"bigint\"".to_string()),
+            TypeRef::Named(name) if self.wide.holds_bigint(&self.namespace, ty) => {
+                self.uses.resolve(name);
+                self.values.borrow_mut().insert(name.clone());
+                Some(format!("() => {name}"))
+            }
+            TypeRef::Array { element, .. } => {
+                Some(format!("{{ array: {} }}", self.shape(element)?))
+            }
+            TypeRef::Union(members) if self.wide.holds_bigint(&self.namespace, ty) => {
+                let members = members
+                    .iter()
+                    .map(|m| self.shape(m).unwrap_or_else(|| self.wide.kind(&self.namespace, m)))
+                    .collect::<Vec<_>>();
+                Some(format!("{{ union: [{}] }}", members.join(", ")))
+            }
+            _ => None,
+        }
+    }
+
+    /// `export const NAME: Shape = SHAPE;`, the value companion of the type
+    /// `name` declares.
+    fn companion(&self, name: &str, shape: &str) -> String {
+        self.shapes.set(true);
+        format!("export const {name}: Shape = {shape};\n\n")
+    }
+
+    fn declares_shapes(&self) -> bool {
+        self.shapes.get()
     }
 
     /// `import type` lines for every imported name the rendering reached for,
@@ -899,23 +1023,31 @@ impl TypeMapper {
                 .insert((origin.declared, bound));
         }
 
+        let values = self.values.borrow();
         let mut s = String::new();
         for (module, names) in by_module {
-            let list = names
-                .iter()
-                .map(|(declared, bound)| {
-                    if declared == bound {
-                        declared.clone()
-                    } else {
-                        format!("{declared} as {bound}")
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join(", ");
-            s.push_str(&format!(
-                "import type {{ {list} }} from \"{}\";\n",
-                self.specifier_for(namespace, &module)
-            ));
+            let specifier = self.specifier_for(namespace, &module);
+            // A name whose `Shape` is used is imported as a value, which
+            // brings its type along; the rest stay `import type`.
+            let (as_values, as_types): (Vec<_>, Vec<_>) =
+                names.iter().partition(|(_, bound)| values.contains(bound));
+            for (keyword, names) in [("import", as_values), ("import type", as_types)] {
+                if names.is_empty() {
+                    continue;
+                }
+                let list = names
+                    .iter()
+                    .map(|(declared, bound)| {
+                        if declared == bound {
+                            declared.clone()
+                        } else {
+                            format!("{declared} as {bound}")
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                s.push_str(&format!("{keyword} {{ {list} }} from \"{specifier}\";\n"));
+            }
         }
         if !s.is_empty() {
             s.push('\n');
@@ -964,6 +1096,97 @@ impl TypeMapper {
     }
 }
 
+/// Which types hold a `bigint` somewhere inside, followed through every
+/// named type to its declaration, in whichever schema declares it.
+struct Wide<'a> {
+    schemas: &'a [(String, Vec<FrozenUnit>)],
+    /// Each schema's own name bindings: a type's fields are named in the
+    /// scope of the schema declaring it.
+    tables: HashMap<&'a str, SymbolTable>,
+}
+
+impl<'a> Wide<'a> {
+    fn new(schemas: &'a [(String, Vec<FrozenUnit>)]) -> Self {
+        let tables = schemas
+            .iter()
+            .map(|(namespace, units)| (namespace.as_str(), SymbolTable::new(units, schemas)))
+            .collect();
+        Self { schemas, tables }
+    }
+
+    /// The declaration `name` refers to in `namespace`, with the namespace
+    /// declaring it. `None` for a name the request doesn't carry.
+    fn declaration(&self, namespace: &str, name: &str) -> Option<(&'a str, &'a FrozenUnit)> {
+        let (home, declared) = match self.tables.get(namespace).and_then(|t| t.origin(name)) {
+            Some(origin) => (origin.namespace.clone(), origin.declared.clone()),
+            None => (namespace.to_string(), name.to_string()),
+        };
+        let (home, units) = self.schemas.iter().find(|(n, _)| *n == home)?;
+        let unit = units.iter().find(|u| match u {
+            FrozenUnit::Struct { name, .. }
+            | FrozenUnit::Error { name, .. }
+            | FrozenUnit::Enum { name, .. }
+            | FrozenUnit::TypeAlias { name, .. } => *name == declared,
+            _ => false,
+        })?;
+        Some((home.as_str(), unit))
+    }
+
+    fn holds_bigint(&self, namespace: &str, ty: &TypeRef) -> bool {
+        self.reaches(namespace, ty, &mut HashSet::new())
+    }
+
+    /// `seen` stops a recursive type; whatever is reachable from the root
+    /// is still visited once.
+    fn reaches(&self, namespace: &str, ty: &TypeRef, seen: &mut HashSet<(String, String)>) -> bool {
+        match ty {
+            TypeRef::Primitive(p) => is_wide(*p),
+            TypeRef::Array { element, .. } => self.reaches(namespace, element, seen),
+            TypeRef::Union(members) => members.iter().any(|m| self.reaches(namespace, m, seen)),
+            TypeRef::Unit => false,
+            TypeRef::Named(name) => {
+                let Some((home, unit)) = self.declaration(namespace, name) else {
+                    return false;
+                };
+                if !seen.insert((home.to_string(), name.clone())) {
+                    return false;
+                }
+                match unit {
+                    FrozenUnit::Struct { fields, .. } | FrozenUnit::Error { fields, .. } => {
+                        fields.iter().any(|f| match f {
+                            FrozenUnit::Field { ty, .. } => self.reaches(home, ty, seen),
+                            _ => false,
+                        })
+                    }
+                    FrozenUnit::TypeAlias { target, .. } => self.reaches(home, target, seen),
+                    _ => false,
+                }
+            }
+        }
+    }
+
+    /// The `Shape` of a union member holding no `bigint`: only its kind
+    /// matters, to tell it apart from the members that do.
+    fn kind(&self, namespace: &str, ty: &TypeRef) -> String {
+        match ty {
+            TypeRef::Primitive(PrimitiveType::Bool) => "\"boolean\"".into(),
+            TypeRef::Primitive(PrimitiveType::String) => "\"string\"".into(),
+            TypeRef::Primitive(_) => "\"number\"".into(),
+            TypeRef::Array { element, .. } => format!("{{ array: {} }}", self.kind(namespace, element)),
+            TypeRef::Union(members) => format!(
+                "{{ union: [{}] }}",
+                members.iter().map(|m| self.kind(namespace, m)).collect::<Vec<_>>().join(", ")
+            ),
+            TypeRef::Named(name) => match self.declaration(namespace, name) {
+                Some((home, FrozenUnit::TypeAlias { target, .. })) => self.kind(home, target),
+                Some((_, FrozenUnit::Enum { .. })) => "\"string\"".into(),
+                _ => "{ fields: {} }".into(),
+            },
+            TypeRef::Unit => "\"number\"".into(),
+        }
+    }
+}
+
 /// The namespace an `import type` specifier should point at, relative to the
 /// importing schema, as a module specifier NodeNext accepts (`.js`, and
 /// explicitly relative).
@@ -1003,9 +1226,18 @@ fn primitive_ts_type(p: PrimitiveType) -> &'static str {
     match p {
         PrimitiveType::String => "string",
         PrimitiveType::Bool => "boolean",
-        // 128-bit integers overflow `number`'s 2^53 exact range — use `bigint`.
-        PrimitiveType::U128 | PrimitiveType::S128 => "bigint",
+        // 64- and 128-bit integers overflow `number`'s 2^53 exact range.
+        p if is_wide(p) => "bigint",
         // TypeScript has one plain numeric type; every other width maps to it.
         _ => "number",
     }
+}
+
+/// Whether `p` is a `bigint` in TypeScript: an integer `number` can't hold
+/// exactly.
+fn is_wide(p: PrimitiveType) -> bool {
+    matches!(
+        p,
+        PrimitiveType::U64 | PrimitiveType::S64 | PrimitiveType::U128 | PrimitiveType::S128
+    )
 }

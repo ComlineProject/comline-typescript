@@ -6,7 +6,15 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { JsonCodec } from "../src/index.js";
-import { canonicalNumber, jsonEqual, jsonInteger, parseJson, stringifyJson } from "../src/json.js";
+import {
+  type Shape,
+  canonicalNumber,
+  decodeJson,
+  jsonEqual,
+  jsonInteger,
+  parseJson,
+  stringifyJson,
+} from "../src/json.js";
 
 test("parseJson keeps each number's digits and each value's span", () => {
   const text = ' {"id": 9007199254740993, "params": [1.0, "x"]} ';
@@ -56,4 +64,36 @@ test("JsonCodec reads null back as an absent value", () => {
   const back = codec.decode<{ id: number; label?: string }>(codec.encode({ id: 1, label: undefined }));
   assert.deepEqual(back, { id: 1 });
   assert.equal(codec.decode(codec.encode(undefined)), undefined);
+});
+
+test("a Shape reads its bigints exactly, and the rest as JSON.parse would", () => {
+  const point: Shape = { fields: { id: "bigint" } };
+  const tree: Shape = { fields: { id: "bigint", children: { array: () => tree } } };
+  const read = (text: string, shape: Shape) => decodeJson(parseJson(text), shape);
+
+  assert.deepEqual(read('{"id":9007199254740993,"x":1.5,"label":null}', point), {
+    id: 9007199254740993n,
+    x: 1.5,
+  });
+  assert.deepEqual(read('{"id":1,"children":[{"id":2,"children":[]}]}', tree), {
+    id: 1n,
+    children: [{ id: 2n, children: [] }],
+  });
+  assert.deepEqual(read("[18446744073709551615]", { array: "bigint" }), [18446744073709551615n]);
+  assert.throws(() => read("1.5", "bigint"), SyntaxError);
+});
+
+test("a union member is chosen by the JSON value's kind", () => {
+  const value: Shape = { union: ["string", "bigint", { fields: { n: "bigint" } }] };
+  const read = (text: string) => decodeJson(parseJson(text), value);
+  assert.equal(read('"7"'), "7");
+  assert.equal(read("7"), 7n);
+  assert.deepEqual(read('{"n":7}'), { n: 7n });
+});
+
+test("JsonCodec decodes with a shape, and round-trips a bigint", () => {
+  const codec = new JsonCodec();
+  const shape: Shape = { fields: { seq: "bigint" } };
+  const value = { seq: 18446744073709551615n, body: "x" };
+  assert.deepEqual(codec.decode(codec.encode(value), shape), value);
 });

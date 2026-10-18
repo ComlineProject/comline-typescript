@@ -12,6 +12,7 @@ import {
     type Framing,
     type Kind,
     type Reply,
+    type Shape,
     type Transport,
 } from "@comline/runtime";
 
@@ -21,8 +22,10 @@ export const IR_HASH = 0x3f8f03f5d62a3fean;
 
 export interface Message {
     body: string;
-    seq: number;
+    seq: bigint;
 }
+
+export const Message: Shape = { fields: { seq: "bigint" } };
 
 export interface Rejected {
     reason: string;
@@ -119,7 +122,7 @@ export class ChatClient {
 
     async send(params: ChatSendParams): Promise<Message> {
         const env = await this.client.call({ id: 0, name: "send" }, params);
-        if ("ok" in env) return this.client.codec.decode<Message>(env.ok);
+        if ("ok" in env) return this.client.codec.decode<Message>(env.ok, Message);
         if ("fault" in env) throw RuntimeError.provider();
         switch (env.err.id) {
             case RejectedError.ordinal:
@@ -131,7 +134,7 @@ export class ChatClient {
 
     async history(params: ChatHistoryParams): Promise<Message[]> {
         const env = await this.client.call({ id: 1, name: "history" }, params);
-        if ("ok" in env) return this.client.codec.decode<Message[]>(env.ok);
+        if ("ok" in env) return this.client.codec.decode<Message[]>(env.ok, { array: () => Message });
         if ("fault" in env) throw RuntimeError.provider();
         throw RuntimeError.remote(env.err.id);
     }

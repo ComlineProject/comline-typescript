@@ -15,14 +15,7 @@
       ]
     },
     "format-json": {
-      "state": "partial",
-      "note": "64-bit integers are `number`, exact only below 2^53",
-      "tracking": "comline-typescript#49",
-      "failing": [
-        "format-json/u64-above-2-53",
-        "format-json/u64-max",
-        "format-json/i64-min"
-      ],
+      "state": "supported",
       "proven_by": [
         "format-json/bool-true",
         "format-json/bool-false",
@@ -30,9 +23,12 @@
         "format-json/u16-max",
         "format-json/u32-max",
         "format-json/u64-small",
+        "format-json/u64-above-2-53",
+        "format-json/u64-max",
         "format-json/i8-min",
         "format-json/i16-min",
         "format-json/i32-min",
+        "format-json/i64-min",
         "format-json/f64-fraction",
         "format-json/f64-integral",
         "format-json/string-empty",

@@ -184,3 +184,89 @@ export function stringifyJson(value: unknown): string {
       throw new TypeError(`not JSON-serializable: ${typeof value}`);
   }
 }
+
+/**
+ * Where a decoded value holds integers too wide for `number`, as generated
+ * code describes its types: each type with a 64- or 128-bit integer in it
+ * gets a `Shape` beside its interface, under the same name.
+ *
+ * - `"bigint"`: an integer read exactly, as a `bigint`.
+ * - `"number"`, `"string"`, `"boolean"`: a value read as `JSON.parse` would.
+ *   They only matter as union members, to tell the members apart.
+ * - `{ array }`, `{ fields }`: the shape of each element, or of the named
+ *   fields. A field not listed is read as `JSON.parse` would.
+ * - `{ union }`: the first member whose kind the JSON value has.
+ * - A function: a named type's shape, looked up only when it's needed, so
+ *   types can refer to each other in any order, and recursively.
+ */
+export type Shape =
+  | "bigint"
+  | "number"
+  | "string"
+  | "boolean"
+  | { readonly array: Shape }
+  | { readonly fields: { readonly [name: string]: Shape } }
+  | { readonly union: readonly Shape[] }
+  | (() => Shape);
+
+type Resolved = Exclude<Shape, () => Shape>;
+
+function resolve(shape: Shape | undefined): Resolved | undefined {
+  while (typeof shape === "function") shape = shape();
+  return shape;
+}
+
+/** Whether a value of `shape` can be the JSON value `node`. */
+function admits(shape: Resolved, node: JsonNode): boolean {
+  if (typeof shape === "string") {
+    if (shape === "bigint" || shape === "number") return node.kind === "number";
+    if (shape === "boolean") return node.kind === "true" || node.kind === "false";
+    return node.kind === "string";
+  }
+  if ("array" in shape) return node.kind === "array";
+  if ("fields" in shape) return node.kind === "object";
+  return shape.union.some((member) => admits(resolve(member)!, node));
+}
+
+/**
+ * `node` as a value of `shape`: `JSON.parse`'s reading, except that a
+ * `"bigint"` is read exactly and `null` reads as an absent value (the IDL
+ * has no null).
+ */
+export function decodeJson(node: JsonNode, shape?: Shape): unknown {
+  let s = resolve(shape);
+  if (s && typeof s === "object" && "union" in s) {
+    s = s.union.map(resolve).find((member) => admits(member!, node));
+  }
+  switch (node.kind) {
+    case "null":
+      return undefined;
+    case "true":
+      return true;
+    case "false":
+      return false;
+    case "string":
+      return node.value;
+    case "number": {
+      if (s !== "bigint") return Number(node.raw);
+      const n = jsonInteger(node);
+      if (n === undefined) throw new SyntaxError(`expected an integer, got ${node.raw}`);
+      return n;
+    }
+    case "array": {
+      const element = s && typeof s === "object" && "array" in s ? s.array : undefined;
+      return node.items.map((item) => decodeJson(item, element));
+    }
+    case "object": {
+      const fields = s && typeof s === "object" && "fields" in s ? s.fields : undefined;
+      // An absent optional is left out, as `JSON.parse` with nulls dropped
+      // leaves it. `fromEntries` defines own properties, so a `__proto__`
+      // member stays data.
+      const entries = [...node.members].map(([key, member]) => [
+        key,
+        decodeJson(member, fields && Object.hasOwn(fields, key) ? fields[key] : undefined),
+      ]);
+      return Object.fromEntries(entries.filter(([, value]) => value !== undefined));
+    }
+  }
+}

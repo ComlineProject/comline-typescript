@@ -47,7 +47,7 @@ src/
   contract.ts        RuntimeError, Kind, Call, Envelope, Reply, CallError, Codec, Dispatch, Framing
   handshake.ts       Handshake, nameHash, FRAMING_DATAGRAM
   codec.ts           JsonCodec
-  json.ts            exact JSON: digits kept, bigint written in full
+  json.ts            exact JSON: digits kept, bigint written and read in full (Shape)
   envelope.ts        the datagram tag-byte Envelope form
   framing/
     datagram.ts      DatagramFraming
