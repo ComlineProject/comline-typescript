@@ -27,7 +27,7 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 
-use comline_core::schema::ir::compiler::interpreted::kind_search::{KindValue, Primitive};
+use comline_core::schema::ir::frozen::types::{Literal, PrimitiveType, TypeRef};
 use comline_core::schema::ir::frozen::schema_ir_hash;
 use comline_core::schema::ir::frozen::unit::FrozenUnit;
 
@@ -395,10 +395,11 @@ fn schema_source(
             FrozenUnit::Constant {
                 docstring,
                 name,
-                kind_value,
+                ty,
+                value,
                 ..
             } => {
-                decls.push_str(&constant(docstring.as_deref(), name, kind_value));
+                decls.push_str(&constant(docstring.as_deref(), name, ty, value.as_ref()));
             }
             FrozenUnit::Protocol {
                 name,
@@ -431,41 +432,42 @@ fn schema_source(
 // ── data types ─────────────────────────────────────────────────────────────
 
 /// `export type NAME = TARGET;` - transparent like Rust's own `type` (not a
-/// newtype): `ts_type` already maps any `KindValue` to a real TS type
+/// newtype): `ts_type` already maps any type to a real TS type
 /// expression, named or primitive, so this is the same mapping every field
 /// already goes through, just at the top level of the file instead of
 /// inside an interface.
-fn type_alias(name: &str, target: &KindValue, types: &TypeMapper) -> String {
+fn type_alias(name: &str, target: &TypeRef, types: &TypeMapper) -> String {
     format!("export type {name} = {};\n\n", types.ts_type(target))
 }
 
 /// `const MAX_RETRIES: u8 = 5` -> `export const MAX_RETRIES = 5;`.
 ///
 /// Declarations used to vanish here: a schema of nothing but constants
-/// generated an empty file. Only safe to emit since core#92, which stopped
-/// inferring the primitive from the literal - before that a `u8` constant
-/// and a `u64` one were indistinguishable in the IR.
+/// generated an empty file. The IR carries the declared type next to the
+/// literal, so a `u8` constant and a `u64` one stay distinguishable.
 ///
 /// **No type annotation, deliberately.** TypeScript has no `u8`, so
 /// annotating would mean writing `number` and throwing away what the
 /// inferred literal type (`5`) already says more precisely. The exception is
 /// a 128-bit integer, which [`primitive_ts_type`] maps to `bigint` and which
 /// therefore needs the `n` suffix on the literal to *be* one.
-fn constant(docstring: Option<&str>, name: &str, kind_value: &KindValue) -> String {
-    let KindValue::Primitive(primitive) = kind_value else {
-        // Validation refuses a constant of a named type, so this is
-        // unreachable from a real build.
+fn constant(
+    docstring: Option<&str>,
+    name: &str,
+    ty: &TypeRef,
+    value: Option<&Literal>,
+) -> String {
+    // Validation refuses a constant that isn't a primitive with a literal
+    // value, so neither early return is reachable from a real build.
+    let Some(primitive) = ty.as_primitive() else {
         return String::new();
     };
-    let Some(literal) = primitive.value_str() else {
-        return String::new();
-    };
-
-    let value = match primitive {
-        Primitive::String(_) => format!("{literal:?}"),
+    let value = match (primitive, value) {
+        (_, Some(Literal::String(text))) => format!("{text:?}"),
         // `bigint` is a distinct type from `number`, and `7` is not one.
-        Primitive::U128(_) | Primitive::S128(_) => format!("{literal}n"),
-        _ => literal,
+        (PrimitiveType::U128 | PrimitiveType::S128, Some(Literal::Integer(i))) => format!("{i}n"),
+        (_, Some(literal @ (Literal::Integer(_) | Literal::Bool(_)))) => literal.to_string(),
+        _ => return String::new(),
     };
 
     let mut s = String::new();
@@ -488,16 +490,13 @@ fn interface(name: &str, fields: &[FrozenUnit], types: &TypeMapper) -> String {
     for field in fields {
         if let FrozenUnit::Field {
             name,
-            kind_value,
+            ty,
             optional,
             ..
         } = field
         {
             let opt = if *optional { "?" } else { "" };
-            s.push_str(&format!(
-                "    {name}{opt}: {};\n",
-                types.ts_type(kind_value)
-            ));
+            s.push_str(&format!("    {name}{opt}: {};\n", types.ts_type(ty)));
         }
     }
     s.push_str("}\n\n");
@@ -522,11 +521,7 @@ fn error_class(name: &str, ordinal: u16) -> String {
 fn string_enum(name: &str, variants: &[FrozenUnit]) -> String {
     let mut s = format!("export enum {name} {{\n");
     for variant in variants {
-        if let FrozenUnit::EnumVariant(kv, _) = variant {
-            let v = match kv {
-                KindValue::EnumVariant(n, _) | KindValue::Namespaced(n, _) => n.clone(),
-                _ => "Unknown".to_string(),
-            };
+        if let FrozenUnit::EnumVariant(v, _) = variant {
             s.push_str(&format!("    {v} = \"{v}\",\n"));
         }
     }
@@ -617,13 +612,13 @@ fn protocol(
                 let one_way = _return.is_none();
                 let args: Vec<(String, String)> = arguments
                     .iter()
-                    .map(|a| (a.name.clone(), types.ts_type(&a.kind)))
+                    .map(|a| (a.name.clone(), types.ts_type(&a.ty)))
                     .collect();
                 let params_ty =
                     (!args.is_empty()).then(|| format!("{proto}{}Params", pascal(name)));
                 let ret = match _return {
-                    None | Some(KindValue::Unit) => "void".to_string(),
-                    Some(kv) => types.ts_type(kv),
+                    None | Some(TypeRef::Unit) => "void".to_string(),
+                    Some(ty) => types.ts_type(ty),
                 };
                 let throws: Vec<(u16, String)> = if one_way {
                     Vec::new()
@@ -854,7 +849,7 @@ fn protocol(
 
 // ── type mapping ───────────────────────────────────────────────────────────
 
-/// Maps a `KindValue` to a TypeScript type expression, and remembers which
+/// Maps a type to a TypeScript type expression, and remembers which
 /// of this schema's imported names the mapping actually reached for — the
 /// import header is built from that, so an unused `use` produces no import.
 ///
@@ -941,28 +936,27 @@ impl TypeMapper {
         relative_specifier(from, to)
     }
 
-    fn ts_type(&self, kind: &KindValue) -> String {
-        match kind {
-            KindValue::Primitive(p) => self.map_str_type(p.name()),
-            KindValue::Namespaced(name, _) => self.map_str_type(name),
-            KindValue::EnumVariant(name, _) => name.clone(),
-            KindValue::Unit => "void".to_string(),
-            _ => "unknown".to_string(),
+    fn ts_type(&self, ty: &TypeRef) -> String {
+        match ty {
+            TypeRef::Primitive(p) => primitive_ts_type(*p).to_string(),
+            // Resolving is what records the name for the header; the emitted
+            // name is the same either way (the binding, aliased or not),
+            // because an alias is this schema's own name for it.
+            TypeRef::Named(name) => {
+                self.uses.resolve(name);
+                name.clone()
+            }
+            // TypeScript has no fixed-length array short of a tuple, so `T[N]`
+            // is `T[]` too. A union element needs its parentheses.
+            TypeRef::Array { element, .. } => match **element {
+                TypeRef::Union(_) => format!("({})[]", self.ts_type(element)),
+                _ => format!("{}[]", self.ts_type(element)),
+            },
+            TypeRef::Union(members) => {
+                members.iter().map(|m| self.ts_type(m)).collect::<Vec<_>>().join(" | ")
+            }
+            TypeRef::Unit => "void".to_string(),
         }
-    }
-
-    fn map_str_type(&self, s: &str) -> String {
-        if let Some(inner) = s.strip_suffix("[]") {
-            return format!("{}[]", self.map_str_type(inner));
-        }
-        if let Some(mapped) = primitive_ts_type(s) {
-            return mapped;
-        }
-        // A named type. Resolving is what records it for the header; the
-        // emitted name is the same either way (the binding, aliased or not),
-        // because an alias is this schema's own name for it.
-        self.uses.resolve(s);
-        s.to_string()
     }
 }
 
@@ -1000,18 +994,14 @@ fn relative_specifier(from: &str, to: &str) -> String {
     s
 }
 
-/// The TypeScript type for an IDL primitive, or `None` if the name isn't one
-/// (a type some schema declares).
-fn primitive_ts_type(s: &str) -> Option<String> {
-    let ts = match s {
-        "string" => "string",
-        "bool" => "boolean",
+/// The TypeScript type for an IDL primitive.
+fn primitive_ts_type(p: PrimitiveType) -> &'static str {
+    match p {
+        PrimitiveType::String => "string",
+        PrimitiveType::Bool => "boolean",
         // 128-bit integers overflow `number`'s 2^53 exact range — use `bigint`.
-        "u128" | "i128" | "s128" => "bigint",
-        // TypeScript has one plain numeric type; the narrower widths map to it.
-        "float" | "double" | "int" | "u8" | "u16" | "u32" | "u64" | "i8" | "i16" | "i32"
-        | "i64" | "s8" | "s16" | "s32" | "s64" => "number",
-        _ => return None,
-    };
-    Some(ts.to_string())
+        PrimitiveType::U128 | PrimitiveType::S128 => "bigint",
+        // TypeScript has one plain numeric type; every other width maps to it.
+        _ => "number",
+    }
 }
