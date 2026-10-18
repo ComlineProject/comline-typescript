@@ -41,6 +41,43 @@ framing-agnostic contract (`RuntimeError`, `Kind`, `Envelope`, `Reply`,
 cd runtime && npm ci && npm test
 ```
 
+## Features
+
+What this generator implements, feature by feature. Each claim is checked by
+the conformance suite in [`ComlineProject/generation`](https://github.com/ComlineProject/generation):
+a supported feature has a fixture that generates and matches its golden output,
+an ignored one generates exactly what it would without the feature, and an
+unsupported one is refused with an error naming every use. The full matrix,
+with the fixtures that prove each claim, is in
+[`FEATURES.md`](https://github.com/ComlineProject/generation/blob/master/FEATURES.md).
+
+<!-- features:start -->
+<!-- Generated from `SUPPORT` in `codegen/src/lib.rs` - don't edit by hand. -->
+
+| Feature | typescript 5.0 |
+|---|---|
+| structs <br><sub>`structs`</sub> | ✅ supported |
+| enums <br><sub>`enums`</sub> | ✅ supported |
+| optional fields <br><sub>`optional-fields`</sub> | ✅ supported |
+| arrays <br><sub>`arrays`</sub> | ✅ supported |
+| fixed-length arrays <br><sub>`fixed-arrays`</sub> | 🟡 partial: rendered as `T[]`: the length isn't part of the type |
+| fixed arrays over 32 elements, nested <br><sub>`large-fixed-arrays-nested`</sub> | 🟡 partial: rendered as `T[]`: the length isn't part of the type |
+| unions <br><sub>`unions`</sub> | ✅ supported |
+| type aliases <br><sub>`type-aliases`</sub> | ✅ supported |
+| constants <br><sub>`constants`</sub> | ✅ supported |
+| protocols <br><sub>`protocols`</sub> | ✅ supported |
+| errors <br><sub>`errors`</sub> | ✅ supported |
+| functions that throw <br><sub>`throws`</sub> | ✅ supported |
+| validators <br><sub>`validators`</sub> | ⚪ ignored: the types are generated; the checks aren't run yet (core#96) |
+| imports between schemas <br><sub>`imports`</sub> | ✅ supported |
+| nested namespaces <br><sub>`nested-namespaces`</sub> | ✅ supported |
+| `lib` mode <br><sub>`lib-mode`</sub> | ✅ supported |
+| `external_std` <br><sub>`external-std`</sub> | ✅ supported |
+| `validate_on_decode` <br><sub>`validate-on-decode`</sub> | ⚪ ignored: no checks are generated to run on decode yet (core#96) |
+| JSON-RPC framing <br><sub>`framing-jsonrpc`</sub> | ✅ supported |
+
+<!-- features:end -->
+
 ## Design
 
 See `ComlineProject/docs` → Design:
