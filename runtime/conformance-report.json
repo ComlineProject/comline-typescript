@@ -1,0 +1,107 @@
+{
+  "runtime": "typescript",
+  "support": {
+    "envelope": {
+      "state": "supported",
+      "proven_by": [
+        "envelope/ok",
+        "envelope/ok-empty",
+        "envelope/err",
+        "envelope/err-empty-body",
+        "envelope/fault",
+        "envelope/reject-empty",
+        "envelope/reject-unknown-tag",
+        "envelope/reject-truncated-err"
+      ]
+    },
+    "format-json": {
+      "state": "partial",
+      "note": "64-bit integers are `number`, exact only below 2^53",
+      "tracking": "comline-typescript#49",
+      "failing": [
+        "format-json/u64-above-2-53",
+        "format-json/u64-max",
+        "format-json/i64-min"
+      ],
+      "proven_by": [
+        "format-json/bool-true",
+        "format-json/bool-false",
+        "format-json/u8-max",
+        "format-json/u16-max",
+        "format-json/u32-max",
+        "format-json/u64-small",
+        "format-json/i8-min",
+        "format-json/i16-min",
+        "format-json/i32-min",
+        "format-json/f64-fraction",
+        "format-json/f64-integral",
+        "format-json/string-empty",
+        "format-json/string-unicode",
+        "format-json/array-empty",
+        "format-json/array-u8",
+        "format-json/option-none",
+        "format-json/option-some",
+        "format-json/struct",
+        "format-json/struct-nested",
+        "format-json/struct-optional-none",
+        "format-json/enum-unit-variant"
+      ]
+    },
+    "format-msgpack": {
+      "state": "unsupported",
+      "note": "only JSON ships",
+      "proven_by": []
+    },
+    "framing-datagram": {
+      "state": "supported",
+      "proven_by": [
+        "framing-datagram/request",
+        "framing-datagram/request-large-id",
+        "framing-datagram/response-ok",
+        "framing-datagram/response-ok-exact-numbers",
+        "framing-datagram/response-err",
+        "framing-datagram/response-fault",
+        "framing-datagram/reject-short-request",
+        "framing-datagram/reject-short-response",
+        "framing-datagram/reject-response-without-envelope"
+      ]
+    },
+    "framing-jsonrpc": {
+      "state": "supported",
+      "proven_by": [
+        "framing-jsonrpc/request",
+        "framing-jsonrpc/request-large-id",
+        "framing-jsonrpc/response-ok",
+        "framing-jsonrpc/response-ok-exact-numbers",
+        "framing-jsonrpc/response-err",
+        "framing-jsonrpc/response-fault",
+        "framing-jsonrpc/reject-request-not-json",
+        "framing-jsonrpc/reject-request-without-method",
+        "framing-jsonrpc/reject-response-without-id"
+      ]
+    },
+    "handshake": {
+      "state": "supported",
+      "proven_by": [
+        "handshake/json-datagram",
+        "handshake/msgpack-datagram",
+        "handshake/json-jsonrpc",
+        "handshake/reject-empty",
+        "handshake/reject-truncated",
+        "handshake/reject-bad-magic",
+        "handshake/reject-bad-version"
+      ]
+    },
+    "name-hash": {
+      "state": "supported",
+      "proven_by": [
+        "name-hash/empty",
+        "name-hash/json",
+        "name-hash/msgpack",
+        "name-hash/comline.datagram",
+        "name-hash/jsonrpc-2.0",
+        "name-hash/com.acme.custom-format"
+      ]
+    }
+  }
+}

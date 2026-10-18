@@ -1,0 +1,17 @@
+{
+  "runtime": "typescript",
+  "support": {
+    "name-hash": { "state": "supported" },
+    "handshake": { "state": "supported" },
+    "envelope": { "state": "supported" },
+    "framing-datagram": { "state": "supported" },
+    "framing-jsonrpc": { "state": "supported" },
+    "format-json": {
+      "state": "partial",
+      "note": "64-bit integers are `number`, exact only below 2^53",
+      "tracking": "comline-typescript#49",
+      "failing": ["format-json/u64-above-2-53", "format-json/u64-max", "format-json/i64-min"]
+    },
+    "format-msgpack": { "state": "unsupported", "note": "only JSON ships" }
+  }
+}

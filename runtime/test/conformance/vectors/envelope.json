@@ -1,0 +1,69 @@
+{
+  "feature": "envelope",
+  "cases": [
+    {
+      "id": "envelope/ok",
+      "op": "envelope",
+      "input": {
+        "kind": "ok",
+        "payload": "7061796c6f6164"
+      },
+      "bytes": "007061796c6f6164"
+    },
+    {
+      "id": "envelope/ok-empty",
+      "op": "envelope",
+      "input": {
+        "kind": "ok",
+        "payload": ""
+      },
+      "bytes": "00"
+    },
+    {
+      "id": "envelope/err",
+      "op": "envelope",
+      "input": {
+        "body": "6669656c6473",
+        "id": 258,
+        "kind": "err"
+      },
+      "bytes": "0102016669656c6473"
+    },
+    {
+      "id": "envelope/err-empty-body",
+      "op": "envelope",
+      "input": {
+        "body": "",
+        "id": 0,
+        "kind": "err"
+      },
+      "bytes": "010000"
+    },
+    {
+      "id": "envelope/fault",
+      "op": "envelope",
+      "input": {
+        "kind": "fault"
+      },
+      "bytes": "02"
+    },
+    {
+      "id": "envelope/reject-empty",
+      "op": "envelope",
+      "bytes": "",
+      "expect": "reject"
+    },
+    {
+      "id": "envelope/reject-unknown-tag",
+      "op": "envelope",
+      "bytes": "03",
+      "expect": "reject"
+    },
+    {
+      "id": "envelope/reject-truncated-err",
+      "op": "envelope",
+      "bytes": "0100",
+      "expect": "reject"
+    }
+  ]
+}

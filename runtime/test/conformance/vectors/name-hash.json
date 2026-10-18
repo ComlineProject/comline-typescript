@@ -1,0 +1,53 @@
+{
+  "feature": "name-hash",
+  "cases": [
+    {
+      "id": "name-hash/empty",
+      "op": "name_hash",
+      "input": {
+        "name": ""
+      },
+      "bytes": "25232284e49cf2cb"
+    },
+    {
+      "id": "name-hash/json",
+      "op": "name_hash",
+      "input": {
+        "name": "json"
+      },
+      "bytes": "03380e17de6ebc20"
+    },
+    {
+      "id": "name-hash/msgpack",
+      "op": "name_hash",
+      "input": {
+        "name": "msgpack"
+      },
+      "bytes": "ab0663dc73ac7cc7"
+    },
+    {
+      "id": "name-hash/comline.datagram",
+      "op": "name_hash",
+      "input": {
+        "name": "comline.datagram"
+      },
+      "bytes": "b921146a9e8c1d06"
+    },
+    {
+      "id": "name-hash/jsonrpc-2.0",
+      "op": "name_hash",
+      "input": {
+        "name": "jsonrpc-2.0"
+      },
+      "bytes": "7736b6bd834df925"
+    },
+    {
+      "id": "name-hash/com.acme.custom-format",
+      "op": "name_hash",
+      "input": {
+        "name": "com.acme.custom-format"
+      },
+      "bytes": "69a4525b63f0d052"
+    }
+  ]
+}

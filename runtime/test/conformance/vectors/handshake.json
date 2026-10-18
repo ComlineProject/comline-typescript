@@ -1,0 +1,62 @@
+{
+  "feature": "handshake",
+  "cases": [
+    {
+      "id": "handshake/json-datagram",
+      "op": "handshake",
+      "input": {
+        "capabilities": 0,
+        "framing": "comline.datagram",
+        "ir_hash": "72623859790382856",
+        "wire_format": "json"
+      },
+      "bytes": "434f01080706050403020103380e17de6ebc20b921146a9e8c1d0600000000"
+    },
+    {
+      "id": "handshake/msgpack-datagram",
+      "op": "handshake",
+      "input": {
+        "capabilities": 5,
+        "framing": "comline.datagram",
+        "ir_hash": "16045690981114315524",
+        "wire_format": "msgpack"
+      },
+      "bytes": "434f0104030201efbeaddeab0663dc73ac7cc7b921146a9e8c1d0605000000"
+    },
+    {
+      "id": "handshake/json-jsonrpc",
+      "op": "handshake",
+      "input": {
+        "capabilities": 4294967295,
+        "framing": "jsonrpc-2.0",
+        "ir_hash": "18446744073709551615",
+        "wire_format": "json"
+      },
+      "bytes": "434f01ffffffffffffffff03380e17de6ebc207736b6bd834df925ffffffff"
+    },
+    {
+      "id": "handshake/reject-empty",
+      "op": "handshake",
+      "bytes": "",
+      "expect": "reject"
+    },
+    {
+      "id": "handshake/reject-truncated",
+      "op": "handshake",
+      "bytes": "434f01010000000000000003380e17de6ebc20b921146a9e8c1d06000000",
+      "expect": "reject"
+    },
+    {
+      "id": "handshake/reject-bad-magic",
+      "op": "handshake",
+      "bytes": "584f01010000000000000003380e17de6ebc20b921146a9e8c1d0600000000",
+      "expect": "reject"
+    },
+    {
+      "id": "handshake/reject-bad-version",
+      "op": "handshake",
+      "bytes": "434f02010000000000000003380e17de6ebc20b921146a9e8c1d0600000000",
+      "expect": "reject"
+    }
+  ]
+}

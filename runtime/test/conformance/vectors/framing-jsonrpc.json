@@ -1,0 +1,119 @@
+{
+  "feature": "framing-jsonrpc",
+  "cases": [
+    {
+      "id": "framing-jsonrpc/request",
+      "op": "request",
+      "input": {
+        "call_id": 3,
+        "format": "json",
+        "framing": "jsonrpc-2.0",
+        "method": "greet",
+        "params": {
+          "array": [
+            {
+              "u32": 7
+            },
+            {
+              "string": "x"
+            }
+          ]
+        },
+        "request_id": "42"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226d6574686f64223a226772656574222c22706172616d73223a5b372c2278225d2c226964223a34327d",
+      "compare": "json"
+    },
+    {
+      "id": "framing-jsonrpc/request-large-id",
+      "op": "request",
+      "input": {
+        "call_id": 65535,
+        "format": "json",
+        "framing": "jsonrpc-2.0",
+        "method": "ping",
+        "params": {
+          "array": []
+        },
+        "request_id": "18446744073709551615"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226d6574686f64223a2270696e67222c22706172616d73223a5b5d2c226964223a31383434363734343037333730393535313631357d",
+      "compare": "json"
+    },
+    {
+      "id": "framing-jsonrpc/response-ok",
+      "op": "response",
+      "input": {
+        "framing": "jsonrpc-2.0",
+        "kind": "ok",
+        "payload": "7b22626f6479223a226869227d",
+        "request_id": "7"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c22726573756c74223a7b22626f6479223a226869227d2c226964223a377d",
+      "compare": "json"
+    },
+    {
+      "id": "framing-jsonrpc/response-ok-exact-numbers",
+      "op": "response",
+      "input": {
+        "framing": "jsonrpc-2.0",
+        "kind": "ok",
+        "payload": "7b226e223a393030373139393235343734303939332c2266223a312e307d",
+        "request_id": "8"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c22726573756c74223a7b226e223a393030373139393235343734303939332c2266223a312e307d2c226964223a387d",
+      "compare": "json"
+    },
+    {
+      "id": "framing-jsonrpc/response-err",
+      "op": "response",
+      "input": {
+        "body": "7b22776879223a226e6f227d",
+        "framing": "jsonrpc-2.0",
+        "id": 2,
+        "kind": "err",
+        "request_id": "7"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226572726f72223a7b22636f6465223a322c226d657373616765223a226170706c69636174696f6e206572726f72222c2264617461223a7b22776879223a226e6f227d7d2c226964223a377d",
+      "compare": "json"
+    },
+    {
+      "id": "framing-jsonrpc/response-fault",
+      "op": "response",
+      "input": {
+        "framing": "jsonrpc-2.0",
+        "kind": "fault",
+        "request_id": "9"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226572726f72223a7b22636f6465223a2d33323630332c226d657373616765223a22496e7465726e616c206572726f72227d2c226964223a397d",
+      "compare": "json"
+    },
+    {
+      "id": "framing-jsonrpc/reject-request-not-json",
+      "op": "request",
+      "input": {
+        "framing": "jsonrpc-2.0"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-request-without-method",
+      "op": "request",
+      "input": {
+        "framing": "jsonrpc-2.0"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c22706172616d73223a5b5d2c226964223a317d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-response-without-id",
+      "op": "response",
+      "input": {
+        "framing": "jsonrpc-2.0"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c22726573756c74223a317d",
+      "expect": "reject"
+    }
+  ]
+}
