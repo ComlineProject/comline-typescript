@@ -286,6 +286,8 @@ fn chat_units() -> Vec<FrozenUnit> {
             message: "rejected: {self.reason}".into(),
             fields: vec![field("reason", "string")],
             span: Some((0, 0)),
+            message_span: None,
+            uninterpolated: vec![],
         },
         FrozenUnit::Protocol {
             docstring: "Chat".into(),
@@ -1017,6 +1019,8 @@ fn a_function_with_several_throws_documents_and_catches_each() {
         message: format!("{name} happened"),
         fields: vec![],
         span: None,
+        message_span: None,
+        uninterpolated: vec![],
     };
     let proto = FrozenUnit::Protocol {
         docstring: String::new(),
@@ -1074,6 +1078,8 @@ fn an_error_suffix_that_collides_with_a_declaration_is_refused() {
         message: "no".into(),
         fields: vec![],
         span: None,
+        message_span: None,
+        uninterpolated: vec![],
     };
     let schemas = vec![("chat".to_string(), vec![declared, error])];
     let err = generate_typescript(&code_req(&schemas)).expect_err("the name is taken");
