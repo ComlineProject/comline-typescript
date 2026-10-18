@@ -8,6 +8,8 @@
  * `Client` / `Server` are written against these types.
  */
 
+import type { Shape } from "./json.js";
+
 /** Every way a call can fail below the application layer. */
 export type RuntimeErrorKind =
   | "transport" // the transport failed to send or receive
@@ -152,7 +154,11 @@ export type CallError<E> = { readonly app: E } | { readonly runtime: RuntimeErro
 export interface Codec {
   readonly name: string;
   encode(value: unknown): Uint8Array;
-  decode<T>(bytes: Uint8Array): T;
+  /**
+   * `shape`, from generated code, says where the value holds integers too
+   * wide for `number`; without one, every number is a `number`.
+   */
+  decode<T>(bytes: Uint8Array, shape?: Shape): T;
 }
 
 /**

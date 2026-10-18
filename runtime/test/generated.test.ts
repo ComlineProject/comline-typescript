@@ -25,10 +25,11 @@ test("a generated client ⇆ provider round-trip", async () => {
   const impl: Chat = {
     async send({ text }) {
       if (text === "") throw new RejectedError({ reason: "empty" });
-      return { body: `echo: ${text}`, seq: 1 };
+      // Above 2^53: a `number` would round it.
+      return { body: `echo: ${text}`, seq: 9007199254740993n };
     },
     async history({ limit }) {
-      return Array.from({ length: limit }, (_, i) => ({ body: `m${i}`, seq: i }));
+      return Array.from({ length: limit }, (_, i) => ({ body: `m${i}`, seq: BigInt(i) }));
     },
     async wipe() {
       seen.length = 0;
@@ -41,8 +42,12 @@ test("a generated client ⇆ provider round-trip", async () => {
   const provider = serveChat(impl, providerSide, new JsonCodec());
   const chat = await ChatClient.connect(clientSide, new JsonCodec());
 
-  assert.equal((await chat.send({ text: "hi" })).body, "echo: hi");
-  assert.equal((await chat.history({ limit: 3 })).length, 3);
+  const sent = await chat.send({ text: "hi" });
+  assert.equal(sent.body, "echo: hi");
+  // A `u64` crosses the wire exactly, and comes back a `bigint`.
+  assert.equal(sent.seq, 9007199254740993n);
+  const history = await chat.history({ limit: 3 });
+  assert.deepEqual(history.map((m) => m.seq), [0n, 1n, 2n]);
 
   await assert.rejects(
     chat.send({ text: "" }),

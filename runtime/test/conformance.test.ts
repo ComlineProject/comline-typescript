@@ -110,16 +110,16 @@ function canon(value: unknown): string {
 }
 
 /**
- * A vector's typed value as generated TypeScript holds it: every integer
- * below 128 bits a `number`, an absent optional `undefined`, a unit enum
- * variant its name.
+ * A vector's typed value as generated TypeScript holds it: a 64-bit integer
+ * a `bigint`, every narrower one a `number`, an absent optional `undefined`,
+ * a unit enum variant its name.
  */
 function toJs(value: Json): unknown {
   const [[kind, inner]] = Object.entries(value as { [key: string]: Json }) as [[string, Json]];
   switch (kind) {
     case "u64":
     case "i64":
-      return Number(inner as string);
+      return BigInt(inner as string);
     case "bool":
     case "u8":
     case "u16":
