@@ -58,6 +58,10 @@ const STD_PACKAGE: &str = "@comline/std";
 const STD_VERSION: &str = "^0.1.0";
 
 pub fn generate_typescript(req: &GenRequest) -> Result<Vec<GeneratedFile>> {
+    // What this generator can't render at all is refused up front, every use
+    // named, before a single file is produced.
+    comline_codegen::features::refuse_unsupported("TypeScript", req, crate::SUPPORT)?;
+
     let default_framing = req.default_framing.as_deref();
     let external_std = req.external_std;
 
