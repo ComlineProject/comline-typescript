@@ -35,6 +35,9 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      # The generated fixtures, against the built runtime as a consumer sees
+      # it, under the strictest flags and erasable syntax only.
+      - run: npm run typecheck:generated
       # The wire conformance vectors are vendored from ComlineProject/runtime
       # at the commit in VECTORS_REV; this fails if the copy was edited.
       - run: scripts/vendor-conformance.sh --check
@@ -55,3 +58,21 @@ jobs:
       # emits TypeScript which doesn't typecheck - in CI rather than in
       # someone's project.
       - run: npm run build
+      - run: npx tsc --noEmit --erasableSyntaxOnly
+
+  floor:
+    # Generated code must type-check on the oldest TypeScript the generator
+    # registers at (`LANG_VERSION`), not only on the one in the lockfiles.
+    name: Generated code type-checks at the floor (TypeScript 5.0)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci && npm run build
+        working-directory: runtime
+      - run: npx -y -p typescript@5.0.4 tsc -p tsconfig.generated.json
+        working-directory: runtime
+      - run: npm ci && npx -y -p typescript@5.0.4 tsc --noEmit
+        working-directory: std-extra
