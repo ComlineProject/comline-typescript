@@ -6,8 +6,8 @@
       "op": "request",
       "input": {
         "call_id": 3,
-        "format": "json",
-        "framing": "jsonrpc-2.0",
+        "format": "json@1",
+        "framing": "jsonrpc@1",
         "method": "greet",
         "params": {
           "array": [
@@ -29,8 +29,8 @@
       "op": "request",
       "input": {
         "call_id": 65535,
-        "format": "json",
-        "framing": "jsonrpc-2.0",
+        "format": "json@1",
+        "framing": "jsonrpc@1",
         "method": "ping",
         "params": {
           "array": []
@@ -44,7 +44,7 @@
       "id": "framing-jsonrpc/response-ok",
       "op": "response",
       "input": {
-        "framing": "jsonrpc-2.0",
+        "framing": "jsonrpc@1",
         "kind": "ok",
         "payload": "7b22626f6479223a226869227d",
         "request_id": "7"
@@ -56,7 +56,7 @@
       "id": "framing-jsonrpc/response-ok-exact-numbers",
       "op": "response",
       "input": {
-        "framing": "jsonrpc-2.0",
+        "framing": "jsonrpc@1",
         "kind": "ok",
         "payload": "7b226e223a393030373139393235343734303939332c2266223a312e307d",
         "request_id": "8"
@@ -69,7 +69,7 @@
       "op": "response",
       "input": {
         "body": "7b22776879223a226e6f227d",
-        "framing": "jsonrpc-2.0",
+        "framing": "jsonrpc@1",
         "id": 2,
         "kind": "err",
         "request_id": "7"
@@ -81,7 +81,7 @@
       "id": "framing-jsonrpc/response-fault",
       "op": "response",
       "input": {
-        "framing": "jsonrpc-2.0",
+        "framing": "jsonrpc@1",
         "kind": "fault",
         "request_id": "9"
       },
@@ -92,7 +92,7 @@
       "id": "framing-jsonrpc/reject-request-not-json",
       "op": "request",
       "input": {
-        "framing": "jsonrpc-2.0"
+        "framing": "jsonrpc@1"
       },
       "bytes": "7b226a736f6e727063223a22322e30222c",
       "expect": "reject"
@@ -101,7 +101,7 @@
       "id": "framing-jsonrpc/reject-request-without-method",
       "op": "request",
       "input": {
-        "framing": "jsonrpc-2.0"
+        "framing": "jsonrpc@1"
       },
       "bytes": "7b226a736f6e727063223a22322e30222c22706172616d73223a5b5d2c226964223a317d",
       "expect": "reject"
@@ -110,7 +110,7 @@
       "id": "framing-jsonrpc/reject-response-without-id",
       "op": "response",
       "input": {
-        "framing": "jsonrpc-2.0"
+        "framing": "jsonrpc@1"
       },
       "bytes": "7b226a736f6e727063223a22322e30222c22726573756c74223a317d",
       "expect": "reject"

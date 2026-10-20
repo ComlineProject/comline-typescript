@@ -31,6 +31,8 @@ export {
 
 export {
   FRAMING_DATAGRAM,
+  FRAMING_JSONRPC,
+  FORMAT_JSON,
   nameHash,
   Handshake,
   type HandshakeInit,

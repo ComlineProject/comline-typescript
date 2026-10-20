@@ -21,6 +21,9 @@ import { test } from "node:test";
 
 import {
   DatagramFraming,
+  FORMAT_JSON,
+  FRAMING_DATAGRAM,
+  FRAMING_JSONRPC,
   Handshake,
   JsonCodec,
   JsonRpcFraming,
@@ -146,15 +149,15 @@ function toJs(value: Json): unknown {
 }
 
 function encodeValue(format: string, value: Json): Uint8Array {
-  if (format !== "json") throw new NotImplemented(`format \`${format}\``);
+  if (format !== FORMAT_JSON) throw new NotImplemented(`format \`${format}\``);
   return new JsonCodec().encode(toJs(value));
 }
 
 function framingOf(name: string): Framing {
   switch (name) {
-    case "comline.datagram":
+    case FRAMING_DATAGRAM:
       return new DatagramFraming();
-    case "jsonrpc-2.0":
+    case FRAMING_JSONRPC:
       return new JsonRpcFraming();
     default:
       throw new NotImplemented(`framing \`${name}\``);
