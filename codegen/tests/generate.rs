@@ -383,6 +383,20 @@ fn framing_annotation_and_package_default_pick_jsonrpc() {
 }
 
 #[test]
+fn an_unknown_package_default_framing_is_an_error_not_datagram() {
+    let schemas = vec![("account".to_string(), chat_units())];
+    let req = GenRequest {
+        default_framing: Some("jsonrcp".to_string()),
+        ..code_req(&schemas)
+    };
+    let error = generate_typescript(&req).unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "unknown default framing `jsonrcp` - expected one of `jsonrpc`, `datagram`"
+    );
+}
+
+#[test]
 fn a_schema_without_a_protocol_has_no_ir_hash_or_runtime_import() {
     let out = one(vec![FrozenUnit::Enum {
         docstring: None,
