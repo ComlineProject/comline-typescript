@@ -12,13 +12,24 @@
 mod generator;
 
 use comline_codegen::features::{Feature, Support, SupportTable};
+use comline_codegen::versions::Versions;
+use comline_codegen::Generator;
 
 pub use generator::generate_typescript;
 
-/// Contribute the TypeScript generator to a CLI's [`Registry`](comline_codegen::Registry).
-/// The language version this generator registers under - what a
-/// congregation names as `typescript#5.0`.
+/// The oldest TypeScript this generator generates for, its floor - what a
+/// congregation names as `typescript#5.0`. Any later version reaches it too.
 pub const LANG_VERSION: &str = "5.0";
+
+/// Which TypeScript versions this generator handles. No output changes above
+/// the floor yet. The runtime's tests type-check generated code with
+/// TypeScript 5.9; TypeScript doesn't promise later releases accept it.
+pub const VERSIONS: Versions = Versions {
+    floor: LANG_VERSION,
+    changes: &[],
+    verified_up_to: "5.9",
+    forward_compatible: false,
+};
 
 /// What this generator implements, feature by feature. Each claim is proven
 /// by `comline-conformance`, not taken on trust: see `comline_codegen::features`.
@@ -56,7 +67,16 @@ pub const SUPPORT: SupportTable = &[
     ),
 ];
 
+/// Contribute the TypeScript generator to a CLI's [`Registry`](comline_codegen::Registry),
+/// as `typescript` and `ts`.
 pub fn register(registry: &mut comline_codegen::Registry) {
-    registry.register("typescript", "ts", LANG_VERSION, generate_typescript, SUPPORT);
-    registry.register("ts", "ts", LANG_VERSION, generate_typescript, SUPPORT);
+    for language in ["typescript", "ts"] {
+        registry.register(Generator {
+            language,
+            ext: "ts",
+            generate: generate_typescript,
+            support: SUPPORT,
+            versions: VERSIONS,
+        });
+    }
 }

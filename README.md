@@ -54,7 +54,7 @@ with the fixtures that prove each claim, is in
 <!-- features:start -->
 <!-- Generated from `SUPPORT` in `codegen/src/lib.rs` - don't edit by hand. -->
 
-| Feature | typescript 5.0 |
+| Feature | typescript ≥ 5.0 |
 |---|---|
 | structs <br><sub>`structs`</sub> | ✅ supported |
 | enums <br><sub>`enums`</sub> | ✅ supported |
