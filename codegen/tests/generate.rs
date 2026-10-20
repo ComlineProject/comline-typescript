@@ -1226,3 +1226,43 @@ fn lib_mode_declares_the_runtime_dep_for_a_shape() {
         .contents;
     assert!(pkg.contains("\"@comline/runtime\""), "got: {pkg}");
 }
+
+#[test]
+fn handshake_none_passes_no_handshake_and_documents_what_is_given_up() {
+    use comline_core::schema::ir::frozen::unit::Guarantee;
+    let out = one(vec![FrozenUnit::Protocol {
+        docstring: String::new(),
+        parameters: vec![
+            FrozenUnit::Property { name: "handshake".into(), value: ConfigValue::Str("none".into()) },
+            FrozenUnit::Property {
+                name: "unverified".into(),
+                value: ConfigValue::Str("the 2009 gateway".into()),
+            },
+            FrozenUnit::Unverified(vec![Guarantee::SchemaAgreement, Guarantee::EncodingAgreement]),
+        ],
+        name: "Gate".into(),
+        functions: vec![function("ping", vec![], Some(TypeRef::Primitive(PrimitiveType::U32)), vec![])],
+        span: (0, 0),
+    }]);
+
+    assert!(out.contains("    NoHandshake,\n"), "{out}");
+    assert!(out.contains("await Client.connect(transport, codec, IR_HASH, framing, new NoHandshake())"));
+    assert!(out.contains(".serve(transport, IR_HASH, new NoHandshake())"));
+    let doc = "/**\n * **Unverified:** gives up schema agreement and encoding agreement (handshake `none`).\n \
+               * Reason given: the 2009 gateway\n */\n";
+    assert!(out.contains(&format!("{doc}export class GateDispatcher")), "{out}");
+    assert!(out.contains(&format!("{doc}export class GateClient")), "{out}");
+}
+
+#[test]
+fn a_protocol_with_the_default_handshake_imports_no_no_handshake() {
+    let out = one(vec![FrozenUnit::Protocol {
+        docstring: String::new(),
+        parameters: vec![],
+        name: "Plain".into(),
+        functions: vec![function("ping", vec![], None, vec![])],
+        span: (0, 0),
+    }]);
+    assert!(!out.contains("NoHandshake"));
+    assert!(!out.contains("Unverified"));
+}

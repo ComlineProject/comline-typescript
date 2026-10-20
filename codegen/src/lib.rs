@@ -48,6 +48,7 @@ pub const SUPPORT: SupportTable = &[
     (Feature::LibMode, Support::supported()),
     (Feature::ExternalStd, Support::supported()),
     (Feature::FramingJsonRpc, Support::supported()),
+    (Feature::HandshakeNone, Support::supported()),
 ];
 
 pub fn register(registry: &mut comline_codegen::Registry) {

@@ -75,6 +75,7 @@ with the fixtures that prove each claim, is in
 | `external_std` <br><sub>`external-std`</sub> | ✅ supported |
 | `validate_on_decode` <br><sub>`validate-on-decode`</sub> | ⚪ ignored: no checks are generated to run on decode yet (core#96) |
 | JSON-RPC framing <br><sub>`framing-jsonrpc`</sub> | ✅ supported |
+| no handshake <br><sub>`handshake-none`</sub> | ✅ supported |
 
 <!-- features:end -->
 
