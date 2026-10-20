@@ -27,6 +27,9 @@ const FNV_PRIME = 0x00000100000001b3n;
 
 /** Name of Comline's default datagram framing. */
 export const FRAMING_DATAGRAM = "datagram@1";
+/** Name of the datagram framing with a request/reply kind and a protocol number ({@link Datagram2Framing}). */
+export const FRAMING_DATAGRAM2 = "datagram@2";
+
 /** Name of the JSON-RPC 2.0 framing ({@link JsonRpcFraming}). */
 export const FRAMING_JSONRPC = "jsonrpc@1";
 /** Name of the JSON wire format ({@link JsonCodec}). */

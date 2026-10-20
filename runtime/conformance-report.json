@@ -73,6 +73,23 @@
         "framing-datagram/reject-response-without-envelope"
       ]
     },
+    "framing-datagram2": {
+      "state": "supported",
+      "proven_by": [
+        "framing-datagram2/request",
+        "framing-datagram2/request-two-byte-protocol",
+        "framing-datagram2/request-large-ids",
+        "framing-datagram2/response-ok",
+        "framing-datagram2/response-err",
+        "framing-datagram2/response-fault",
+        "framing-datagram2/reject-unknown-kind",
+        "framing-datagram2/reject-overlong-protocol",
+        "framing-datagram2/reject-reply-as-request",
+        "framing-datagram2/reject-request-as-reply",
+        "framing-datagram2/reject-short-request",
+        "framing-datagram2/reject-reply-without-envelope"
+      ]
+    },
     "framing-jsonrpc": {
       "state": "supported",
       "proven_by": [
@@ -92,6 +109,7 @@
       "proven_by": [
         "handshake/json-datagram",
         "handshake/msgpack-datagram",
+        "handshake/msgpack-datagram2",
         "handshake/json-jsonrpc",
         "handshake/reject-empty",
         "handshake/reject-truncated",
@@ -106,6 +124,7 @@
         "name-hash/json@1",
         "name-hash/msgpack@1",
         "name-hash/datagram@1",
+        "name-hash/datagram@2",
         "name-hash/jsonrpc@1",
         "name-hash/com.acme.custom-format"
       ]

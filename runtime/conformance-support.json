@@ -5,6 +5,7 @@
     "handshake": { "state": "supported" },
     "envelope": { "state": "supported" },
     "framing-datagram": { "state": "supported" },
+    "framing-datagram2": { "state": "supported" },
     "framing-jsonrpc": { "state": "supported" },
     "format-json": {
       "state": "partial",

@@ -169,6 +169,62 @@ export interface Codec {
 export interface Dispatch {
   calls(): readonly string[];
   dispatch(call: Kind, params: Uint8Array, codec: Codec, reply: Reply): Promise<void>;
+  /**
+   * {@link Dispatch.dispatch} on a {@link Connection}, with the {@link Peer}
+   * that made the call, so a handler can call it back. Optional: without it
+   * a connection calls `dispatch` with the peer's codec.
+   */
+  dispatchWith?(call: Kind, params: Uint8Array, reply: Reply, peer: Peer): Promise<void>;
+}
+
+/** A connection's id, unique within the process. The runtime assigns it. */
+export type ConnectionId = number;
+
+/**
+ * The other end of a connection, as this side's code sees it: what a
+ * generated sender calls through, and what a handler is given to call back
+ * the peer that called it. Mirrors `comline_runtime::contract::Peer`.
+ */
+export interface Peer {
+  readonly codec: Codec;
+  readonly id: ConnectionId;
+  /** Typed data the application keeps on this connection. */
+  readonly extensions: Extensions;
+  /** Call `call` on the peer's `protocol` and wait for the reply. */
+  call(protocol: number, call: Call, params: unknown, options?: CallOptions): Promise<Envelope>;
+  /** Send a one-way call: no reply is awaited. */
+  notify(protocol: number, call: Call, params: unknown): Promise<void>;
+}
+
+export interface CallOptions {
+  /** Give up after this many milliseconds with `RuntimeError("timeout")`. */
+  readonly timeoutMs?: number;
+}
+
+/**
+ * Typed data kept on a connection, one value per class, like
+ * `http::Extensions`: a session, a user id, a rate-limit bucket.
+ */
+export class Extensions {
+  private readonly values = new Map<abstract new (...args: never[]) => unknown, unknown>();
+
+  /** Store `value` under its class, returning the one stored before. */
+  set<T extends object>(value: T): T | undefined {
+    const key = value.constructor as abstract new (...args: never[]) => T;
+    const old = this.values.get(key) as T | undefined;
+    this.values.set(key, value);
+    return old;
+  }
+
+  get<T>(type: abstract new (...args: never[]) => T): T | undefined {
+    return this.values.get(type) as T | undefined;
+  }
+
+  delete<T>(type: abstract new (...args: never[]) => T): T | undefined {
+    const old = this.values.get(type) as T | undefined;
+    this.values.delete(type);
+    return old;
+  }
 }
 
 /** Whichever call address a framing put on the wire. */
@@ -180,6 +236,31 @@ export interface DecodedRequest {
   readonly requestId: bigint;
   /** The params sub-frame, independently decodable with the peer's {@link Codec}. */
   readonly params: Uint8Array;
+}
+
+/**
+ * A decoded {@link ConnectionFraming} frame: the peer calls one of this
+ * side's protocols, or answers a call this side made.
+ */
+export type Frame =
+  | { readonly kind: "request"; readonly protocol: number; readonly request: DecodedRequest }
+  | {
+      readonly kind: "reply";
+      readonly protocol: number;
+      readonly requestId: bigint;
+      readonly envelope: Envelope;
+    };
+
+/**
+ * How a {@link Connection} puts calls on the wire when either end may start
+ * one: every frame says whether it's a request or a reply, and which protocol
+ * it belongs to. {@link Datagram2Framing} (`datagram@2`) is one.
+ */
+export interface ConnectionFraming {
+  readonly name: string;
+  encodeRequest(protocol: number, call: Call, requestId: bigint, params: Uint8Array): Uint8Array;
+  encodeReply(protocol: number, requestId: bigint, reply: Envelope): Uint8Array;
+  decode(frame: Uint8Array): Frame | undefined;
 }
 
 /** A decoded response frame: the correlation id and its {@link Envelope}. */

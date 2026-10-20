@@ -49,6 +49,11 @@ pub const SUPPORT: SupportTable = &[
     (Feature::ExternalStd, Support::supported()),
     (Feature::FramingJsonRpc, Support::supported()),
     (Feature::HandshakeNone, Support::supported()),
+    (
+        Feature::Connections,
+        Support::partial("over `datagram@2`; JSON-RPC on a connection isn't supported yet")
+            .tracked("runtime#19"),
+    ),
 ];
 
 pub fn register(registry: &mut comline_codegen::Registry) {

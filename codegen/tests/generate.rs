@@ -392,7 +392,7 @@ fn an_unknown_package_default_framing_is_an_error_not_datagram() {
     let error = generate_typescript(&req).unwrap_err();
     assert_eq!(
         error.to_string(),
-        "unknown default framing `jsonrcp` - expected one of `jsonrpc`, `datagram`"
+        "unknown default framing `jsonrcp` - expected one of `jsonrpc`, `datagram`, `datagram@2`"
     );
 }
 
@@ -1265,4 +1265,80 @@ fn a_protocol_with_the_default_handshake_imports_no_no_handshake() {
     }]);
     assert!(!out.contains("NoHandshake"));
     assert!(!out.contains("Unverified"));
+}
+
+/// Two protocols on one connection: `Chat`, which the accepting side
+/// provides, and `Events`, which the dialling side does.
+const LINK: &str = r#"
+@framing = "datagram@2"
+protocol Chat {
+    function send(text: string) -> u64;
+    function count() -> u64;
+}
+
+@provider = Client
+@framing = "datagram@2"
+protocol Events {
+    function message(text: string) -> bool;
+    function ping();
+}
+"#;
+
+fn link_units() -> Vec<FrozenUnit> {
+    use comline_core::schema::ir::compiler::interpreter::incremental::IncrementalInterpreter;
+    use comline_core::schema::ir::compiler::Compile;
+    IncrementalInterpreter::from_source(LINK)
+}
+
+#[test]
+fn a_connection_protocol_gets_a_sender_and_peer_taking_handlers() {
+    let out = one(link_units());
+    assert!(out.contains("export class EventsSender {"));
+    assert!(out.contains("message(peer: Peer, params: EventsMessageParams): Promise<boolean>;"));
+    assert!(out.contains("static readonly PROTOCOL = 1;"));
+    assert!(out.contains("export const CONNECTION_IR_HASH = "));
+    assert!(!out.contains("ChatClient"), "no lockstep client for a connection protocol");
+    assert!(!out.contains("serveChat"));
+}
+
+#[test]
+fn jsonrpc_on_a_connection_is_refused_for_now() {
+    let units = link_units()
+        .into_iter()
+        .map(|mut u| {
+            if let FrozenUnit::Protocol { parameters, .. } = &mut u {
+                for p in parameters.iter_mut() {
+                    if let FrozenUnit::Property { name, value } = p {
+                        if name == "framing" {
+                            *value = comline_core::schema::ir::frozen::unit::ConfigValue::Str("jsonrpc".into());
+                        }
+                    }
+                }
+            }
+            u
+        })
+        .collect();
+    let schemas = vec![("link".to_string(), units)];
+    let error = generate_typescript(&code_req(&schemas)).unwrap_err().to_string();
+    assert!(error.contains("JSON-RPC on a connection isn't supported yet"), "{error}");
+}
+
+/// The generated connection protocols, kept in
+/// `runtime/test/generated/link.ts` so the Node job type-checks and runs
+/// them. Regenerate with `TS_BLESS=1 cargo test -p comline-codegen-typescript`.
+#[test]
+fn generated_link_matches_the_runtime_test_fixture() {
+    let schemas = vec![("link".to_string(), link_units())];
+    let generated = generate_typescript(&code_req(&schemas)).unwrap().remove(0).contents;
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../runtime/test/generated/link.ts");
+    if std::env::var_os("TS_BLESS").is_some() {
+        std::fs::write(path, &generated).unwrap();
+        return;
+    }
+    let committed = std::fs::read_to_string(path).unwrap_or_default();
+    assert_eq!(
+        generated, committed,
+        "generated link drifted from runtime/test/generated/link.ts — \
+         re-bless with TS_BLESS=1 cargo test -p comline-codegen-typescript"
+    );
 }

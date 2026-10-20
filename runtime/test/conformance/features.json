@@ -4,6 +4,7 @@
     { "id": "handshake", "title": "handshake", "description": "the fixed 31-byte frame each side sends first: magic, version, IR hash, wire format, framing, capabilities" },
     { "id": "envelope", "title": "envelope", "description": "a response's outcome: ok with a payload, an error ordinal with its body, or a provider fault" },
     { "id": "framing-datagram", "title": "datagram framing", "description": "Comline's own binary framing of requests and responses" },
+    { "id": "framing-datagram2", "title": "datagram@2 framing", "description": "the datagram framing with a request/reply kind and a protocol number, for calls in both directions and several protocols on one connection" },
     { "id": "framing-jsonrpc", "title": "JSON-RPC framing", "description": "JSON-RPC 2.0 requests and responses, a fault as -32603" },
     { "id": "format-json", "title": "JSON wire format", "description": "values as UTF-8 JSON: a struct as an object" },
     { "id": "format-msgpack", "title": "MessagePack wire format", "description": "values as MessagePack: a struct as an array" }

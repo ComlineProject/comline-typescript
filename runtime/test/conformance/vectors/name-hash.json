@@ -34,6 +34,14 @@
       "bytes": "d153a199ba45a444"
     },
     {
+      "id": "name-hash/datagram@2",
+      "op": "name_hash",
+      "input": {
+        "name": "datagram@2"
+      },
+      "bytes": "b84ea199ba42a444"
+    },
+    {
       "id": "name-hash/jsonrpc@1",
       "op": "name_hash",
       "input": {

@@ -21,6 +21,8 @@ import { test } from "node:test";
 
 import {
   DatagramFraming,
+  Datagram2Framing,
+  FRAMING_DATAGRAM2,
   FORMAT_JSON,
   FRAMING_DATAGRAM,
   FRAMING_JSONRPC,
@@ -204,15 +206,30 @@ function encode(c: Case): Uint8Array {
     case "envelope":
       return encodeReply(i as unknown as Reply);
     case "request":
+      if (i.framing === FRAMING_DATAGRAM2) {
+        return new Datagram2Framing().encodeRequest(
+          i.protocol as number,
+          call(i.call_id as number, i.method as string),
+          BigInt(i.request_id as string),
+          encodeValue(i.format as string, i.params as Json),
+        );
+      }
       return framingOf(i.framing as string).encodeRequest(
         call(i.call_id as number, i.method as string),
         BigInt(i.request_id as string),
         encodeValue(i.format as string, i.params as Json),
       );
     case "response": {
-      const f = framingOf(i.framing as string);
       const id = BigInt(i.request_id as string);
       const reply = i as unknown as Reply;
+      if (i.framing === FRAMING_DATAGRAM2) {
+        return new Datagram2Framing().encodeReply(
+          i.protocol as number,
+          id,
+          decodeEnvelope(encodeReply(reply))!,
+        );
+      }
+      const f = framingOf(i.framing as string);
       switch (reply.kind) {
         case "ok":
           return f.encodeResponseOk(id, unhex(reply.payload));
@@ -291,6 +308,22 @@ function decode(c: Case, bytes: Uint8Array): unknown {
       return e && replyOf(e);
     }
     case "request": {
+      if (i.framing === FRAMING_DATAGRAM2) {
+        const frame = new Datagram2Framing().decode(bytes);
+        if (frame?.kind !== "request") return undefined;
+        if (c.expect === "reject") return frame;
+        const r = frame.request;
+        const params = encodeValue(i.format as string, i.params as Json);
+        return {
+          framing: i.framing,
+          protocol: frame.protocol,
+          call_id: "id" in r.call ? r.call.id : i.call_id,
+          method: i.method,
+          request_id: r.requestId.toString(),
+          format: i.format,
+          params: matches(c, r.params, hex(params)) ? i.params : { undecoded: hex(r.params) },
+        };
+      }
       const r = framingOf(i.framing as string).decodeRequest(bytes);
       if (!r || c.expect === "reject") return r;
       const params = encodeValue(i.format as string, i.params as Json);
@@ -306,7 +339,17 @@ function decode(c: Case, bytes: Uint8Array): unknown {
       };
     }
     case "response": {
-      const r = framingOf(i.framing as string).decodeResponse(bytes);
+      let r: { requestId: bigint; envelope: Envelope } | undefined;
+      let protocol: number | undefined;
+      if (i.framing === FRAMING_DATAGRAM2) {
+        const frame = new Datagram2Framing().decode(bytes);
+        if (frame?.kind === "reply") {
+          r = frame;
+          protocol = frame.protocol;
+        }
+      } else {
+        r = framingOf(i.framing as string).decodeResponse(bytes);
+      }
       if (!r) return undefined;
       const reply = replyOf(r.envelope);
       // A payload or body stands for the stated one when it matches it.
@@ -316,7 +359,12 @@ function decode(c: Case, bytes: Uint8Array): unknown {
       if (reply.kind === "err" && matches(c, unhex(reply.body), i.body as string)) {
         reply.body = i.body as string;
       }
-      return { framing: i.framing, request_id: r.requestId.toString(), ...reply };
+      return {
+        framing: i.framing,
+        ...(protocol === undefined ? {} : { protocol }),
+        request_id: r.requestId.toString(),
+        ...reply,
+      };
     }
     case "decode": {
       if (i.format !== FORMAT_JSON) throw new NotImplemented(`format \`${i.format as string}\``);
