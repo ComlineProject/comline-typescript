@@ -39,6 +39,7 @@ use comline_core::schema::ir::unverified;
 
 use eyre::Result;
 
+use comline_codegen::connections;
 use comline_codegen::collisions::{self, Derived};
 use comline_codegen::modules::{NamespaceTree, TreeLayout};
 use comline_codegen::naming::{pascal, screaming_snake};
@@ -85,6 +86,21 @@ pub fn generate_typescript(req: &GenRequest) -> Result<Vec<GeneratedFile>> {
             ));
         }
     }
+    // JSON-RPC on a connection has no runtime framing yet.
+    for (_, units) in req.schemas {
+        for unit in units {
+            if let FrozenUnit::Protocol { name, parameters, .. } = unit {
+                if connections::on_connection(parameters, default_framing)
+                    && framing_choice(parameters, default_framing).jsonrpc
+                {
+                    return Err(eyre::eyre!(
+                        "protocol `{name}`: JSON-RPC on a connection isn't supported yet - use \
+                         `@framing = \"datagram@2\"` (ComlineProject/runtime#19)"
+                    ));
+                }
+            }
+        }
+    }
     let external_std = req.external_std;
 
     // With `external_std`, std's schemas aren't this package's to emit - it
@@ -104,7 +120,7 @@ pub fn generate_typescript(req: &GenRequest) -> Result<Vec<GeneratedFile>> {
     // collision in the last one does not arrive after the earlier files are
     // already written.
     for (namespace, units) in emitted {
-        collisions::check(namespace, units, derived_names(units))?;
+        collisions::check(namespace, units, derived_names(units, default_framing))?;
     }
 
     match req.mode {
@@ -277,9 +293,10 @@ fn package_json(pkg: &PackageMeta, needs_runtime: bool, needs_std_dep: bool) -> 
 /// The shapes differ from Rust's - there is no per-function error type and no
 /// protocol-wide union here, but every `error` grows an `Error` suffix, which
 /// Rust has no equivalent of. Keep it in step with the emitters below.
-fn derived_names(units: &[FrozenUnit]) -> Vec<Derived> {
+fn derived_names(units: &[FrozenUnit], default_framing: Option<&str>) -> Vec<Derived> {
     let mut derived = Vec::new();
     let mut any_protocol = false;
+    let mut any_connection = false;
 
     for unit in units {
         match unit {
@@ -292,6 +309,7 @@ fn derived_names(units: &[FrozenUnit]) -> Vec<Derived> {
             FrozenUnit::Protocol {
                 name: proto,
                 functions,
+                parameters,
                 ..
             } => {
                 any_protocol = true;
@@ -299,14 +317,22 @@ fn derived_names(units: &[FrozenUnit]) -> Vec<Derived> {
                     format!("{proto}Dispatcher"),
                     format!("protocol `{proto}`'s dispatcher"),
                 ));
-                derived.push(Derived::new(
-                    format!("{proto}Client"),
-                    format!("protocol `{proto}`'s client"),
-                ));
-                derived.push(Derived::new(
-                    format!("serve{proto}"),
-                    format!("protocol `{proto}`'s serve helper"),
-                ));
+                if connections::on_connection(parameters, default_framing) {
+                    any_connection = true;
+                    derived.push(Derived::new(
+                        format!("{proto}Sender"),
+                        format!("protocol `{proto}`'s sender"),
+                    ));
+                } else {
+                    derived.push(Derived::new(
+                        format!("{proto}Client"),
+                        format!("protocol `{proto}`'s client"),
+                    ));
+                    derived.push(Derived::new(
+                        format!("serve{proto}"),
+                        format!("protocol `{proto}`'s serve helper"),
+                    ));
+                }
                 derived.push(Derived::new(
                     format!("{}_CALLS", screaming_snake(proto)),
                     format!("protocol `{proto}`'s call table"),
@@ -332,6 +358,9 @@ fn derived_names(units: &[FrozenUnit]) -> Vec<Derived> {
 
     if any_protocol {
         derived.push(Derived::new("IR_HASH", "the schema's IR hash constant"));
+    }
+    if any_connection {
+        derived.push(Derived::new("CONNECTION_IR_HASH", "the package's connection hash constant"));
     }
     derived
 }
@@ -390,11 +419,15 @@ fn schema_source(
                 parameters,
                 ..
             } => {
+                let number = connections::on_connection(parameters, default_framing)
+                    .then(|| connections::protocol_number(schemas, namespace, name))
+                    .flatten();
                 decls.push_str(&protocol(
                     name,
                     functions,
                     parameters,
                     &framing_choice(parameters, default_framing),
+                    number,
                     &errors,
                     &types,
                 ));
@@ -407,28 +440,33 @@ fn schema_source(
         .iter()
         .any(|u| matches!(u, FrozenUnit::Protocol { .. }));
 
-    // Which framings the protocols in this file reach for.
+    // Which framings the protocols in this file reach for: the lockstep ones
+    // only, since a protocol on a connection names none of its own.
+    let on_connection = |parameters: &[FrozenUnit]| connections::on_connection(parameters, default_framing);
     let picks: Vec<FramingChoice> = units
         .iter()
         .filter_map(|u| match u {
-            FrozenUnit::Protocol { parameters, .. } => {
+            FrozenUnit::Protocol { parameters, .. } if !on_connection(parameters) => {
                 Some(framing_choice(parameters, default_framing))
             }
             _ => None,
         })
         .collect();
+    let has_lockstep = !picks.is_empty();
+    let has_connection = units.iter().any(
+        |u| matches!(u, FrozenUnit::Protocol { parameters, .. } if on_connection(parameters)),
+    );
 
     // The runtime import and the `IR_HASH` const, which only depend on the
     // schema's own shape.
     let mut runtime_import = String::new();
     let mut ir_hash = String::new();
     if has_protocol {
-        let mut values = vec![
-            "Client",
-            "Server",
-            "RuntimeError",
-            "resolveKind",
-        ];
+        let mut values = Vec::new();
+        if has_lockstep {
+            values.extend(["Client", "Server"]);
+        }
+        values.extend(["RuntimeError", "resolveKind"]);
         if picks.iter().any(|p| !p.jsonrpc) {
             values.push("DatagramFraming");
         }
@@ -436,7 +474,7 @@ fn schema_source(
             values.push("JsonRpcFraming");
         }
         let any_none = units.iter().any(|u| {
-            matches!(u, FrozenUnit::Protocol { parameters, .. } if no_handshake(parameters))
+            matches!(u, FrozenUnit::Protocol { parameters, .. } if no_handshake(parameters) && !on_connection(parameters))
         });
         if any_none {
             values.push("NoHandshake");
@@ -445,11 +483,25 @@ fn schema_source(
         for v in values {
             runtime_import.push_str(&format!("    {v},\n"));
         }
-        let mut type_names = vec!["Codec", "Dispatch", "Framing", "Kind", "Reply"];
+        let mut type_names = vec!["Codec"];
+        if has_connection {
+            type_names.push("Connection");
+        }
+        type_names.push("Dispatch");
+        if has_lockstep {
+            type_names.push("Framing");
+        }
+        type_names.push("Kind");
+        if has_connection {
+            type_names.push("Peer");
+        }
+        type_names.push("Reply");
         if types.declares_shapes() {
             type_names.push("Shape");
         }
-        type_names.push("Transport");
+        if has_lockstep {
+            type_names.push("Transport");
+        }
         for t in type_names {
             runtime_import.push_str(&format!("    type {t},\n"));
         }
@@ -461,6 +513,14 @@ fn schema_source(
              export const IR_HASH = {:#018x}n;\n\n",
             schema_ir_hash(units)
         ));
+        if has_connection {
+            ir_hash.push_str(&format!(
+                "/** Digest of every schema in the package — what a connection's handshake\n\
+                 *  checks, so both ends agree on each protocol's number. */\n\
+                 export const CONNECTION_IR_HASH = {:#018x}n;\n\n",
+                connections::connection_ir_hash(schemas)
+            ));
+        }
     } else if types.declares_shapes() {
         runtime_import.push_str(&format!("import type {{ Shape }} from \"{RUNTIME_PACKAGE}\";\n\n"));
     }
@@ -629,6 +689,12 @@ fn framing_for(name: &str) -> Option<FramingChoice> {
             ctor: "DatagramFraming",
             jsonrpc: false,
         }),
+        // A protocol on it runs on a `Connection`, which names its framing
+        // itself; this only says the name is known.
+        comline_core::schema::idl::annotations::FRAMING_DATAGRAM2 => Some(FramingChoice {
+            ctor: "Datagram2Framing",
+            jsonrpc: false,
+        }),
         _ => None,
     }
 }
@@ -702,11 +768,15 @@ fn unverified_doc(parameters: &[FrozenUnit]) -> String {
     doc
 }
 
+/// `number` is the protocol's number on a connection, for a protocol that
+/// runs on one: its handlers take the peer, its dispatcher is provided on a
+/// `Connection`, and a `<Proto>Sender` calls it through any `Peer`.
 fn protocol(
     proto: &str,
     functions: &[FrozenUnit],
     parameters: &[FrozenUnit],
     framing: &FramingChoice,
+    number: Option<u16>,
     errors: &HashMap<u16, String>,
     types: &TypeMapper,
 ) -> String {
@@ -799,14 +869,12 @@ fn protocol(
                 .join(" | ");
             s.push_str(&format!("    /** @throws {{{names}}} */\n"));
         }
-        s.push_str(&format!(
-            "    {}({}): Promise<{}>;\n",
-            f.name,
-            f.params_ty
-                .as_ref()
-                .map_or(String::new(), |t| format!("params: {t}")),
-            f.ret
-        ));
+        let mut params: Vec<String> = Vec::new();
+        if number.is_some() {
+            params.push("peer: Peer".to_string());
+        }
+        params.extend(f.params_ty.as_ref().map(|t| format!("params: {t}")));
+        s.push_str(&format!("    {}({}): Promise<{}>;\n", f.name, params.join(", "), f.ret));
     }
     s.push_str("}\n\n");
 
@@ -831,14 +899,37 @@ fn protocol(
     // 4. the dispatcher
     s.push_str(&doc);
     s.push_str(&format!(
-        "export class {proto}Dispatcher implements Dispatch {{\n\
-        \x20   constructor(private readonly impl: {proto}) {{}}\n\n\
+        "export class {proto}Dispatcher implements Dispatch {{\n"
+    ));
+    if let Some(number) = number {
+        s.push_str(&format!(
+            "    /** This protocol's number on a connection. */\n\
+            \x20   static readonly PROTOCOL = {number};\n\n"
+        ));
+    }
+    s.push_str(&format!(
+        "    constructor(private readonly impl: {proto}) {{}}\n\n\
         \x20   calls(): readonly string[] {{\n\
         \x20       return {calls_const};\n\
-        \x20   }}\n\n\
-        \x20   async dispatch(call: Kind, params: Uint8Array, codec: Codec, reply: Reply): Promise<void> {{\n\
-        \x20       switch (resolveKind(call, {calls_const})) {{\n"
+        \x20   }}\n\n"
     ));
+    if number.is_some() {
+        // Its handlers take the peer, which only a connection has.
+        s.push_str(
+            "    /** Only served on a connection, whose handlers are given the peer: anywhere else the caller hears a fault. */\n\
+            \x20   async dispatch(_call: Kind, _params: Uint8Array, _codec: Codec, reply: Reply): Promise<void> {\n\
+            \x20       reply.fault();\n\
+            \x20   }\n\n\
+            \x20   async dispatchWith(call: Kind, params: Uint8Array, reply: Reply, peer: Peer): Promise<void> {\n\
+            \x20       const codec = peer.codec;\n",
+        );
+    } else {
+        s.push_str(
+            "    async dispatch(call: Kind, params: Uint8Array, codec: Codec, reply: Reply): Promise<void> {\n",
+        );
+    }
+    s.push_str(&format!("        switch (resolveKind(call, {calls_const})) {{\n"));
+    let peer_arg = if number.is_some() { Some("peer") } else { None };
     for (i, f) in fns.iter().enumerate() {
         s.push_str(&format!("            case {i}: {{\n"));
         // Emitted *inside* the `try` below, so params that will not decode are
@@ -850,7 +941,11 @@ fn protocol(
             }
             None => String::new(),
         };
-        let call_arg = if f.params_ty.is_some() { "p" } else { "" };
+        let call_arg = peer_arg
+            .into_iter()
+            .chain(f.params_ty.is_some().then_some("p"))
+            .collect::<Vec<_>>()
+            .join(", ");
         if f.one_way {
             // No response frame, so nothing a failure could be reported in.
             s.push_str("                try {\n");
@@ -897,21 +992,49 @@ fn protocol(
         "            default:\n\
         \x20               throw RuntimeError.unknownCall();\n\
         \x20       }\n\
-        \x20   }\n\
-        }\n\n",
+        \x20   }\n",
     );
+    if number.is_some() {
+        let open = if no_handshake(parameters) {
+            "`Connection.accept(transport, codec, CONNECTION_IR_HASH, framing, new NoHandshake())`"
+        } else {
+            "`Connection.accept(transport, codec, CONNECTION_IR_HASH)`"
+        };
+        s.push_str(&format!(
+            "\n    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with {open}. */\n\
+            \x20   provideOn(conn: Connection): void {{\n\
+            \x20       conn.provide({proto}Dispatcher.PROTOCOL, this);\n\
+            \x20   }}\n"
+        ));
+    }
+    s.push_str("}\n\n");
 
-    // 5. the client
+    // 5. the client, or on a connection, the sender
     s.push_str(&doc);
-    s.push_str(&format!(
-        "export class {proto}Client {{\n\
-        \x20   constructor(private readonly client: Client) {{}}\n\n\
-        \x20   static async connect(transport: Transport, codec: Codec, framing: Framing = new {ctor}()): Promise<{proto}Client> {{\n\
-        {handshake_note}\
-        \x20       return new {proto}Client(await Client.connect(transport, codec, IR_HASH, framing{handshake_arg}));\n\
-        \x20   }}\n",
-        ctor = framing.ctor
-    ));
+    let (field, call_prefix) = match number {
+        Some(number) => {
+            s.push_str(&format!(
+                "/** Calls protocol `{proto}` on the other end of a connection: the peer a `Connection` reaches, or the one a handler was given. */\n\
+                export class {proto}Sender {{\n\
+                \x20   /** This protocol's number on a connection. */\n\
+                \x20   static readonly PROTOCOL = {number};\n\n\
+                \x20   constructor(private readonly peer: Peer) {{}}\n"
+            ));
+            ("peer", format!("{proto}Sender.PROTOCOL, "))
+        }
+        None => {
+            s.push_str(&format!(
+                "export class {proto}Client {{\n\
+                \x20   constructor(private readonly client: Client) {{}}\n\n\
+                \x20   static async connect(transport: Transport, codec: Codec, framing: Framing = new {ctor}()): Promise<{proto}Client> {{\n\
+                {handshake_note}\
+                \x20       return new {proto}Client(await Client.connect(transport, codec, IR_HASH, framing{handshake_arg}));\n\
+                \x20   }}\n",
+                ctor = framing.ctor
+            ));
+            ("client", String::new())
+        }
+    };
     for (i, f) in fns.iter().enumerate() {
         let sig_params = f
             .params_ty
@@ -926,7 +1049,7 @@ fn protocol(
         if f.one_way {
             s.push_str(&format!(
                 "    async {}({sig_params}): Promise<void> {{\n\
-                 \x20       await this.client.notify({{ id: {i}, name: \"{}\" }}, {arg});\n\
+                 \x20       await this.{field}.notify({call_prefix}{{ id: {i}, name: \"{}\" }}, {arg});\n\
                  \x20   }}\n",
                 f.name, f.name
             ));
@@ -934,7 +1057,7 @@ fn protocol(
         }
         s.push_str(&format!(
             "    async {}({sig_params}): Promise<{}> {{\n\
-             \x20       const env = await this.client.call({{ id: {i}, name: \"{}\" }}, {arg});\n",
+             \x20       const env = await this.{field}.call({call_prefix}{{ id: {i}, name: \"{}\" }}, {arg});\n",
             f.name, f.ret, f.name
         ));
         if f.ret == "void" {
@@ -942,7 +1065,7 @@ fn protocol(
         } else {
             let shape = f.ret_shape.as_ref().map_or(String::new(), |s| format!(", {s}"));
             s.push_str(&format!(
-                "        if (\"ok\" in env) return this.client.codec.decode<{}>(env.ok{shape});\n",
+                "        if (\"ok\" in env) return this.{field}.codec.decode<{}>(env.ok{shape});\n",
                 f.ret
             ));
         }
@@ -958,7 +1081,7 @@ fn protocol(
                 let shape = if *shaped { format!(", {err}") } else { String::new() };
                 s.push_str(&format!(
                     "            case {err}Error.ordinal:\n\
-                     \x20               throw new {err}Error(this.client.codec.decode<{err}>(env.err.body{shape}));\n"
+                     \x20               throw new {err}Error(this.{field}.codec.decode<{err}>(env.err.body{shape}));\n"
                 ));
             }
             s.push_str("            default:\n");
@@ -969,14 +1092,16 @@ fn protocol(
     }
     s.push_str("}\n\n");
 
-    // 6. the serve helper
-    s.push_str(&format!(
-        "export function serve{proto}(impl: {proto}, transport: Transport, codec: Codec, framing: Framing = new {ctor}()): Promise<void> {{\n\
-        {handshake_note}\
-        \x20   return new Server(new {proto}Dispatcher(impl), codec, framing).serve(transport, IR_HASH{handshake_arg});\n\
-        }}\n\n",
-        ctor = framing.ctor
-    ));
+    // 6. the serve helper, for the lockstep `Server`
+    if number.is_none() {
+        s.push_str(&format!(
+            "export function serve{proto}(impl: {proto}, transport: Transport, codec: Codec, framing: Framing = new {ctor}()): Promise<void> {{\n\
+            {handshake_note}\
+            \x20   return new Server(new {proto}Dispatcher(impl), codec, framing).serve(transport, IR_HASH{handshake_arg});\n\
+            }}\n\n",
+            ctor = framing.ctor
+        ));
+    }
 
     s
 }
