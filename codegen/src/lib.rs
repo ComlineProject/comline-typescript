@@ -1,7 +1,7 @@
 //! TypeScript code generator. Per schema: `export interface` per struct /
 //! `error` (+ a `<Name>Error` throwable, and a same-named `Shape` const when
-//! it holds a 64- or 128-bit integer, a `bigint`), `export enum` (string values) per
-//! enum, and per `protocol` the full RPC shape against `@comline/runtime` — an
+//! it holds a 64- or 128-bit integer, a `bigint`), a `const` object and union
+//! type (string values) per enum, and per `protocol` the full RPC shape against `@comline/runtime` — an
 //! `IR_HASH`, params interfaces, a provider interface, a `<Proto>Dispatcher`, a
 //! `<Proto>Client`, and a `serve<Proto>` helper.
 //!

@@ -12,19 +12,29 @@ runtime is not published to npm yet.
 ## `codegen/`
 
 `comline-codegen-typescript` — frozen IR → `.ts` source: `export interface` per
-struct / `error` (plus a `<Name>Error` throwable), `export enum` (string values)
-per enum, and per `protocol` the full RPC shape against `@comline/runtime` — an
+struct / `error` (plus a `<Name>Error` throwable), a `const` object of string
+values and a same-named union type per enum, and per `protocol` the full RPC shape against `@comline/runtime` — an
 `IR_HASH`, params interfaces, a provider interface, a `<Proto>Dispatcher`, a
 `<Proto>Client`, and a `serve<Proto>` helper (framing from `@framing` / the
 package default). It depends on `comline-codegen` (the language-neutral contract
 + `Registry`) and `comline-core` (the IR), both by git rev.
 
 `code` mode writes bare `<namespace>.ts`; `lib` mode wraps them in an npm
-package — `package.json` (declaring `@comline/runtime`), `tsconfig.json`, and a
-`src/index.ts` barrel.
+package — `package.json` (declaring `@comline/runtime`, and `typescript` as an
+optional peer dependency at the declared version and up), `tsconfig.json`, and
+a `src/index.ts` barrel.
 
-`register(&mut Registry)` contributes the generator under `typescript` / `ts` at
-version `5.0`; the Comline CLI composes it into its `Registry` at startup.
+The output targets ES2020 (it uses `bigint`) and ESM, and is erasable syntax
+only: no `enum`, no constructor parameter properties, so it runs under
+`erasableSyntaxOnly` and Node's type stripping. CI type-checks it under the
+strictest flags (`exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`,
+`verbatimModuleSyntax`), on the TypeScript in the lockfiles and on 5.0. Every
+file's header names the range: "For TypeScript 5.0 or later; verified up to
+5.9."
+
+`register(&mut Registry)` contributes the generator under `typescript` / `ts`
+from version `5.0` (its floor) on; the Comline CLI composes it into its
+`Registry` at startup.
 
 ```sh
 cargo test
