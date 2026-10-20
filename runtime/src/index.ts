@@ -33,9 +33,14 @@ export {
   FRAMING_DATAGRAM,
   FRAMING_JSONRPC,
   FORMAT_JSON,
+  HANDSHAKE_COMLINE,
+  HANDSHAKE_NONE,
   nameHash,
-  Handshake,
-  type HandshakeInit,
+  HandshakeFrame,
+  type Facts,
+  type Handshake,
+  ComlineHandshake,
+  NoHandshake,
 } from "./handshake.js";
 
 export { JsonCodec } from "./codec.js";

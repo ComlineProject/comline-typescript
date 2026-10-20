@@ -5,7 +5,14 @@ import {
   Client,
   DatagramFraming,
   FRAMING_DATAGRAM,
-  Handshake,
+  HandshakeFrame,
+  HANDSHAKE_COMLINE,
+  HANDSHAKE_NONE,
+  ComlineHandshake,
+  NoHandshake,
+  type Facts,
+  type Handshake,
+  type Transport,
   JsonCodec,
   JsonRpcFraming,
   type Codec,
@@ -95,14 +102,8 @@ class ChatClient {
 
 const IR_HASH = 0xbdbe5c6fd7420bd0n;
 
-function stack(framing: () => Framing): { codec: Codec; framing: Framing; hs: Handshake } {
-  const codec = new JsonCodec();
-  const f = framing();
-  return {
-    codec,
-    framing: f,
-    hs: new Handshake({ irHash: IR_HASH, wireFormat: codec.name, framing: f.name }),
-  };
+function stack(framing: () => Framing): { codec: Codec; framing: Framing } {
+  return { codec: new JsonCodec(), framing: framing() };
 }
 
 for (const [label, mkFraming] of [
@@ -124,13 +125,13 @@ for (const [label, mkFraming] of [
     };
 
     const s = stack(mkFraming);
-    const provider = new Server(new ChatDispatcher(svc), s.codec, s.framing).serveHandshaked(
+    const provider = new Server(new ChatDispatcher(svc), s.codec, s.framing).serve(
       providerSide,
-      s.hs,
+      IR_HASH,
     );
 
     const c = stack(mkFraming);
-    const chat = new ChatClient(await Client.connect(clientSide, c.codec, c.hs, c.framing));
+    const chat = new ChatClient(await Client.connect(clientSide, c.codec, IR_HASH, c.framing));
 
     assert.equal((await chat.send("hi")).body, "echo: hi");
 
@@ -151,7 +152,7 @@ test("connect refuses a peer on a wire-format mismatch", async () => {
   const [clientSide, providerSide] = duplex();
 
   // provider speaks a differently-named codec
-  const providerHs = new Handshake({
+  const providerHs = new HandshakeFrame({
     irHash: IR_HASH,
     wireFormat: "msgpack",
     framing: FRAMING_DATAGRAM,
@@ -160,11 +161,78 @@ test("connect refuses a peer on a wire-format mismatch", async () => {
   void providerSide.recv();
 
   await assert.rejects(
-    Client.connect(clientSide, new JsonCodec(), new Handshake({
-      irHash: IR_HASH,
-      wireFormat: "json",
-      framing: FRAMING_DATAGRAM,
-    })),
+    Client.connect(clientSide, new JsonCodec(), IR_HASH),
     (e: unknown) => e instanceof RuntimeError && e.is("handshake"),
   );
+});
+
+test("the declared none sends nothing and checks nothing", async () => {
+  const [clientSide, providerSide] = duplex();
+  const svc: Chat = {
+    async send(text) {
+      return { body: text, seq: 1 };
+    },
+    async note() {},
+  };
+
+  // Different schema hashes: `none` doesn't look.
+  const provider = new Server(new ChatDispatcher(svc), new JsonCodec()).serve(
+    providerSide,
+    0xdeadn,
+    new NoHandshake(),
+  );
+  const chat = new ChatClient(
+    await Client.connect(clientSide, new JsonCodec(), IR_HASH, undefined, new NoHandshake()),
+  );
+  assert.equal((await chat.send("x")).body, "x");
+
+  clientSide.close();
+  await provider;
+});
+
+/** A legacy peer's own hello: `HELLO <framing>`, answered `OK`. Checks no schema. */
+class Hello implements Handshake {
+  readonly name = "com.example.hello@1";
+
+  async initiate(transport: Transport, local: Facts): Promise<void> {
+    await transport.send(new TextEncoder().encode(`HELLO ${local.framing}`));
+    const answer = new TextDecoder().decode(await transport.recv());
+    if (answer !== "OK") throw RuntimeError.handshake();
+  }
+
+  async respond(transport: Transport, local: Facts): Promise<void> {
+    const hello = new TextDecoder().decode(await transport.recv());
+    const ok = hello === `HELLO ${local.framing}`;
+    await transport.send(new TextEncoder().encode(ok ? "OK" : "NO"));
+    if (!ok) throw RuntimeError.handshake();
+  }
+}
+
+test("a custom handshake runs in place of Comline's", async () => {
+  const [clientSide, providerSide] = duplex();
+  const svc: Chat = {
+    async send(text) {
+      return { body: `hello ${text}`, seq: 1 };
+    },
+    async note() {},
+  };
+
+  const provider = new Server(new ChatDispatcher(svc), new JsonCodec()).serve(
+    providerSide,
+    IR_HASH,
+    new Hello(),
+  );
+  const chat = new ChatClient(
+    await Client.connect(clientSide, new JsonCodec(), IR_HASH, undefined, new Hello()),
+  );
+  assert.equal((await chat.send("there")).body, "hello there");
+
+  clientSide.close();
+  await provider;
+});
+
+test("handshakes carry their versioned names", () => {
+  assert.equal(new ComlineHandshake().name, HANDSHAKE_COMLINE);
+  assert.equal(HANDSHAKE_COMLINE, "comline@1");
+  assert.equal(new NoHandshake().name, HANDSHAKE_NONE);
 });

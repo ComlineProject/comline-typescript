@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { FRAMING_DATAGRAM, Handshake, nameHash, RuntimeError } from "../src/index.js";
+import { FRAMING_DATAGRAM, HandshakeFrame, nameHash, RuntimeError } from "../src/index.js";
 
 const sample = () =>
-  new Handshake({
+  new HandshakeFrame({
     irHash: 0xdeadbeef01020304n,
     wireFormat: "msgpack",
     framing: FRAMING_DATAGRAM,
@@ -30,7 +30,7 @@ test("the frame is 31 bytes and round-trips", () => {
   const frame = sample().encode();
   assert.equal(frame.length, 31);
 
-  const back = Handshake.decode(frame);
+  const back = HandshakeFrame.decode(frame);
   assert.ok(back);
   assert.equal(back.irHash, sample().irHash);
   assert.equal(back.wireFormat, sample().wireFormat);
@@ -39,15 +39,15 @@ test("the frame is 31 bytes and round-trips", () => {
 });
 
 test("decode rejects a truncated or foreign frame", () => {
-  assert.equal(Handshake.decode(new Uint8Array(0)), undefined);
-  assert.equal(Handshake.decode(new Uint8Array(31)), undefined); // bad magic
-  assert.equal(Handshake.decode(sample().encode().subarray(0, 30)), undefined);
+  assert.equal(HandshakeFrame.decode(new Uint8Array(0)), undefined);
+  assert.equal(HandshakeFrame.decode(new Uint8Array(31)), undefined); // bad magic
+  assert.equal(HandshakeFrame.decode(sample().encode().subarray(0, 30)), undefined);
 });
 
 test("check agrees, ignores capability bits, and rejects real mismatches", () => {
   assert.doesNotThrow(() => sample().check(sample()));
 
-  const capsDiffer = new Handshake({
+  const capsDiffer = new HandshakeFrame({
     irHash: 0xdeadbeef01020304n,
     wireFormat: "msgpack",
     framing: FRAMING_DATAGRAM,
@@ -55,14 +55,14 @@ test("check agrees, ignores capability bits, and rejects real mismatches", () =>
   });
   assert.doesNotThrow(() => sample().check(capsDiffer), "capability bits may differ");
 
-  const fmtDiffer = new Handshake({
+  const fmtDiffer = new HandshakeFrame({
     irHash: 0xdeadbeef01020304n,
     wireFormat: "json",
     framing: FRAMING_DATAGRAM,
   });
   assert.throws(() => sample().check(fmtDiffer), (e: unknown) => e instanceof RuntimeError && e.is("handshake"));
 
-  const schemaDiffer = new Handshake({
+  const schemaDiffer = new HandshakeFrame({
     irHash: 0n,
     wireFormat: "msgpack",
     framing: FRAMING_DATAGRAM,
