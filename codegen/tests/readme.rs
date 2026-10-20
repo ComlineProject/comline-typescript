@@ -18,7 +18,7 @@ fn readme_features_match_the_support_table() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../README.md");
     let readme = std::fs::read_to_string(&path).unwrap();
     let table = markdown(
-        &[Column { generator: "typescript", version: comline_codegen_typescript::LANG_VERSION, support: comline_codegen_typescript::SUPPORT }],
+        &[Column { generator: "typescript", versions: comline_codegen_typescript::VERSIONS, support: comline_codegen_typescript::SUPPORT }],
         &BTreeMap::new(),
     );
     let section = format!(
