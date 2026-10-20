@@ -24,6 +24,17 @@
       "bytes": "434f0104030201efbeadde2096d428c0c44c62d153a199ba45a44405000000"
     },
     {
+      "id": "handshake/msgpack-datagram2",
+      "op": "handshake",
+      "input": {
+        "capabilities": 0,
+        "framing": "datagram@2",
+        "ir_hash": "72623859790382856",
+        "wire_format": "msgpack@1"
+      },
+      "bytes": "434f0108070605040302012096d428c0c44c62b84ea199ba42a44400000000"
+    },
+    {
       "id": "handshake/json-jsonrpc",
       "op": "handshake",
       "input": {

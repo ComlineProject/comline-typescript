@@ -5,7 +5,8 @@ the counterpart of the Rust `comline-runtime` crate.
 
 ## Status
 
-The contract, two framings, an in-memory transport, and a `Client` / `Server`.
+The contract, three framings, an in-memory transport, a `Client` / `Server`,
+and a `Connection` carrying calls in both directions.
 Next: a generator that emits a `<Proto>Client` / dispatcher against this
 package, and a stream transport.
 
@@ -17,6 +18,7 @@ package, and a stream transport.
 | `Framing` + `DatagramFraming` + `JsonRpcFraming` — wire-compatible with `comline-runtime` | ✅ |
 | `Transport` interface + `duplex()` in-memory pair | ✅ |
 | `Client` (`connect` / `unverified` / `call` / `notify`) and `Server` (`serve` / `serveUnverified`) | ✅ |
+| `Connection` (`connect` / `accept` / `unverified`, `provide`, `call` / `notify`, `closed`): calls in both directions, several protocols, a `Peer` handle for handlers (`Dispatch.dispatchWith`), `Extensions`; `ConnectionFraming` + `Datagram2Framing` (`datagram@2`), wire-compatible with `comline-runtime` | ✅ |
 | A stream `Transport`; a MessagePack `Codec` | — |
 
 ## Wire conformance
