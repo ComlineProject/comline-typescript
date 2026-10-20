@@ -402,6 +402,200 @@
       },
       "bytes": "22477265656e22",
       "compare": "json"
+    },
+    {
+      "id": "format-json/decode-fields-reordered",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "struct": {
+            "fields": [
+              [
+                "x",
+                "i32"
+              ],
+              [
+                "y",
+                "i32"
+              ]
+            ],
+            "name": "Point"
+          }
+        },
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "x",
+                {
+                  "i32": 1
+                }
+              ],
+              [
+                "y",
+                {
+                  "i32": -2
+                }
+              ]
+            ],
+            "name": "Point"
+          }
+        }
+      },
+      "bytes": "7b2279223a2d322c2278223a317d"
+    },
+    {
+      "id": "format-json/decode-unknown-field",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "struct": {
+            "fields": [
+              [
+                "x",
+                "i32"
+              ],
+              [
+                "y",
+                "i32"
+              ]
+            ],
+            "name": "Point"
+          }
+        },
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "x",
+                {
+                  "i32": 1
+                }
+              ],
+              [
+                "y",
+                {
+                  "i32": -2
+                }
+              ]
+            ],
+            "name": "Point"
+          }
+        }
+      },
+      "bytes": "7b2278223a312c2279223a2d322c227a223a357d"
+    },
+    {
+      "id": "format-json/decode-missing-optional",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "struct": {
+            "fields": [
+              [
+                "id",
+                "u32"
+              ],
+              [
+                "label",
+                {
+                  "option": "string"
+                }
+              ]
+            ],
+            "name": "Tagged"
+          }
+        },
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "id",
+                {
+                  "u32": 1
+                }
+              ],
+              [
+                "label",
+                {
+                  "option": null
+                }
+              ]
+            ],
+            "name": "Tagged"
+          }
+        }
+      },
+      "bytes": "7b226964223a317d"
+    },
+    {
+      "id": "format-json/decode-variant-reordered",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "enum": {
+            "name": "Color",
+            "variants": [
+              "Red",
+              "Green",
+              "Blue"
+            ]
+          }
+        },
+        "value": {
+          "unit_variant": {
+            "enum": "Color",
+            "index": 1,
+            "variant": "Green"
+          }
+        }
+      },
+      "bytes": "22477265656e22"
+    },
+    {
+      "id": "format-json/decode-unknown-variant",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "enum": {
+            "name": "Color",
+            "variants": [
+              "Red",
+              "Green",
+              "Blue"
+            ]
+          }
+        }
+      },
+      "bytes": "22507572706c6522",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/decode-wider-integer",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": "u32",
+        "value": {
+          "u32": 7
+        }
+      },
+      "bytes": "37"
+    },
+    {
+      "id": "format-json/decode-wider-integer-overflow",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": "u32"
+      },
+      "bytes": "31303939353131363237373736",
+      "expect": "reject"
     }
   ]
 }

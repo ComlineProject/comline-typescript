@@ -49,7 +49,7 @@ type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 
 interface Case {
   id: string;
-  op: "name_hash" | "handshake" | "envelope" | "request" | "response" | "encode";
+  op: "name_hash" | "handshake" | "envelope" | "request" | "response" | "encode" | "decode";
   input?: { [key: string]: Json };
   bytes: string;
   expect?: "reject";
@@ -225,7 +225,47 @@ function encode(c: Case): Uint8Array {
     // falls through: every reply kind returns
     case "encode":
       return encodeValue(i.format as string, i.value as Json);
+    case "decode":
+      throw new Error("`decode` cases are decode only");
   }
+}
+
+/** A reader type, as a `decode` case describes it. */
+type Type =
+  | "u32"
+  | "i32"
+  | "string"
+  | { option: Type }
+  | { struct: { name: string; fields: [string, Type][] } }
+  | { enum: { name: string; variants: string[] } };
+
+/**
+ * What generated TypeScript holds after decoding `v` as `type`, as a vector
+ * value. Generated code takes the parsed JSON as it is, so nothing here
+ * checks more than it does: an unknown variant or an out-of-range integer
+ * comes through.
+ */
+function fromJs(type: Type, v: unknown): Json {
+  if (type === "u32" || type === "i32") return { [type]: v as number };
+  if (type === "string") return { string: v as string };
+  if ("option" in type) return { option: v === undefined || v === null ? null : fromJs(type.option, v) };
+  if ("struct" in type) {
+    const o = v as { [field: string]: unknown };
+    return {
+      struct: {
+        name: type.struct.name,
+        fields: type.struct.fields.map(([field, t]) => [field, fromJs(t, o[field])]),
+      },
+    };
+  }
+  const variant = v as string;
+  return {
+    unit_variant: {
+      enum: type.enum.name,
+      index: type.enum.variants.indexOf(variant),
+      variant,
+    },
+  };
 }
 
 /** The input `bytes` decode to, or `undefined` when the runtime refuses them. */
@@ -278,6 +318,16 @@ function decode(c: Case, bytes: Uint8Array): unknown {
       }
       return { framing: i.framing, request_id: r.requestId.toString(), ...reply };
     }
+    case "decode": {
+      if (i.format !== FORMAT_JSON) throw new NotImplemented(`format \`${i.format as string}\``);
+      let parsed: unknown;
+      try {
+        parsed = new JsonCodec().decode(bytes);
+      } catch {
+        return undefined;
+      }
+      return { format: i.format, type: i.type, value: fromJs(i.type as Type, parsed) };
+    }
     default:
       return undefined;
   }
@@ -292,11 +342,13 @@ function run(c: Case): Outcome {
         ? { pass: true }
         : { fail: `accepted bytes it must reject, as ${canon(got)}` };
     }
-    const encoded = encode(c);
-    if (!matches(c, encoded, c.bytes)) {
-      return { fail: `encodes to ${show(encoded)}, expected ${show(bytes)}` };
+    if (c.op !== "decode") {
+      const encoded = encode(c);
+      if (!matches(c, encoded, c.bytes)) {
+        return { fail: `encodes to ${show(encoded)}, expected ${show(bytes)}` };
+      }
+      if (c.op === "name_hash" || c.op === "encode") return { pass: true };
     }
-    if (c.op === "name_hash" || c.op === "encode") return { pass: true };
     const got = decode(c, bytes);
     if (got === undefined) return { fail: "refused bytes it must decode" };
     return canon(got) === canon(c.input)
