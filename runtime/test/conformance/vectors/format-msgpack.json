@@ -378,6 +378,164 @@
         }
       },
       "bytes": "a5477265656e"
+    },
+    {
+      "id": "format-msgpack/decode-fields-reordered",
+      "op": "decode",
+      "input": {
+        "format": "msgpack@1",
+        "type": {
+          "struct": {
+            "fields": [
+              [
+                "x",
+                "i32"
+              ],
+              [
+                "y",
+                "i32"
+              ]
+            ],
+            "name": "Point"
+          }
+        },
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "x",
+                {
+                  "i32": -2
+                }
+              ],
+              [
+                "y",
+                {
+                  "i32": 1
+                }
+              ]
+            ],
+            "name": "Point"
+          }
+        }
+      },
+      "bytes": "92fe01"
+    },
+    {
+      "id": "format-msgpack/decode-unknown-field",
+      "op": "decode",
+      "input": {
+        "format": "msgpack@1",
+        "type": {
+          "struct": {
+            "fields": [
+              [
+                "x",
+                "i32"
+              ],
+              [
+                "y",
+                "i32"
+              ]
+            ],
+            "name": "Point"
+          }
+        }
+      },
+      "bytes": "9301fe05",
+      "expect": "reject"
+    },
+    {
+      "id": "format-msgpack/decode-missing-optional",
+      "op": "decode",
+      "input": {
+        "format": "msgpack@1",
+        "type": {
+          "struct": {
+            "fields": [
+              [
+                "id",
+                "u32"
+              ],
+              [
+                "label",
+                {
+                  "option": "string"
+                }
+              ]
+            ],
+            "name": "Tagged"
+          }
+        }
+      },
+      "bytes": "9101",
+      "expect": "reject"
+    },
+    {
+      "id": "format-msgpack/decode-variant-reordered",
+      "op": "decode",
+      "input": {
+        "format": "msgpack@1",
+        "type": {
+          "enum": {
+            "name": "Color",
+            "variants": [
+              "Red",
+              "Green",
+              "Blue"
+            ]
+          }
+        },
+        "value": {
+          "unit_variant": {
+            "enum": "Color",
+            "index": 1,
+            "variant": "Green"
+          }
+        }
+      },
+      "bytes": "a5477265656e"
+    },
+    {
+      "id": "format-msgpack/decode-unknown-variant",
+      "op": "decode",
+      "input": {
+        "format": "msgpack@1",
+        "type": {
+          "enum": {
+            "name": "Color",
+            "variants": [
+              "Red",
+              "Green",
+              "Blue"
+            ]
+          }
+        }
+      },
+      "bytes": "a6507572706c65",
+      "expect": "reject"
+    },
+    {
+      "id": "format-msgpack/decode-wider-integer",
+      "op": "decode",
+      "input": {
+        "format": "msgpack@1",
+        "type": "u32",
+        "value": {
+          "u32": 7
+        }
+      },
+      "bytes": "07"
+    },
+    {
+      "id": "format-msgpack/decode-wider-integer-overflow",
+      "op": "decode",
+      "input": {
+        "format": "msgpack@1",
+        "type": "u32"
+      },
+      "bytes": "cf0000010000000000",
+      "expect": "reject"
     }
   ]
 }

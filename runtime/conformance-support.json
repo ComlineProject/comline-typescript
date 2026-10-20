@@ -6,7 +6,12 @@
     "envelope": { "state": "supported" },
     "framing-datagram": { "state": "supported" },
     "framing-jsonrpc": { "state": "supported" },
-    "format-json": { "state": "supported" },
+    "format-json": {
+      "state": "partial",
+      "note": "decoding doesn't check enum variants or integer ranges",
+      "tracking": "comline-typescript#57",
+      "failing": ["format-json/decode-unknown-variant", "format-json/decode-wider-integer-overflow"]
+    },
     "format-msgpack": { "state": "unsupported", "note": "only JSON ships" }
   }
 }

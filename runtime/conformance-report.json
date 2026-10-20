@@ -15,7 +15,13 @@
       ]
     },
     "format-json": {
-      "state": "supported",
+      "state": "partial",
+      "note": "decoding doesn't check enum variants or integer ranges",
+      "tracking": "comline-typescript#57",
+      "failing": [
+        "format-json/decode-unknown-variant",
+        "format-json/decode-wider-integer-overflow"
+      ],
       "proven_by": [
         "format-json/bool-true",
         "format-json/bool-false",
@@ -40,7 +46,12 @@
         "format-json/struct",
         "format-json/struct-nested",
         "format-json/struct-optional-none",
-        "format-json/enum-unit-variant"
+        "format-json/enum-unit-variant",
+        "format-json/decode-fields-reordered",
+        "format-json/decode-unknown-field",
+        "format-json/decode-missing-optional",
+        "format-json/decode-variant-reordered",
+        "format-json/decode-wider-integer"
       ]
     },
     "format-msgpack": {
