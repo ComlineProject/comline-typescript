@@ -33,7 +33,9 @@ use std::path::PathBuf;
 
 use comline_core::schema::ir::frozen::types::{Literal, PrimitiveType, TypeRef};
 use comline_core::schema::ir::frozen::schema_ir_hash;
+use comline_core::schema::idl::annotations::HANDSHAKE_NONE;
 use comline_core::schema::ir::frozen::unit::FrozenUnit;
+use comline_core::schema::ir::unverified;
 
 use eyre::Result;
 
@@ -391,6 +393,7 @@ fn schema_source(
                 decls.push_str(&protocol(
                     name,
                     functions,
+                    parameters,
                     &framing_choice(parameters, default_framing),
                     &errors,
                     &types,
@@ -431,6 +434,12 @@ fn schema_source(
         }
         if picks.iter().any(|p| p.jsonrpc) {
             values.push("JsonRpcFraming");
+        }
+        let any_none = units.iter().any(|u| {
+            matches!(u, FrozenUnit::Protocol { parameters, .. } if no_handshake(parameters))
+        });
+        if any_none {
+            values.push("NoHandshake");
         }
         runtime_import.push_str("import {\n");
         for v in values {
@@ -667,9 +676,36 @@ struct FnInfo {
     throws: Vec<(u16, String, bool)>,
 }
 
+/// `@handshake = "none"` (or the package default, which core has already
+/// written into the protocol): connect and serve pass the runtime's
+/// `NoHandshake`.
+fn no_handshake(parameters: &[FrozenUnit]) -> bool {
+    annotation(parameters, "handshake").as_deref() == Some(HANDSHAKE_NONE)
+}
+
+/// A doc comment naming what an `@unverified` protocol gives up, and why,
+/// for its dispatcher and client. Empty for one that gives nothing up.
+fn unverified_doc(parameters: &[FrozenUnit]) -> String {
+    let set = unverified::frozen_set(parameters);
+    if set.is_empty() {
+        return String::new();
+    }
+    let mut doc = format!(
+        "/**\n * **Unverified:** gives up {} ({}).\n",
+        unverified::describe(set),
+        unverified::cause(parameters)
+    );
+    if let Some(reason) = unverified::reason(parameters) {
+        doc.push_str(&format!(" * Reason given: {reason}\n"));
+    }
+    doc.push_str(" */\n");
+    doc
+}
+
 fn protocol(
     proto: &str,
     functions: &[FrozenUnit],
+    parameters: &[FrozenUnit],
     framing: &FramingChoice,
     errors: &HashMap<u16, String>,
     types: &TypeMapper,
@@ -785,7 +821,15 @@ fn protocol(
         "export const {calls_const} = [{call_names}] as const;\n\n"
     ));
 
+    let doc = unverified_doc(parameters);
+    let (handshake_arg, handshake_note) = if no_handshake(parameters) {
+        (", new NoHandshake()", "        // No handshake: `@handshake = \"none\"`.\n")
+    } else {
+        ("", "")
+    };
+
     // 4. the dispatcher
+    s.push_str(&doc);
     s.push_str(&format!(
         "export class {proto}Dispatcher implements Dispatch {{\n\
         \x20   constructor(private readonly impl: {proto}) {{}}\n\n\
@@ -858,11 +902,13 @@ fn protocol(
     );
 
     // 5. the client
+    s.push_str(&doc);
     s.push_str(&format!(
         "export class {proto}Client {{\n\
         \x20   constructor(private readonly client: Client) {{}}\n\n\
         \x20   static async connect(transport: Transport, codec: Codec, framing: Framing = new {ctor}()): Promise<{proto}Client> {{\n\
-        \x20       return new {proto}Client(await Client.connect(transport, codec, IR_HASH, framing));\n\
+        {handshake_note}\
+        \x20       return new {proto}Client(await Client.connect(transport, codec, IR_HASH, framing{handshake_arg}));\n\
         \x20   }}\n",
         ctor = framing.ctor
     ));
@@ -926,7 +972,8 @@ fn protocol(
     // 6. the serve helper
     s.push_str(&format!(
         "export function serve{proto}(impl: {proto}, transport: Transport, codec: Codec, framing: Framing = new {ctor}()): Promise<void> {{\n\
-        \x20   return new Server(new {proto}Dispatcher(impl), codec, framing).serve(transport, IR_HASH);\n\
+        {handshake_note}\
+        \x20   return new Server(new {proto}Dispatcher(impl), codec, framing).serve(transport, IR_HASH{handshake_arg});\n\
         }}\n\n",
         ctor = framing.ctor
     ));
