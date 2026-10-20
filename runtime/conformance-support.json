@@ -9,7 +9,7 @@
     "format-json": {
       "state": "partial",
       "note": "decoding doesn't check enum variants or integer ranges",
-      "tracking": "https://github.com/ComlineProject/comline-typescript/issues/57",
+      "tracking": "comline-typescript#57",
       "failing": ["format-json/decode-unknown-variant", "format-json/decode-wider-integer-overflow"]
     },
     "format-msgpack": { "state": "unsupported", "note": "only JSON ships" }
