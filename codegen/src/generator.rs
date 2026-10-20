@@ -67,6 +67,22 @@ pub fn generate_typescript(req: &GenRequest) -> Result<Vec<GeneratedFile>> {
     comline_codegen::features::refuse_unsupported("TypeScript", req, crate::SUPPORT)?;
 
     let default_framing = req.default_framing.as_deref();
+    // A name `framing_for` doesn't know would fall through to datagram below,
+    // and the mismatch would only surface as a refused handshake. `@framing`
+    // is checked by core; the package default arrives unchecked from the
+    // caller, so it's checked here.
+    if let Some(name) = default_framing {
+        if framing_for(name).is_none() {
+            return Err(eyre::eyre!(
+                "unknown default framing `{name}` - expected one of {}",
+                comline_core::schema::idl::annotations::value_spellings("framing")
+                    .iter()
+                    .map(|n| format!("`{n}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+    }
     let external_std = req.external_std;
 
     // With `external_std`, std's schemas aren't this package's to emit - it
