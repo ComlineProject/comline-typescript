@@ -92,10 +92,10 @@
       "state": "supported",
       "proven_by": [
         "name-hash/empty",
-        "name-hash/json",
-        "name-hash/msgpack",
-        "name-hash/comline.datagram",
-        "name-hash/jsonrpc-2.0",
+        "name-hash/json@1",
+        "name-hash/msgpack@1",
+        "name-hash/datagram@1",
+        "name-hash/jsonrpc@1",
         "name-hash/com.acme.custom-format"
       ]
     }

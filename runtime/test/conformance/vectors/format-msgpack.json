@@ -5,7 +5,7 @@
       "id": "format-msgpack/bool-true",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "bool": true
         }
@@ -16,7 +16,7 @@
       "id": "format-msgpack/bool-false",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "bool": false
         }
@@ -27,7 +27,7 @@
       "id": "format-msgpack/u8-max",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "u8": 255
         }
@@ -38,7 +38,7 @@
       "id": "format-msgpack/u16-max",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "u16": 65535
         }
@@ -49,7 +49,7 @@
       "id": "format-msgpack/u32-max",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "u32": 4294967295
         }
@@ -60,7 +60,7 @@
       "id": "format-msgpack/u64-small",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "u64": "7"
         }
@@ -71,7 +71,7 @@
       "id": "format-msgpack/u64-above-2-53",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "u64": "9007199254740993"
         }
@@ -82,7 +82,7 @@
       "id": "format-msgpack/u64-max",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "u64": "18446744073709551615"
         }
@@ -93,7 +93,7 @@
       "id": "format-msgpack/i8-min",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "i8": -128
         }
@@ -104,7 +104,7 @@
       "id": "format-msgpack/i16-min",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "i16": -32768
         }
@@ -115,7 +115,7 @@
       "id": "format-msgpack/i32-min",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "i32": -2147483648
         }
@@ -126,7 +126,7 @@
       "id": "format-msgpack/i64-min",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "i64": "-9223372036854775808"
         }
@@ -137,7 +137,7 @@
       "id": "format-msgpack/f64-fraction",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "f64": -0.25
         }
@@ -148,7 +148,7 @@
       "id": "format-msgpack/f64-integral",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "f64": 1.0
         }
@@ -159,7 +159,7 @@
       "id": "format-msgpack/string-empty",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "string": ""
         }
@@ -170,7 +170,7 @@
       "id": "format-msgpack/string-unicode",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "string": "héllo \"wörld\" ✓\n"
         }
@@ -181,7 +181,7 @@
       "id": "format-msgpack/array-empty",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "array": []
         }
@@ -192,7 +192,7 @@
       "id": "format-msgpack/array-u8",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "array": [
             {
@@ -213,7 +213,7 @@
       "id": "format-msgpack/option-none",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "option": null
         }
@@ -224,7 +224,7 @@
       "id": "format-msgpack/option-some",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "option": {
             "u32": 5
@@ -237,7 +237,7 @@
       "id": "format-msgpack/struct",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "struct": {
             "fields": [
@@ -264,7 +264,7 @@
       "id": "format-msgpack/struct-nested",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "struct": {
             "fields": [
@@ -341,7 +341,7 @@
       "id": "format-msgpack/struct-optional-none",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "struct": {
             "fields": [
@@ -368,7 +368,7 @@
       "id": "format-msgpack/enum-unit-variant",
       "op": "encode",
       "input": {
-        "format": "msgpack",
+        "format": "msgpack@1",
         "value": {
           "unit_variant": {
             "enum": "Color",

@@ -19,8 +19,15 @@ const U64_MASK = (1n << 64n) - 1n;
 const FNV_OFFSET = 0xcbf29ce484222325n;
 const FNV_PRIME = 0x00000100000001b3n;
 
+// Encoding names are versioned, `name@major`, matching the Rust runtime: a later
+// `msgpack@2` must never be mistaken for `msgpack@1`. The handshake hashes them.
+
 /** Name of Comline's default datagram framing. Pass it to {@link Handshake}. */
-export const FRAMING_DATAGRAM = "comline.datagram";
+export const FRAMING_DATAGRAM = "datagram@1";
+/** Name of the JSON-RPC 2.0 framing ({@link JsonRpcFraming}). */
+export const FRAMING_JSONRPC = "jsonrpc@1";
+/** Name of the JSON wire format ({@link JsonCodec}). */
+export const FORMAT_JSON = "json@1";
 
 /**
  * 64-bit FNV-1a over a name's UTF-8 bytes. Folds a wire-format / framing name

@@ -10,36 +10,36 @@
       "bytes": "25232284e49cf2cb"
     },
     {
-      "id": "name-hash/json",
+      "id": "name-hash/json@1",
       "op": "name_hash",
       "input": {
-        "name": "json"
+        "name": "json@1"
       },
-      "bytes": "03380e17de6ebc20"
+      "bytes": "3885b0bd1f9f6c85"
     },
     {
-      "id": "name-hash/msgpack",
+      "id": "name-hash/msgpack@1",
       "op": "name_hash",
       "input": {
-        "name": "msgpack"
+        "name": "msgpack@1"
       },
-      "bytes": "ab0663dc73ac7cc7"
+      "bytes": "2096d428c0c44c62"
     },
     {
-      "id": "name-hash/comline.datagram",
+      "id": "name-hash/datagram@1",
       "op": "name_hash",
       "input": {
-        "name": "comline.datagram"
+        "name": "datagram@1"
       },
-      "bytes": "b921146a9e8c1d06"
+      "bytes": "d153a199ba45a444"
     },
     {
-      "id": "name-hash/jsonrpc-2.0",
+      "id": "name-hash/jsonrpc@1",
       "op": "name_hash",
       "input": {
-        "name": "jsonrpc-2.0"
+        "name": "jsonrpc@1"
       },
-      "bytes": "7736b6bd834df925"
+      "bytes": "51ee6f4a8f89ae29"
     },
     {
       "id": "name-hash/com.acme.custom-format",

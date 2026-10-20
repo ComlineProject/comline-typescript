@@ -4,11 +4,12 @@
 
 /**
  * Wire formats. {@link JsonCodec} pairs with the Rust runtime's `format::Json`
- * (`name === "json"`); a MessagePack codec matching `format::MsgPack` is a
+ * (`name === "json@1"`); a MessagePack codec matching `format::MsgPack` is a
  * later addition.
  */
 
 import type { Codec } from "./contract.js";
+import { FORMAT_JSON } from "./handshake.js";
 import { type Shape, decodeJson, parseJson, stringifyJson } from "./json.js";
 
 /**
@@ -19,7 +20,7 @@ import { type Shape, decodeJson, parseJson, stringifyJson } from "./json.js";
  * `bigint` goes: those are read exactly.
  */
 export class JsonCodec implements Codec {
-  readonly name = "json";
+  readonly name = FORMAT_JSON;
 
   encode(value: unknown): Uint8Array {
     return new TextEncoder().encode(stringifyJson(value));

@@ -20,10 +20,10 @@ test("nameHash is deterministic and name-specific", () => {
 test("nameHash matches the Rust FNV-1a reference vectors", () => {
   // Cross-checked against `comline_runtime::contract::name_hash`.
   assert.equal(nameHash(""), 0xcbf29ce484222325n);
-  assert.equal(nameHash("json"), 0x20bc6ede170e3803n);
-  assert.equal(nameHash("msgpack"), 0xc77cac73dc6306abn);
-  assert.equal(nameHash(FRAMING_DATAGRAM), 0x061d8c9e6a1421b9n);
-  assert.equal(nameHash("jsonrpc-2.0"), 0x25f94d83bdb63677n);
+  assert.equal(nameHash("json@1"), 0x856c9f1fbdb08538n);
+  assert.equal(nameHash("msgpack@1"), 0x624cc4c028d49620n);
+  assert.equal(nameHash(FRAMING_DATAGRAM), 0x44a445ba99a153d1n);
+  assert.equal(nameHash("jsonrpc@1"), 0x29ae898f4a6fee51n);
 });
 
 test("the frame is 31 bytes and round-trips", () => {

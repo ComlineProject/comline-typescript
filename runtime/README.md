@@ -12,7 +12,7 @@ package, and a stream transport.
 | Piece | State |
 |---|---|
 | `RuntimeError`, `Kind` / `resolveKind`, `Call`, `Envelope`, `Outcome`, `Reply`, `CallError`, `Dispatch` | ✅ |
-| `Codec` interface + `JsonCodec` (`name === "json"`) | ✅ |
+| `Codec` interface + `JsonCodec` (`name === "json@1"`) | ✅ |
 | `Handshake` — 31-byte frame, FNV-1a `nameHash`, `check` — byte-compatible with `comline-runtime` | ✅ |
 | `Framing` + `DatagramFraming` + `JsonRpcFraming` — wire-compatible with `comline-runtime` | ✅ |
 | `Transport` interface + `duplex()` in-memory pair | ✅ |
@@ -45,7 +45,7 @@ CONFORMANCE_BLESS=1 npm test          # rewrite conformance-report.json
 ```
 src/
   contract.ts        RuntimeError, Kind, Call, Envelope, Reply, CallError, Codec, Dispatch, Framing
-  handshake.ts       Handshake, nameHash, FRAMING_DATAGRAM
+  handshake.ts       Handshake, nameHash, FRAMING_DATAGRAM, FRAMING_JSONRPC, FORMAT_JSON
   codec.ts           JsonCodec
   json.ts            exact JSON: digits kept, bigint written and read in full (Shape)
   envelope.ts        the datagram tag-byte Envelope form

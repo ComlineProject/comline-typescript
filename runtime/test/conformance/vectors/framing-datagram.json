@@ -6,8 +6,8 @@
       "op": "request",
       "input": {
         "call_id": 3,
-        "format": "json",
-        "framing": "comline.datagram",
+        "format": "json@1",
+        "framing": "datagram@1",
         "method": "greet",
         "params": {
           "array": [
@@ -28,8 +28,8 @@
       "op": "request",
       "input": {
         "call_id": 65535,
-        "format": "json",
-        "framing": "comline.datagram",
+        "format": "json@1",
+        "framing": "datagram@1",
         "method": "ping",
         "params": {
           "array": []
@@ -42,7 +42,7 @@
       "id": "framing-datagram/response-ok",
       "op": "response",
       "input": {
-        "framing": "comline.datagram",
+        "framing": "datagram@1",
         "kind": "ok",
         "payload": "7b22626f6479223a226869227d",
         "request_id": "7"
@@ -53,7 +53,7 @@
       "id": "framing-datagram/response-ok-exact-numbers",
       "op": "response",
       "input": {
-        "framing": "comline.datagram",
+        "framing": "datagram@1",
         "kind": "ok",
         "payload": "7b226e223a393030373139393235343734303939332c2266223a312e307d",
         "request_id": "8"
@@ -65,7 +65,7 @@
       "op": "response",
       "input": {
         "body": "7b22776879223a226e6f227d",
-        "framing": "comline.datagram",
+        "framing": "datagram@1",
         "id": 2,
         "kind": "err",
         "request_id": "7"
@@ -76,7 +76,7 @@
       "id": "framing-datagram/response-fault",
       "op": "response",
       "input": {
-        "framing": "comline.datagram",
+        "framing": "datagram@1",
         "kind": "fault",
         "request_id": "9"
       },
@@ -86,7 +86,7 @@
       "id": "framing-datagram/reject-short-request",
       "op": "request",
       "input": {
-        "framing": "comline.datagram"
+        "framing": "datagram@1"
       },
       "bytes": "03002a000000000000",
       "expect": "reject"
@@ -95,7 +95,7 @@
       "id": "framing-datagram/reject-short-response",
       "op": "response",
       "input": {
-        "framing": "comline.datagram"
+        "framing": "datagram@1"
       },
       "bytes": "07000000000000",
       "expect": "reject"
@@ -104,7 +104,7 @@
       "id": "framing-datagram/reject-response-without-envelope",
       "op": "response",
       "input": {
-        "framing": "comline.datagram"
+        "framing": "datagram@1"
       },
       "bytes": "0700000000000000",
       "expect": "reject"

@@ -6,33 +6,33 @@
       "op": "handshake",
       "input": {
         "capabilities": 0,
-        "framing": "comline.datagram",
+        "framing": "datagram@1",
         "ir_hash": "72623859790382856",
-        "wire_format": "json"
+        "wire_format": "json@1"
       },
-      "bytes": "434f01080706050403020103380e17de6ebc20b921146a9e8c1d0600000000"
+      "bytes": "434f0108070605040302013885b0bd1f9f6c85d153a199ba45a44400000000"
     },
     {
       "id": "handshake/msgpack-datagram",
       "op": "handshake",
       "input": {
         "capabilities": 5,
-        "framing": "comline.datagram",
+        "framing": "datagram@1",
         "ir_hash": "16045690981114315524",
-        "wire_format": "msgpack"
+        "wire_format": "msgpack@1"
       },
-      "bytes": "434f0104030201efbeaddeab0663dc73ac7cc7b921146a9e8c1d0605000000"
+      "bytes": "434f0104030201efbeadde2096d428c0c44c62d153a199ba45a44405000000"
     },
     {
       "id": "handshake/json-jsonrpc",
       "op": "handshake",
       "input": {
         "capabilities": 4294967295,
-        "framing": "jsonrpc-2.0",
+        "framing": "jsonrpc@1",
         "ir_hash": "18446744073709551615",
-        "wire_format": "json"
+        "wire_format": "json@1"
       },
-      "bytes": "434f01ffffffffffffffff03380e17de6ebc207736b6bd834df925ffffffff"
+      "bytes": "434f01ffffffffffffffff3885b0bd1f9f6c8551ee6f4a8f89ae29ffffffff"
     },
     {
       "id": "handshake/reject-empty",
@@ -43,19 +43,19 @@
     {
       "id": "handshake/reject-truncated",
       "op": "handshake",
-      "bytes": "434f01010000000000000003380e17de6ebc20b921146a9e8c1d06000000",
+      "bytes": "434f0101000000000000003885b0bd1f9f6c85d153a199ba45a444000000",
       "expect": "reject"
     },
     {
       "id": "handshake/reject-bad-magic",
       "op": "handshake",
-      "bytes": "584f01010000000000000003380e17de6ebc20b921146a9e8c1d0600000000",
+      "bytes": "584f0101000000000000003885b0bd1f9f6c85d153a199ba45a44400000000",
       "expect": "reject"
     },
     {
       "id": "handshake/reject-bad-version",
       "op": "handshake",
-      "bytes": "434f02010000000000000003380e17de6ebc20b921146a9e8c1d0600000000",
+      "bytes": "434f0201000000000000003885b0bd1f9f6c85d153a199ba45a44400000000",
       "expect": "reject"
     }
   ]

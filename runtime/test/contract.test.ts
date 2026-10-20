@@ -45,9 +45,9 @@ test("RuntimeError carries a discriminant and an optional remote id", () => {
   assert.equal(RuntimeError.timeout().remoteId, undefined);
 });
 
-test("JsonCodec round-trips a value and hashes as \"json\"", () => {
+test("JsonCodec round-trips a value and is named \"json@1\"", () => {
   const codec = new JsonCodec();
-  assert.equal(codec.name, "json");
+  assert.equal(codec.name, "json@1");
 
   const value = { body: "hi", seq: 42, tags: ["a", "b"] };
   const decoded = codec.decode<typeof value>(codec.encode(value));

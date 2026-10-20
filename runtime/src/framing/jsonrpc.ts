@@ -2,6 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+import { FRAMING_JSONRPC } from "../handshake.js";
 import type { Call, DecodedRequest, DecodedResponse, Framing } from "../contract.js";
 import { type JsonNode, jsonInteger, parseJson } from "../json.js";
 
@@ -49,7 +50,7 @@ function u64(node: JsonNode | undefined): bigint | undefined {
  * exactly. A response must carry its id.
  */
 export class JsonRpcFraming implements Framing {
-  readonly name = "jsonrpc-2.0";
+  readonly name = FRAMING_JSONRPC;
 
   encodeRequest(call: Call, requestId: bigint, params: Uint8Array): Uint8Array {
     const p = params.length === 0 ? "null" : dec.decode(params);
