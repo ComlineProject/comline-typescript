@@ -13,10 +13,10 @@ package, and a stream transport.
 |---|---|
 | `RuntimeError`, `Kind` / `resolveKind`, `Call`, `Envelope`, `Outcome`, `Reply`, `CallError`, `Dispatch` | ✅ |
 | `Codec` interface + `JsonCodec` (`name === "json@1"`) | ✅ |
-| `Handshake` — 31-byte frame, FNV-1a `nameHash`, `check` — byte-compatible with `comline-runtime` | ✅ |
+| `Handshake` interface; `comline@1` (`ComlineHandshake`, the 31-byte `HandshakeFrame`, FNV-1a `nameHash`) byte-compatible with `comline-runtime`, and `none` (`NoHandshake`) | ✅ |
 | `Framing` + `DatagramFraming` + `JsonRpcFraming` — wire-compatible with `comline-runtime` | ✅ |
 | `Transport` interface + `duplex()` in-memory pair | ✅ |
-| `Client` (`connect` / `call` / `notify`) and `Server` (`serve` / `serveHandshaked`) | ✅ |
+| `Client` (`connect` / `unverified` / `call` / `notify`) and `Server` (`serve` / `serveUnverified`) | ✅ |
 | A stream `Transport`; a MessagePack `Codec` | — |
 
 ## Wire conformance
@@ -45,7 +45,7 @@ CONFORMANCE_BLESS=1 npm test          # rewrite conformance-report.json
 ```
 src/
   contract.ts        RuntimeError, Kind, Call, Envelope, Reply, CallError, Codec, Dispatch, Framing
-  handshake.ts       Handshake, nameHash, FRAMING_DATAGRAM, FRAMING_JSONRPC, FORMAT_JSON
+  handshake.ts       Handshake, ComlineHandshake, NoHandshake, HandshakeFrame, nameHash, the names
   codec.ts           JsonCodec
   json.ts            exact JSON: digits kept, bigint written and read in full (Shape)
   envelope.ts        the datagram tag-byte Envelope form

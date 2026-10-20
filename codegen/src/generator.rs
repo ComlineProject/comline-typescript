@@ -423,7 +423,6 @@ fn schema_source(
         let mut values = vec![
             "Client",
             "Server",
-            "Handshake",
             "RuntimeError",
             "resolveKind",
         ];
@@ -863,8 +862,7 @@ fn protocol(
         "export class {proto}Client {{\n\
         \x20   constructor(private readonly client: Client) {{}}\n\n\
         \x20   static async connect(transport: Transport, codec: Codec, framing: Framing = new {ctor}()): Promise<{proto}Client> {{\n\
-        \x20       const hs = new Handshake({{ irHash: IR_HASH, wireFormat: codec.name, framing: framing.name }});\n\
-        \x20       return new {proto}Client(await Client.connect(transport, codec, hs, framing));\n\
+        \x20       return new {proto}Client(await Client.connect(transport, codec, IR_HASH, framing));\n\
         \x20   }}\n",
         ctor = framing.ctor
     ));
@@ -928,8 +926,7 @@ fn protocol(
     // 6. the serve helper
     s.push_str(&format!(
         "export function serve{proto}(impl: {proto}, transport: Transport, codec: Codec, framing: Framing = new {ctor}()): Promise<void> {{\n\
-        \x20   const hs = new Handshake({{ irHash: IR_HASH, wireFormat: codec.name, framing: framing.name }});\n\
-        \x20   return new Server(new {proto}Dispatcher(impl), codec, framing).serveHandshaked(transport, hs);\n\
+        \x20   return new Server(new {proto}Dispatcher(impl), codec, framing).serve(transport, IR_HASH);\n\
         }}\n\n",
         ctor = framing.ctor
     ));

@@ -4,7 +4,7 @@
 
 import type { Call, Codec, Envelope, Framing } from "./contract.js";
 import { RuntimeError } from "./contract.js";
-import { Handshake } from "./handshake.js";
+import { ComlineHandshake, type Handshake } from "./handshake.js";
 import type { Transport } from "./transport.js";
 import { DatagramFraming } from "./framing/datagram.js";
 
@@ -16,26 +16,41 @@ import { DatagramFraming } from "./framing/datagram.js";
 export class Client {
   private nextId = 0n;
 
-  constructor(
+  private constructor(
     private readonly transport: Transport,
     readonly codec: Codec,
-    readonly framing: Framing = new DatagramFraming(),
+    readonly framing: Framing,
   ) {}
 
   /**
-   * Bind and run the connection {@link Handshake}: send `local`, read the
-   * peer's, refuse (`RuntimeError("handshake")`) on a mismatch.
+   * Bind to a transport **without a handshake**. Use when the peer can't take
+   * part (a legacy server); a mismatch then surfaces later as a decode or
+   * framing error. {@link Client.connect} is the checked path.
+   */
+  static unverified(
+    transport: Transport,
+    codec: Codec,
+    framing: Framing = new DatagramFraming(),
+  ): Client {
+    return new Client(transport, codec, framing);
+  }
+
+  /**
+   * Bind and run `handshake`'s consumer side (`comline@1` unless given):
+   * refuse (`RuntimeError("handshake")`) if it does.
    */
   static async connect(
     transport: Transport,
     codec: Codec,
-    local: Handshake,
+    irHash: bigint,
     framing: Framing = new DatagramFraming(),
+    handshake: Handshake = new ComlineHandshake(),
   ): Promise<Client> {
-    await transport.send(local.encode());
-    const peer = Handshake.decode(await transport.recv());
-    if (!peer) throw RuntimeError.handshake();
-    local.check(peer);
+    await handshake.initiate(transport, {
+      irHash,
+      wireFormat: codec.name,
+      framing: framing.name,
+    });
     return new Client(transport, codec, framing);
   }
 

@@ -3,12 +3,15 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 /**
- * The connection handshake — byte-compatible with `comline-runtime`'s
- * `contract::handshake`. Each end sends one fixed 31-byte frame first and
- * refuses on a schema / wire-format / framing mismatch.
+ * The connection handshake, a declared axis beside format and framing,
+ * matching `comline-runtime`'s `handshake` module. A {@link Handshake} runs on
+ * a connection before the first call: Comline's own `comline@1`
+ * ({@link ComlineHandshake}, one fixed 31-byte frame each way, byte-compatible
+ * with the Rust runtime), `none` ({@link NoHandshake}), or a custom one.
  */
 
 import { RuntimeError } from "./contract.js";
+import type { Transport } from "./transport.js";
 
 const MAGIC = Uint8Array.of(0x43, 0x4f); // "CO"
 const VERSION = 1;
@@ -22,12 +25,17 @@ const FNV_PRIME = 0x00000100000001b3n;
 // Encoding names are versioned, `name@major`, matching the Rust runtime: a later
 // `msgpack@2` must never be mistaken for `msgpack@1`. The handshake hashes them.
 
-/** Name of Comline's default datagram framing. Pass it to {@link Handshake}. */
+/** Name of Comline's default datagram framing. */
 export const FRAMING_DATAGRAM = "datagram@1";
 /** Name of the JSON-RPC 2.0 framing ({@link JsonRpcFraming}). */
 export const FRAMING_JSONRPC = "jsonrpc@1";
 /** Name of the JSON wire format ({@link JsonCodec}). */
 export const FORMAT_JSON = "json@1";
+
+/** Name of Comline's own handshake ({@link ComlineHandshake}). */
+export const HANDSHAKE_COMLINE = "comline@1";
+/** Name of the official "no handshake" choice ({@link NoHandshake}). Unversioned. */
+export const HANDSHAKE_NONE = "none";
 
 /**
  * 64-bit FNV-1a over a name's UTF-8 bytes. Folds a wire-format / framing name
@@ -43,7 +51,12 @@ export function nameHash(name: string): bigint {
   return h;
 }
 
-export interface HandshakeInit {
+/**
+ * What one end knows when a connection opens, handed to its
+ * {@link Handshake}. More facts follow (the package version, per-protocol
+ * lines) as handshakes that use them do.
+ */
+export interface Facts {
   /** Fingerprint of the frozen IR both ends generated from (the `IR_HASH` const). */
   irHash: bigint;
   /** The wire format's name, e.g. `"json"` — hashed in. */
@@ -54,14 +67,17 @@ export interface HandshakeInit {
   capabilities?: number;
 }
 
-/** What each end declares when a connection opens. */
-export class Handshake {
+/**
+ * The frame of the `comline@1` handshake: what each end declares when a
+ * connection opens.
+ */
+export class HandshakeFrame {
   readonly irHash: bigint;
   readonly wireFormat: bigint;
   readonly framing: bigint;
   readonly capabilities: number;
 
-  constructor(init: HandshakeInit) {
+  constructor(init: Facts) {
     this.irHash = init.irHash & U64_MASK;
     this.wireFormat = nameHash(init.wireFormat);
     this.framing = nameHash(init.framing);
@@ -82,13 +98,13 @@ export class Handshake {
   }
 
   /** Parse a frame; `undefined` if truncated or the magic / version is wrong. */
-  static decode(frame: Uint8Array): Handshake | undefined {
+  static decode(frame: Uint8Array): HandshakeFrame | undefined {
     if (frame.length < LEN) return undefined;
     if (frame[0] !== MAGIC[0] || frame[1] !== MAGIC[1] || frame[2] !== VERSION) {
       return undefined;
     }
     const view = new DataView(frame.buffer, frame.byteOffset, LEN);
-    const h = Object.create(Handshake.prototype) as Handshake;
+    const h = Object.create(HandshakeFrame.prototype) as HandshakeFrame;
     return Object.assign(h, {
       irHash: view.getBigUint64(3, true),
       wireFormat: view.getBigUint64(11, true),
@@ -102,11 +118,59 @@ export class Handshake {
    * `RuntimeError("handshake")` if `irHash`, `wireFormat`, or `framing`
    * disagree; capability bits are allowed to differ.
    */
-  check(peer: Handshake): void {
+  check(peer: HandshakeFrame): void {
     const agree =
       this.irHash === peer.irHash &&
       this.wireFormat === peer.wireFormat &&
       this.framing === peer.framing;
     if (!agree) throw RuntimeError.handshake();
   }
+}
+
+/**
+ * What runs on a connection before the first call. The consumer side
+ * `initiate`s, the provider side `respond`s; for a symmetric handshake the two
+ * are the same. Either refuses the connection by throwing (by convention
+ * `RuntimeError("handshake")`).
+ */
+export interface Handshake {
+  /** The versioned name: {@link HANDSHAKE_COMLINE}, {@link HANDSHAKE_NONE}, or a namespaced custom one. */
+  readonly name: string;
+  /** Run the consumer's side over `transport`. */
+  initiate(transport: Transport, local: Facts): Promise<void>;
+  /** Run the provider's side over `transport`. */
+  respond(transport: Transport, local: Facts): Promise<void>;
+}
+
+/**
+ * `comline@1`: each end sends its {@link HandshakeFrame} and refuses unless the
+ * peer's names the same schema, format and framing.
+ */
+export class ComlineHandshake implements Handshake {
+  readonly name = HANDSHAKE_COMLINE;
+
+  initiate(transport: Transport, local: Facts): Promise<void> {
+    return ComlineHandshake.exchange(transport, local);
+  }
+
+  respond(transport: Transport, local: Facts): Promise<void> {
+    return ComlineHandshake.exchange(transport, local);
+  }
+
+  private static async exchange(transport: Transport, local: Facts): Promise<void> {
+    const ours = new HandshakeFrame(local);
+    await transport.send(ours.encode());
+    const peer = HandshakeFrame.decode(await transport.recv());
+    if (!peer) throw RuntimeError.handshake();
+    ours.check(peer);
+  }
+}
+
+/** `none`: nothing is sent or checked. Gives up schema and encoding agreement. */
+export class NoHandshake implements Handshake {
+  readonly name = HANDSHAKE_NONE;
+
+  async initiate(): Promise<void> {}
+
+  async respond(): Promise<void> {}
 }

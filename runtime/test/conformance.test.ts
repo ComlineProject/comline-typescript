@@ -24,7 +24,7 @@ import {
   FORMAT_JSON,
   FRAMING_DATAGRAM,
   FRAMING_JSONRPC,
-  Handshake,
+  HandshakeFrame,
   JsonCodec,
   JsonRpcFraming,
   call,
@@ -195,7 +195,7 @@ function encode(c: Case): Uint8Array {
       return out;
     }
     case "handshake":
-      return new Handshake({
+      return new HandshakeFrame({
         irHash: BigInt(i.ir_hash as string),
         wireFormat: i.wire_format as string,
         framing: i.framing as string,
@@ -273,7 +273,7 @@ function decode(c: Case, bytes: Uint8Array): unknown {
   const i = c.input ?? {};
   switch (c.op) {
     case "handshake": {
-      const h = Handshake.decode(bytes);
+      const h = HandshakeFrame.decode(bytes);
       if (!h) return undefined;
       const named = (hash: bigint, name: Json | undefined) =>
         typeof name === "string" && nameHash(name) === hash

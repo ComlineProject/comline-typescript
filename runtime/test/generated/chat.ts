@@ -3,7 +3,6 @@
 import {
     Client,
     Server,
-    Handshake,
     RuntimeError,
     resolveKind,
     DatagramFraming,
@@ -116,8 +115,7 @@ export class ChatClient {
     constructor(private readonly client: Client) {}
 
     static async connect(transport: Transport, codec: Codec, framing: Framing = new DatagramFraming()): Promise<ChatClient> {
-        const hs = new Handshake({ irHash: IR_HASH, wireFormat: codec.name, framing: framing.name });
-        return new ChatClient(await Client.connect(transport, codec, hs, framing));
+        return new ChatClient(await Client.connect(transport, codec, IR_HASH, framing));
     }
 
     async send(params: ChatSendParams): Promise<Message> {
@@ -152,7 +150,6 @@ export class ChatClient {
 }
 
 export function serveChat(impl: Chat, transport: Transport, codec: Codec, framing: Framing = new DatagramFraming()): Promise<void> {
-    const hs = new Handshake({ irHash: IR_HASH, wireFormat: codec.name, framing: framing.name });
-    return new Server(new ChatDispatcher(impl), codec, framing).serveHandshaked(transport, hs);
+    return new Server(new ChatDispatcher(impl), codec, framing).serve(transport, IR_HASH);
 }
 
