@@ -99,6 +99,8 @@
         "framing-jsonrpc/response-ok-exact-numbers",
         "framing-jsonrpc/response-err",
         "framing-jsonrpc/response-fault",
+        "framing-jsonrpc/request-qualified-method",
+        "framing-jsonrpc/notification",
         "framing-jsonrpc/reject-request-not-json",
         "framing-jsonrpc/reject-request-without-method",
         "framing-jsonrpc/reject-response-without-id"

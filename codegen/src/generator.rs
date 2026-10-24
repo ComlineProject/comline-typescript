@@ -41,7 +41,7 @@ use std::path::PathBuf;
 
 use comline_core::schema::ir::frozen::types::{Literal, PrimitiveType, TypeRef};
 use comline_core::schema::ir::frozen::schema_ir_hash;
-use comline_core::schema::idl::annotations::HANDSHAKE_NONE;
+use comline_core::schema::idl::annotations::{MethodNames, FRAMING_JSONRPC, HANDSHAKE_NONE};
 use comline_core::schema::ir::frozen::unit::FrozenUnit;
 use comline_core::schema::ir::unverified;
 
@@ -94,21 +94,9 @@ pub fn generate_typescript(req: &GenRequest) -> Result<Vec<GeneratedFile>> {
             ));
         }
     }
-    // JSON-RPC on a connection has no runtime framing yet.
-    for (_, units) in req.schemas {
-        for unit in units {
-            if let FrozenUnit::Protocol { name, parameters, .. } = unit {
-                if connections::on_connection(parameters, default_framing)
-                    && framing_choice(parameters, default_framing).jsonrpc
-                {
-                    return Err(eyre::eyre!(
-                        "protocol `{name}`: JSON-RPC on a connection isn't supported yet - use \
-                         `@framing = \"datagram@2\"` (ComlineProject/runtime#19)"
-                    ));
-                }
-            }
-        }
-    }
+    // JSON-RPC protocols sharing a connection whose bare method names one
+    // side couldn't tell apart.
+    connections::check(req.schemas, default_framing)?;
     let external_std = req.external_std;
 
     // With `external_std`, std's schemas aren't this package's to emit - it
@@ -136,7 +124,7 @@ pub fn generate_typescript(req: &GenRequest) -> Result<Vec<GeneratedFile>> {
     // collision in the last one does not arrive after the earlier files are
     // already written.
     for (namespace, units) in emitted {
-        collisions::check(namespace, units, derived_names(units, default_framing))?;
+        collisions::check(namespace, units, derived_names(units, req.schemas, default_framing))?;
     }
 
     match req.mode {
@@ -321,7 +309,11 @@ fn package_json(pkg: &PackageMeta, lang_version: &str, needs_runtime: bool, need
 /// The shapes differ from Rust's - there is no per-function error type and no
 /// protocol-wide union here, but every `error` grows an `Error` suffix, which
 /// Rust has no equivalent of. Keep it in step with the emitters below.
-fn derived_names(units: &[FrozenUnit], default_framing: Option<&str>) -> Vec<Derived> {
+fn derived_names(
+    units: &[FrozenUnit],
+    schemas: &[(String, Vec<FrozenUnit>)],
+    default_framing: Option<&str>,
+) -> Vec<Derived> {
     let mut derived = Vec::new();
     let mut any_protocol = false;
     let mut any_connection = false;
@@ -345,7 +337,7 @@ fn derived_names(units: &[FrozenUnit], default_framing: Option<&str>) -> Vec<Der
                     format!("{proto}Dispatcher"),
                     format!("protocol `{proto}`'s dispatcher"),
                 ));
-                if connections::on_connection(parameters, default_framing) {
+                if connections::on_connection(schemas, parameters, default_framing) {
                     any_connection = true;
                     derived.push(Derived::new(
                         format!("{proto}Sender"),
@@ -448,14 +440,22 @@ fn schema_source(
                 parameters,
                 ..
             } => {
-                let number = connections::on_connection(parameters, default_framing)
+                let number = connections::on_connection(schemas, parameters, default_framing)
                     .then(|| connections::protocol_number(schemas, namespace, name))
                     .flatten();
+                // JSON-RPC names a call by its method: bare, or qualified by
+                // protocol.
+                let method_names = connections::framing(parameters, default_framing)
+                    .filter(|f| f.name == FRAMING_JSONRPC)
+                    .map(|f| f.method_names)
+                    .unwrap_or_default();
                 decls.push_str(&protocol(
                     name,
+                    namespace,
                     functions,
                     parameters,
                     &framing_choice(parameters, default_framing),
+                    method_names,
                     number,
                     &errors,
                     &types,
@@ -471,7 +471,7 @@ fn schema_source(
 
     // Which framings the protocols in this file reach for: the lockstep ones
     // only, since a protocol on a connection names none of its own.
-    let on_connection = |parameters: &[FrozenUnit]| connections::on_connection(parameters, default_framing);
+    let on_connection = |parameters: &[FrozenUnit]| connections::on_connection(schemas, parameters, default_framing);
     let picks: Vec<FramingChoice> = units
         .iter()
         .filter_map(|u| match u {
@@ -735,9 +735,8 @@ fn framing_for(name: &str) -> Option<FramingChoice> {
 /// A protocol's framing, most specific first: its own `@framing`, then the
 /// package `default_framing`, then datagram.
 fn framing_choice(parameters: &[FrozenUnit], default_framing: Option<&str>) -> FramingChoice {
-    annotation(parameters, "framing")
-        .and_then(|name| framing_for(&name))
-        .or_else(|| default_framing.and_then(framing_for))
+    connections::framing(parameters, default_framing)
+        .and_then(|f| framing_for(f.name))
         .unwrap_or(FramingChoice {
             ctor: "DatagramFraming",
             jsonrpc: false,
@@ -761,6 +760,9 @@ fn annotation<'a>(parameters: &'a [FrozenUnit], key: &str) -> Option<Cow<'a, str
 
 struct FnInfo {
     name: String,
+    /// What a call names it on the wire, and the call table holds: `name`,
+    /// or under JSON-RPC's qualified method names `ns.Proto/name`.
+    method: String,
     params_ty: Option<String>,
     args: Vec<(String, String)>,
     /// The params interface's `Shape`, when an argument holds a `bigint`.
@@ -804,11 +806,14 @@ fn unverified_doc(parameters: &[FrozenUnit]) -> String {
 /// `number` is the protocol's number on a connection, for a protocol that
 /// runs on one: its handlers take the peer, its dispatcher is provided on a
 /// `Connection`, and a `<Proto>Sender` calls it through any `Peer`.
+#[allow(clippy::too_many_arguments)]
 fn protocol(
     proto: &str,
+    namespace: &str,
     functions: &[FrozenUnit],
     parameters: &[FrozenUnit],
     framing: &FramingChoice,
+    method_names: MethodNames,
     number: Option<u16>,
     errors: &HashMap<u16, String>,
     types: &TypeMapper,
@@ -856,6 +861,7 @@ fn protocol(
                 };
                 Some(FnInfo {
                     name: name.clone(),
+                    method: connections::method_name(namespace, proto, name, method_names),
                     params_ty,
                     args,
                     params_shape: params_shape.filter(|decl| !decl.is_empty()),
@@ -915,7 +921,7 @@ fn protocol(
     let calls_const = format!("{}_CALLS", screaming_snake(proto));
     let call_names = fns
         .iter()
-        .map(|f| format!("\"{}\"", f.name))
+        .map(|f| format!("\"{}\"", f.method))
         .collect::<Vec<_>>()
         .join(", ");
     s.push_str(&format!(
@@ -1042,10 +1048,13 @@ fn protocol(
         \x20   }\n",
     );
     if number.is_some() {
-        let open = if no_handshake(parameters) {
-            "`Connection.accept(transport, codec, CONNECTION_IR_HASH, framing, new NoHandshake())`"
-        } else {
-            "`Connection.accept(transport, codec, CONNECTION_IR_HASH)`"
+        let open = match (framing.jsonrpc, no_handshake(parameters)) {
+            (false, true) => "`Connection.accept(transport, codec, CONNECTION_IR_HASH, framing, new NoHandshake())`",
+            (false, false) => "`Connection.accept(transport, codec, CONNECTION_IR_HASH)`",
+            (true, true) => {
+                "`Connection.accept(transport, codec, CONNECTION_IR_HASH, new JsonRpcConnectionFraming(), new NoHandshake())`"
+            }
+            (true, false) => "`Connection.accept(transport, codec, CONNECTION_IR_HASH, new JsonRpcConnectionFraming())`",
         };
         s.push_str(&format!(
             "\n    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with {open}. */\n\
@@ -1104,14 +1113,14 @@ fn protocol(
                 "    async {}({sig_params}): Promise<void> {{\n\
                  \x20       await this.{field}.notify({call_prefix}{{ id: {i}, name: \"{}\" }}, {arg});\n\
                  \x20   }}\n",
-                f.name, f.name
+                f.name, f.method
             ));
             continue;
         }
         s.push_str(&format!(
             "    async {}({sig_params}): Promise<{}> {{\n\
              \x20       const env = await this.{field}.call({call_prefix}{{ id: {i}, name: \"{}\" }}, {arg});\n",
-            f.name, f.ret, f.name
+            f.name, f.ret, f.method
         ));
         if f.ret == "void" {
             s.push_str("        if (\"ok\" in env) return;\n");

@@ -28,6 +28,7 @@ import {
   FRAMING_JSONRPC,
   HandshakeFrame,
   JsonCodec,
+  JsonRpcConnectionFraming,
   JsonRpcFraming,
   call,
   decodeEnvelope,
@@ -35,6 +36,7 @@ import {
   encodeEnvelopeFault,
   encodeEnvelopeOk,
   nameHash,
+  type DecodedRequest,
   type Envelope,
   type Framing,
 } from "../src/index.js";
@@ -214,6 +216,16 @@ function encode(c: Case): Uint8Array {
           encodeValue(i.format as string, i.params as Json),
         );
       }
+      if (i.one_way === true && i.framing === FRAMING_JSONRPC) {
+        // Only a connection sends one-way calls, as notifications.
+        return new JsonRpcConnectionFraming().encodeRequest(
+          0,
+          call(i.call_id as number, i.method as string),
+          BigInt(i.request_id as string),
+          encodeValue(i.format as string, i.params as Json),
+          true,
+        );
+      }
       return framingOf(i.framing as string).encodeRequest(
         call(i.call_id as number, i.method as string),
         BigInt(i.request_id as string),
@@ -324,7 +336,19 @@ function decode(c: Case, bytes: Uint8Array): unknown {
           params: matches(c, r.params, hex(params)) ? i.params : { undecoded: hex(r.params) },
         };
       }
-      const r = framingOf(i.framing as string).decodeRequest(bytes);
+      // A notification is a connection's frame: read as one, it says whether
+      // the frame wanted a reply.
+      let r: DecodedRequest | undefined;
+      let oneWay = false;
+      if (i.one_way === true && i.framing === FRAMING_JSONRPC) {
+        const frame = new JsonRpcConnectionFraming().decode(bytes);
+        if (frame?.kind === "request") {
+          r = frame.request;
+          oneWay = frame.oneWay;
+        }
+      } else {
+        r = framingOf(i.framing as string).decodeRequest(bytes);
+      }
       if (!r || c.expect === "reject") return r;
       const params = encodeValue(i.format as string, i.params as Json);
       return {
@@ -332,6 +356,7 @@ function decode(c: Case, bytes: Uint8Array): unknown {
         call_id: "id" in r.call ? r.call.id : i.call_id,
         method: "name" in r.call ? r.call.name : i.method,
         request_id: r.requestId.toString(),
+        ...(oneWay ? { one_way: true } : {}),
         format: i.format,
         // Params decode as bytes; they stand for the stated value only when
         // they're its exact encoding.

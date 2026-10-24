@@ -3,7 +3,15 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import { FRAMING_JSONRPC } from "../handshake.js";
-import type { Call, DecodedRequest, DecodedResponse, Framing } from "../contract.js";
+import type {
+  Call,
+  ConnectionFraming,
+  DecodedRequest,
+  DecodedResponse,
+  Envelope,
+  Frame,
+  Framing,
+} from "../contract.js";
 import { type JsonNode, jsonInteger, parseJson } from "../json.js";
 
 const enc = new TextEncoder();
@@ -115,5 +123,52 @@ export class JsonRpcFraming implements Framing {
       };
     }
     return { requestId, envelope: { ok: raw(r.text, r.members.get("result")) } };
+  }
+}
+
+/**
+ * JSON-RPC on a {@link Connection}, for calls in both directions. Matches
+ * `comline_runtime::framing::JsonRpcFraming` as a `ConnectionFraming`: frames
+ * are {@link JsonRpcFraming}'s, a message with a `method` is a request and any
+ * other a reply. A request names no protocol, only its method - bare (`send`)
+ * or qualified (`chat.Chat/send`), as the schema's `method_names` chose - which
+ * the receiver looks up among the protocols it provides. A one-way call is a
+ * notification: it has no `id`, and gets no reply.
+ */
+export class JsonRpcConnectionFraming implements ConnectionFraming {
+  readonly name = FRAMING_JSONRPC;
+  private readonly frames = new JsonRpcFraming();
+
+  encodeRequest(
+    _protocol: number,
+    call: Call,
+    requestId: bigint,
+    params: Uint8Array,
+    oneWay = false,
+  ): Uint8Array {
+    if (!oneWay) return this.frames.encodeRequest(call, requestId, params);
+    const p = params.length === 0 ? "null" : dec.decode(params);
+    return enc.encode(`{"jsonrpc":"2.0","method":${JSON.stringify(call.name)},"params":${p}}`);
+  }
+
+  encodeReply(_protocol: number, requestId: bigint, reply: Envelope): Uint8Array {
+    return "ok" in reply
+      ? this.frames.encodeResponseOk(requestId, reply.ok)
+      : "err" in reply
+        ? this.frames.encodeResponseErr(requestId, reply.err.id, reply.err.body)
+        : this.frames.encodeResponseFault(requestId);
+  }
+
+  decode(frame: Uint8Array): Frame | undefined {
+    const r = members(frame);
+    if (!r) return undefined;
+    if (r.members.has("method")) {
+      const request = this.frames.decodeRequest(frame);
+      if (!request) return undefined;
+      const id = r.members.get("id");
+      return { kind: "request", protocol: undefined, request, oneWay: !id || id.kind === "null" };
+    }
+    const response = this.frames.decodeResponse(frame);
+    return response && { kind: "reply", protocol: undefined, ...response };
   }
 }

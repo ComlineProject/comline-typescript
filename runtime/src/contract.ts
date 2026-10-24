@@ -243,22 +243,42 @@ export interface DecodedRequest {
  * side's protocols, or answers a call this side made.
  */
 export type Frame =
-  | { readonly kind: "request"; readonly protocol: number; readonly request: DecodedRequest }
+  | {
+      readonly kind: "request";
+      /**
+       * The protocol called, or `undefined` when the framing names only the
+       * call (JSON-RPC): the receiver looks it up among the protocols it
+       * provides.
+       */
+      readonly protocol: number | undefined;
+      readonly request: DecodedRequest;
+      /** The frame asked for no reply (a JSON-RPC notification): send none. */
+      readonly oneWay: boolean;
+    }
   | {
       readonly kind: "reply";
-      readonly protocol: number;
+      /** Matched by `requestId` alone; there when the framing carries it. */
+      readonly protocol: number | undefined;
       readonly requestId: bigint;
       readonly envelope: Envelope;
     };
 
 /**
  * How a {@link Connection} puts calls on the wire when either end may start
- * one: every frame says whether it's a request or a reply, and which protocol
- * it belongs to. {@link Datagram2Framing} (`datagram@2`) is one.
+ * one: every frame says whether it's a request or a reply. A request names its
+ * protocol by number ({@link Datagram2Framing}, `datagram@2`), or only by its
+ * call's name ({@link JsonRpcConnectionFraming}).
  */
 export interface ConnectionFraming {
   readonly name: string;
-  encodeRequest(protocol: number, call: Call, requestId: bigint, params: Uint8Array): Uint8Array;
+  /** A `oneWay` call gets no reply; a framing that can say so on the wire does. */
+  encodeRequest(
+    protocol: number,
+    call: Call,
+    requestId: bigint,
+    params: Uint8Array,
+    oneWay?: boolean,
+  ): Uint8Array;
   encodeReply(protocol: number, requestId: bigint, reply: Envelope): Uint8Array;
   decode(frame: Uint8Array): Frame | undefined;
 }
