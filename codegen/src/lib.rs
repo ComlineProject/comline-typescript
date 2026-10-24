@@ -65,6 +65,12 @@ pub const SUPPORT: SupportTable = &[
         Support::partial("over `datagram@2`; JSON-RPC on a connection isn't supported yet")
             .tracked("runtime#19"),
     ),
+    // Conformance's word for "the same output without it" - here because
+    // the output is async already.
+    (
+        Feature::Async,
+        Support::ignored("handlers and senders always return Promises: the output is async either way"),
+    ),
 ];
 
 /// Contribute the TypeScript generator to a CLI's [`Registry`](comline_codegen::Registry),
