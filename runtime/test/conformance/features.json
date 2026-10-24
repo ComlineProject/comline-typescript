@@ -7,6 +7,7 @@
     { "id": "framing-datagram2", "title": "datagram@2 framing", "description": "the datagram framing with a request/reply kind and a protocol number, for calls in both directions and several protocols on one connection" },
     { "id": "framing-jsonrpc", "title": "JSON-RPC framing", "description": "JSON-RPC 2.0 requests and responses, a fault as -32603" },
     { "id": "format-json", "title": "JSON wire format", "description": "values as UTF-8 JSON: a struct as an object" },
-    { "id": "format-msgpack", "title": "MessagePack wire format", "description": "values as MessagePack: a struct as an array" }
+    { "id": "format-msgpack", "title": "MessagePack wire format", "description": "values as MessagePack: a struct as an array" },
+    { "id": "format-packed", "title": "packed wire format", "description": "values as packed@1: fixed-width fields back to back, varint lengths, no tags" }
   ]
 }

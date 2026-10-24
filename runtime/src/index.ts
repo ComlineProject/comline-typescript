@@ -41,6 +41,7 @@ export {
   FRAMING_DATAGRAM2,
   FRAMING_JSONRPC,
   FORMAT_JSON,
+  FORMAT_PACKED,
   HANDSHAKE_COMLINE,
   HANDSHAKE_NONE,
   nameHash,
@@ -53,6 +54,7 @@ export {
 
 export { JsonCodec } from "./codec.js";
 export { type Shape } from "./json.js";
+export { PackedCodec, type Layout, jsonShape } from "./packed.js";
 
 export {
   encodeEnvelopeOk,

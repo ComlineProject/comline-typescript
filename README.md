@@ -45,7 +45,8 @@ cargo test
 `@comline/runtime` — the package generated bindings link against. So far the
 framing-agnostic contract (`RuntimeError`, `Kind`, `Envelope`, `Reply`,
 `CallError`, `Dispatch`), a `Handshake` byte-compatible with the Rust
-`comline-runtime`, and a `JsonCodec`. Node, zero runtime dependencies.
+`comline-runtime`, a `JsonCodec` and a `PackedCodec` (`packed@1`). Node,
+zero runtime dependencies.
 
 ```sh
 cd runtime && npm ci && npm test

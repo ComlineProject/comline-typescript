@@ -14,6 +14,7 @@ package, and a stream transport.
 |---|---|
 | `RuntimeError`, `Kind` / `resolveKind`, `Call`, `Envelope`, `Outcome`, `Reply`, `CallError`, `Dispatch` | ✅ |
 | `Codec` interface + `JsonCodec` (`name === "json@1"`) | ✅ |
+| `PackedCodec` (`name === "packed@1"`), driven by a `Layout` per type, byte-compatible with `comline-runtime`'s `format::Packed` | ✅ |
 | `Handshake` interface; `comline@1` (`ComlineHandshake`, the 31-byte `HandshakeFrame`, FNV-1a `nameHash`) byte-compatible with `comline-runtime`, and `none` (`NoHandshake`) | ✅ |
 | `Framing` + `DatagramFraming` + `JsonRpcFraming` — wire-compatible with `comline-runtime` | ✅ |
 | `Transport` interface + `duplex()` in-memory pair | ✅ |
@@ -49,6 +50,7 @@ src/
   contract.ts        RuntimeError, Kind, Call, Envelope, Reply, CallError, Codec, Dispatch, Framing
   handshake.ts       Handshake, ComlineHandshake, NoHandshake, HandshakeFrame, nameHash, the names
   codec.ts           JsonCodec
+  packed.ts          PackedCodec, Layout
   json.ts            exact JSON: digits kept, bigint written and read in full (Shape)
   envelope.ts        the datagram tag-byte Envelope form
   framing/

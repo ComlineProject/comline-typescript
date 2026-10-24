@@ -1,0 +1,1640 @@
+{
+  "feature": "format-packed",
+  "cases": [
+    {
+      "id": "format-packed/bool-true",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "bool": true
+        }
+      },
+      "bytes": "01"
+    },
+    {
+      "id": "format-packed/bool-false",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "bool": false
+        }
+      },
+      "bytes": "00"
+    },
+    {
+      "id": "format-packed/u8-max",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "u8": 255
+        }
+      },
+      "bytes": "ff"
+    },
+    {
+      "id": "format-packed/u16-max",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "u16": 65535
+        }
+      },
+      "bytes": "ffff"
+    },
+    {
+      "id": "format-packed/u32-max",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "u32": 4294967295
+        }
+      },
+      "bytes": "ffffffff"
+    },
+    {
+      "id": "format-packed/u64-small",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "u64": "7"
+        }
+      },
+      "bytes": "0700000000000000"
+    },
+    {
+      "id": "format-packed/u64-above-2-53",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "u64": "9007199254740993"
+        }
+      },
+      "bytes": "0100000000002000"
+    },
+    {
+      "id": "format-packed/u64-max",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "u64": "18446744073709551615"
+        }
+      },
+      "bytes": "ffffffffffffffff"
+    },
+    {
+      "id": "format-packed/i8-min",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "i8": -128
+        }
+      },
+      "bytes": "80"
+    },
+    {
+      "id": "format-packed/i16-min",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "i16": -32768
+        }
+      },
+      "bytes": "0080"
+    },
+    {
+      "id": "format-packed/i32-min",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "i32": -2147483648
+        }
+      },
+      "bytes": "00000080"
+    },
+    {
+      "id": "format-packed/i64-min",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "i64": "-9223372036854775808"
+        }
+      },
+      "bytes": "0000000000000080"
+    },
+    {
+      "id": "format-packed/f64-fraction",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "f64": -0.25
+        }
+      },
+      "bytes": "000000000000d0bf"
+    },
+    {
+      "id": "format-packed/f64-integral",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "f64": 1.0
+        }
+      },
+      "bytes": "000000000000f03f"
+    },
+    {
+      "id": "format-packed/string-empty",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "string": ""
+        }
+      },
+      "bytes": "00"
+    },
+    {
+      "id": "format-packed/string-unicode",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "string": "héllo \"wörld\" ✓\n"
+        }
+      },
+      "bytes": "1468c3a96c6c6f202277c3b6726c642220e29c930a"
+    },
+    {
+      "id": "format-packed/array-empty",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "array": []
+        }
+      },
+      "bytes": "00"
+    },
+    {
+      "id": "format-packed/array-u8",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "array": [
+            {
+              "u8": 1
+            },
+            {
+              "u8": 2
+            },
+            {
+              "u8": 3
+            }
+          ]
+        }
+      },
+      "bytes": "03010203"
+    },
+    {
+      "id": "format-packed/option-none",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "option": null
+        }
+      },
+      "bytes": "00"
+    },
+    {
+      "id": "format-packed/option-some",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "option": {
+            "u32": 5
+          }
+        }
+      },
+      "bytes": "0105000000"
+    },
+    {
+      "id": "format-packed/struct",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "x",
+                {
+                  "i32": 1
+                }
+              ],
+              [
+                "y",
+                {
+                  "i32": -2
+                }
+              ]
+            ],
+            "name": "Point"
+          }
+        }
+      },
+      "bytes": "01000000feffffff"
+    },
+    {
+      "id": "format-packed/struct-nested",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "from",
+                {
+                  "struct": {
+                    "fields": [
+                      [
+                        "x",
+                        {
+                          "i32": 0
+                        }
+                      ],
+                      [
+                        "y",
+                        {
+                          "i32": 0
+                        }
+                      ]
+                    ],
+                    "name": "Point"
+                  }
+                }
+              ],
+              [
+                "to",
+                {
+                  "struct": {
+                    "fields": [
+                      [
+                        "x",
+                        {
+                          "i32": 3
+                        }
+                      ],
+                      [
+                        "y",
+                        {
+                          "i32": 4
+                        }
+                      ]
+                    ],
+                    "name": "Point"
+                  }
+                }
+              ],
+              [
+                "label",
+                {
+                  "option": {
+                    "string": "diag"
+                  }
+                }
+              ],
+              [
+                "tags",
+                {
+                  "array": [
+                    {
+                      "string": "a"
+                    }
+                  ]
+                }
+              ]
+            ],
+            "name": "Line"
+          }
+        }
+      },
+      "bytes": "00000000000000000300000004000000010464696167010161"
+    },
+    {
+      "id": "format-packed/struct-optional-none",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "id",
+                {
+                  "u32": 1
+                }
+              ],
+              [
+                "label",
+                {
+                  "option": null
+                }
+              ]
+            ],
+            "name": "Tagged"
+          }
+        }
+      },
+      "bytes": "0100000000"
+    },
+    {
+      "id": "format-packed/enum-unit-variant",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "unit_variant": {
+            "enum": "Color",
+            "index": 1,
+            "variant": "Green"
+          }
+        }
+      },
+      "bytes": "01"
+    },
+    {
+      "id": "format-packed/f32",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "f32": 1.5
+        }
+      },
+      "bytes": "0000c03f"
+    },
+    {
+      "id": "format-packed/u16-small",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "u16": 1
+        }
+      },
+      "bytes": "0100"
+    },
+    {
+      "id": "format-packed/tuple-f32",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "tuple": [
+            {
+              "f32": 1.0
+            },
+            {
+              "f32": 2.0
+            }
+          ]
+        }
+      },
+      "bytes": "0000803f00000040"
+    },
+    {
+      "id": "format-packed/array-two-byte-count",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "array": [
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            },
+            {
+              "u8": 0
+            }
+          ]
+        }
+      },
+      "bytes": "ac02000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "id": "format-packed/enum-first-variant",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "unit_variant": {
+            "enum": "Class",
+            "index": 0,
+            "variant": "Warrior"
+          }
+        }
+      },
+      "bytes": "00"
+    },
+    {
+      "id": "format-packed/struct-player",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "id",
+                {
+                  "u32": 7
+                }
+              ],
+              [
+                "hp",
+                {
+                  "u16": 100
+                }
+              ],
+              [
+                "name",
+                {
+                  "string": "ab"
+                }
+              ],
+              [
+                "guild",
+                {
+                  "option": null
+                }
+              ],
+              [
+                "class",
+                {
+                  "unit_variant": {
+                    "enum": "Class",
+                    "index": 1,
+                    "variant": "Mage"
+                  }
+                }
+              ],
+              [
+                "pos",
+                {
+                  "tuple": [
+                    {
+                      "f32": 1.0
+                    },
+                    {
+                      "f32": 2.0
+                    }
+                  ]
+                }
+              ]
+            ],
+            "name": "Player"
+          }
+        }
+      },
+      "bytes": "07000000640002616200010000803f00000040"
+    },
+    {
+      "id": "format-packed/reject-bool-not-0-or-1",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": "bool"
+      },
+      "bytes": "02",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/reject-option-tag-not-0-or-1",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "option": "u32"
+        }
+      },
+      "bytes": "0200000000",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/reject-truncated-u32",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": "u32"
+      },
+      "bytes": "010203",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/reject-trailing-bytes",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": "u32"
+      },
+      "bytes": "0100000009",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/reject-overlong-length",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": "string"
+      },
+      "bytes": "8000",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/reject-length-past-input",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": "string"
+      },
+      "bytes": "056162",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/reject-invalid-utf8",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": "string"
+      },
+      "bytes": "02c328",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-fields-reordered",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "struct": {
+            "fields": [
+              [
+                "x",
+                "i32"
+              ],
+              [
+                "y",
+                "i32"
+              ]
+            ],
+            "name": "Point"
+          }
+        },
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "x",
+                {
+                  "i32": -2
+                }
+              ],
+              [
+                "y",
+                {
+                  "i32": 1
+                }
+              ]
+            ],
+            "name": "Point"
+          }
+        }
+      },
+      "bytes": "feffffff01000000"
+    },
+    {
+      "id": "format-packed/decode-unknown-field",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "struct": {
+            "fields": [
+              [
+                "x",
+                "i32"
+              ],
+              [
+                "y",
+                "i32"
+              ]
+            ],
+            "name": "Point"
+          }
+        }
+      },
+      "bytes": "01000000feffffff05000000",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-missing-optional",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "struct": {
+            "fields": [
+              [
+                "id",
+                "u32"
+              ],
+              [
+                "label",
+                {
+                  "option": "string"
+                }
+              ]
+            ],
+            "name": "Tagged"
+          }
+        }
+      },
+      "bytes": "01000000",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-variant-reordered",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "enum": {
+            "name": "Color",
+            "variants": [
+              "Red",
+              "Green",
+              "Blue"
+            ]
+          }
+        },
+        "value": {
+          "unit_variant": {
+            "enum": "Color",
+            "index": 0,
+            "variant": "Red"
+          }
+        }
+      },
+      "bytes": "00"
+    },
+    {
+      "id": "format-packed/decode-unknown-variant",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "enum": {
+            "name": "Color",
+            "variants": [
+              "Red",
+              "Green",
+              "Blue"
+            ]
+          }
+        }
+      },
+      "bytes": "03",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-wider-integer",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": "u32"
+      },
+      "bytes": "0700000000000000",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-wider-integer-overflow",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": "u32"
+      },
+      "bytes": "0000000000010000",
+      "expect": "reject"
+    }
+  ]
+}
