@@ -200,12 +200,17 @@ export interface Peer {
   /** Call `call` on the peer's `protocol` and wait for the reply. */
   call(protocol: number, call: Call, params: unknown, options?: CallOptions): Promise<Envelope>;
   /** Send a one-way call: no reply is awaited. */
-  notify(protocol: number, call: Call, params: unknown): Promise<void>;
+  notify(protocol: number, call: Call, params: unknown, options?: CallOptions): Promise<void>;
 }
 
 export interface CallOptions {
   /** Give up after this many milliseconds with `RuntimeError("timeout")`. */
   readonly timeoutMs?: number;
+  /**
+   * The params' {@link Layout}, which a positional codec (`packed@1`) needs
+   * to encode them. Generated code always passes it.
+   */
+  readonly layout?: Layout;
 }
 
 /**

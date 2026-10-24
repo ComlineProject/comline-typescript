@@ -7,29 +7,36 @@ import {
     RuntimeError,
     resolveKind,
     DatagramFraming,
+    PackedCodec,
     type Codec,
     type Dispatch,
     type Framing,
     type Kind,
+    type Layout,
     type Reply,
-    type Shape,
     type Transport,
 } from "@comline/runtime";
 
 /** Canonical digest of the frozen IR this file was generated from — the
 *  two ends of a connection must agree on it. */
-export const IR_HASH = 0x3f8f03f5d62a3fean;
+export const IR_HASH = 0xed1189b980d9a3f8n;
+
+/** The package's wire format (`wire.format`): what this file's helpers
+*  encode with, and what the peer has to speak too. */
+export const Format: Codec = new PackedCodec();
 
 export interface Message {
     body: string;
     seq: bigint;
 }
 
-export const Message: Shape = { fields: { seq: "bigint" } };
+export const MessageLayout: Layout = { struct: [["body", "string"], ["seq", "u64"]] };
 
 export interface Rejected {
     reason: string;
 }
+
+export const RejectedLayout: Layout = { struct: [["reason", "string"]] };
 
 export class RejectedError extends Error {
     static readonly ordinal = 0;
@@ -45,13 +52,19 @@ export interface ChatSendParams {
     text: string;
 }
 
+export const ChatSendParamsLayout: Layout = { struct: [["text", "string"]] };
+
 export interface ChatHistoryParams {
     limit: number;
 }
 
+export const ChatHistoryParamsLayout: Layout = { struct: [["limit", "u32"]] };
+
 export interface ChatNoteParams {
     text: string;
 }
+
+export const ChatNoteParamsLayout: Layout = { struct: [["text", "string"]] };
 
 export interface Chat {
     /** @throws {RejectedError} */
@@ -78,18 +91,18 @@ export class ChatDispatcher implements Dispatch {
         switch (resolveKind(call, CHAT_CALLS)) {
             case 0: {
                 try {
-                    const p = codec.decode<ChatSendParams>(params);
-                    reply.ok(codec.encode((await this.impl.send(p)) ?? null));
+                    const p = codec.decode<ChatSendParams>(params, ChatSendParamsLayout);
+                    reply.ok(codec.encode((await this.impl.send(p)) ?? null, MessageLayout));
                 } catch (e) {
-                    if (e instanceof RejectedError) { reply.err(RejectedError.ordinal, codec.encode(e.data)); return; }
+                    if (e instanceof RejectedError) { reply.err(RejectedError.ordinal, codec.encode(e.data, RejectedLayout)); return; }
                     reply.fault();
                 }
                 return;
             }
             case 1: {
                 try {
-                    const p = codec.decode<ChatHistoryParams>(params);
-                    reply.ok(codec.encode((await this.impl.history(p)) ?? null));
+                    const p = codec.decode<ChatHistoryParams>(params, ChatHistoryParamsLayout);
+                    reply.ok(codec.encode((await this.impl.history(p)) ?? null, { array: MessageLayout }));
                 } catch {
                     reply.fault();
                 }
@@ -98,7 +111,7 @@ export class ChatDispatcher implements Dispatch {
             case 2: {
                 try {
                     await this.impl.wipe();
-                    reply.ok(codec.encode(null));
+                    reply.ok(codec.encode(null, "unit"));
                 } catch {
                     reply.fault();
                 }
@@ -106,7 +119,7 @@ export class ChatDispatcher implements Dispatch {
             }
             case 3: {
                 try {
-                    const p = codec.decode<ChatNoteParams>(params);
+                    const p = codec.decode<ChatNoteParams>(params, ChatNoteParamsLayout);
                     await this.impl.note(p);
                 } catch {
                     /* one-way: nowhere to report this */
@@ -126,42 +139,42 @@ export class ChatClient {
         this.client = client;
     }
 
-    static async connect(transport: Transport, codec: Codec, framing: Framing = new DatagramFraming()): Promise<ChatClient> {
+    static async connect(transport: Transport, codec: Codec = Format, framing: Framing = new DatagramFraming()): Promise<ChatClient> {
         return new ChatClient(await Client.connect(transport, codec, IR_HASH, framing));
     }
 
     async send(params: ChatSendParams): Promise<Message> {
-        const env = await this.client.call({ id: 0, name: "send" }, params);
-        if ("ok" in env) return this.client.codec.decode<Message>(env.ok, Message);
+        const env = await this.client.call({ id: 0, name: "send" }, params, { layout: ChatSendParamsLayout });
+        if ("ok" in env) return this.client.codec.decode<Message>(env.ok, MessageLayout);
         if ("fault" in env) throw RuntimeError.provider();
         switch (env.err.id) {
             case RejectedError.ordinal:
-                throw new RejectedError(this.client.codec.decode<Rejected>(env.err.body));
+                throw new RejectedError(this.client.codec.decode<Rejected>(env.err.body, RejectedLayout));
             default:
                 throw RuntimeError.remote(env.err.id);
         }
     }
 
     async history(params: ChatHistoryParams): Promise<Message[]> {
-        const env = await this.client.call({ id: 1, name: "history" }, params);
-        if ("ok" in env) return this.client.codec.decode<Message[]>(env.ok, { array: () => Message });
+        const env = await this.client.call({ id: 1, name: "history" }, params, { layout: ChatHistoryParamsLayout });
+        if ("ok" in env) return this.client.codec.decode<Message[]>(env.ok, { array: MessageLayout });
         if ("fault" in env) throw RuntimeError.provider();
         throw RuntimeError.remote(env.err.id);
     }
 
     async wipe(): Promise<void> {
-        const env = await this.client.call({ id: 2, name: "wipe" }, null);
+        const env = await this.client.call({ id: 2, name: "wipe" }, null, { layout: "unit" });
         if ("ok" in env) return;
         if ("fault" in env) throw RuntimeError.provider();
         throw RuntimeError.remote(env.err.id);
     }
 
     async note(params: ChatNoteParams): Promise<void> {
-        await this.client.notify({ id: 3, name: "note" }, params);
+        await this.client.notify({ id: 3, name: "note" }, params, { layout: ChatNoteParamsLayout });
     }
 }
 
-export function serveChat(impl: Chat, transport: Transport, codec: Codec, framing: Framing = new DatagramFraming()): Promise<void> {
+export function serveChat(impl: Chat, transport: Transport, codec: Codec = Format, framing: Framing = new DatagramFraming()): Promise<void> {
     return new Server(new ChatDispatcher(impl), codec, framing).serve(transport, IR_HASH);
 }
 

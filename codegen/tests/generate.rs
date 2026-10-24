@@ -12,7 +12,7 @@ fn code_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenRequest<'_> {
             version: "0.1.0".into(),
         },
         lang_version: comline_codegen_typescript::LANG_VERSION.into(),
-        default_framing: None,
+        wire_format: "packed@1".into(),
         external_std: false,
         validate_on_decode: Default::default(),
         async_api: false,
@@ -28,7 +28,7 @@ fn lib_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenRequest<'_> {
             version: "0.3.0".into(),
         },
         lang_version: comline_codegen_typescript::LANG_VERSION.into(),
-        default_framing: None,
+        wire_format: "packed@1".into(),
         external_std: false,
         validate_on_decode: Default::default(),
         async_api: false,
@@ -42,11 +42,13 @@ fn external_std_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenRequest<'_> {
     }
 }
 
+/// The schema's own file; a protocol on a connection brings the package's
+/// `connection.ts` too.
 fn one(units: Vec<FrozenUnit>) -> String {
     let schemas = vec![("account".to_string(), units)];
     let mut files = generate_typescript(&code_req(&schemas)).unwrap();
-    assert_eq!(files.len(), 1);
     assert_eq!(files[0].path.to_str().unwrap(), "account.ts");
+    assert!(files.iter().skip(1).all(|f| f.path.to_str() == Some("connection.ts")));
     files.remove(0).contents
 }
 
@@ -151,11 +153,11 @@ fn type_alias_emits_and_fields_reference_it_by_name() {
 
     assert!(out.contains("export type UserId = bigint;"), "got: {out}");
     assert!(out.contains("sender: UserId;"), "got: {out}");
-    // A `u64` is a `bigint`, so both declarations carry a `Shape`.
-    assert!(out.contains("import type { Shape } from \"@comline/runtime\";"), "got: {out}");
-    assert!(out.contains("export const UserId: Shape = \"bigint\";"), "got: {out}");
+    // Each declaration carries its `Layout`, the alias's its target's.
+    assert!(out.contains("import type { Layout } from \"@comline/runtime\";"), "got: {out}");
+    assert!(out.contains("export const UserIdLayout: Layout = \"u64\";"), "got: {out}");
     assert!(
-        out.contains("export const Greeting: Shape = { fields: { sender: () => UserId } };"),
+        out.contains("export const GreetingLayout: Layout = { struct: [[\"sender\", () => UserIdLayout]] };"),
         "got: {out}"
     );
 }
@@ -172,36 +174,40 @@ fn struct_of(name: &str, fields: Vec<FrozenUnit>) -> FrozenUnit {
 
 /// Nothing wide, nothing extra: no `Shape`, no runtime import.
 #[test]
-fn a_type_without_a_bigint_has_no_shape() {
+fn every_type_declares_its_layout() {
     let out = one(vec![struct_of("Point", vec![field("x", "u32"), field("y", "f64")])]);
     assert!(out.contains("x: number;"), "got: {out}");
-    assert!(!out.contains("Shape"), "got: {out}");
-    assert!(!out.contains("@comline/runtime"), "got: {out}");
+    assert!(out.contains("export const PointLayout: Layout = { struct: [[\"x\", \"u32\"], [\"y\", \"f64\"]] };"), "got: {out}");
+    // Only the type: the runtime isn't loaded for it.
+    assert!(out.contains("import type { Layout } from \"@comline/runtime\";"), "got: {out}");
 }
 
 /// Only the fields that hold a `bigint` are listed, however deep it is.
 #[test]
-fn a_shape_follows_arrays_and_named_types() {
-    let out = one(vec![
-        struct_of("Leaf", vec![field("id", "s64"), field("label", "string")]),
-        struct_of("Plain", vec![field("n", "u32")]),
-        struct_of(
-            "Tree",
-            vec![
-                field("leaves", "Leaf[]"),
-                field("plain", "Plain"),
-                field("big", "u128[4]"),
-                // Recursive: the function form is what makes this load.
-                field("children", "Tree[]"),
-            ],
-        ),
-    ]);
-    assert!(out.contains("export const Leaf: Shape = { fields: { id: \"bigint\" } };"), "got: {out}");
-    assert!(!out.contains("export const Plain"), "got: {out}");
+fn a_layout_follows_arrays_options_and_named_types() {
+    let mut tree = struct_of(
+        "Tree",
+        vec![
+            field("leaves", "Leaf[]"),
+            field("big", "u128[4]"),
+            // Recursive: the function form is what makes this load.
+            field("children", "Tree[]"),
+        ],
+    );
+    if let FrozenUnit::Struct { fields, .. } = &mut tree {
+        if let FrozenUnit::Field { optional, .. } = &mut fields[0] {
+            *optional = true;
+        }
+    }
+    let out = one(vec![struct_of("Leaf", vec![field("id", "s64"), field("label", "string")]), tree]);
+    assert!(
+        out.contains("export const LeafLayout: Layout = { struct: [[\"id\", \"s64\"], [\"label\", \"string\"]] };"),
+        "got: {out}"
+    );
     assert!(
         out.contains(
-            "export const Tree: Shape = { fields: { leaves: { array: () => Leaf }, \
-             big: { array: \"bigint\" }, children: { array: () => Tree } } };"
+            "export const TreeLayout: Layout = { struct: [[\"leaves\", { option: { array: () => LeafLayout } }], \
+             [\"big\", { fixed: \"u128\", length: 4 }], [\"children\", { array: () => TreeLayout }]] };"
         ),
         "got: {out}"
     );
@@ -209,7 +215,7 @@ fn a_shape_follows_arrays_and_named_types() {
 
 /// A union's members are told apart by kind, so each member is described.
 #[test]
-fn a_union_with_a_bigint_names_every_member() {
+fn a_union_lists_every_member() {
     let mut s = struct_of("Holder", vec![]);
     if let FrozenUnit::Struct { fields, .. } = &mut s {
         fields.push(FrozenUnit::Field {
@@ -224,7 +230,7 @@ fn a_union_with_a_bigint_names_every_member() {
     }
     let out = one(vec![s]);
     assert!(
-        out.contains("export const Holder: Shape = { fields: { value: { union: [\"string\", \"bigint\", \"boolean\"] } } };"),
+        out.contains("export const HolderLayout: Layout = { struct: [[\"value\", { union: [\"string\", \"u64\", \"bool\"] }]] };"),
         "got: {out}"
     );
 }
@@ -232,23 +238,17 @@ fn a_union_with_a_bigint_names_every_member() {
 /// The client decodes a result, and an error's data, with their shapes;
 /// the dispatcher decodes params with theirs.
 #[test]
-fn decoding_passes_each_shape() {
-    let mut units = chat_units();
-    if let FrozenUnit::Error { fields, .. } = &mut units[1] {
-        fields.push(field("retry_after", "u64"));
-    }
-    if let FrozenUnit::Protocol { functions, .. } = &mut units[2] {
-        if let FrozenUnit::Function { arguments, .. } = &mut functions[1] {
-            arguments[0].ty = TypeRef::Primitive(PrimitiveType::U64);
-        }
-    }
-    let out = one(units);
-    assert!(out.contains("export const ChatHistoryParams: Shape = { fields: { limit: \"bigint\" } };"), "got: {out}");
-    assert!(out.contains("codec.decode<ChatHistoryParams>(params, ChatHistoryParams)"), "got: {out}");
-    assert!(out.contains("codec.decode<ChatSendParams>(params);"), "got: {out}");
-    assert!(out.contains("decode<Message>(env.ok, Message)"), "got: {out}");
-    assert!(out.contains("decode<Message[]>(env.ok, { array: () => Message })"), "got: {out}");
-    assert!(out.contains("decode<Rejected>(env.err.body, Rejected)"), "got: {out}");
+fn every_call_passes_its_layout() {
+    let out = one(chat_units());
+    assert!(out.contains("codec.decode<ChatHistoryParams>(params, ChatHistoryParamsLayout)"), "got: {out}");
+    assert!(out.contains("codec.encode((await this.impl.send(p)) ?? null, MessageLayout)"), "got: {out}");
+    assert!(out.contains("codec.encode(null, \"unit\")"), "got: {out}");
+    assert!(out.contains("call({ id: 0, name: \"send\" }, params, { layout: ChatSendParamsLayout })"), "got: {out}");
+    assert!(out.contains("call({ id: 2, name: \"wipe\" }, null, { layout: \"unit\" })"), "got: {out}");
+    assert!(out.contains("notify({ id: 3, name: \"note\" }, params, { layout: ChatNoteParamsLayout })"), "got: {out}");
+    assert!(out.contains("decode<Message>(env.ok, MessageLayout)"), "got: {out}");
+    assert!(out.contains("decode<Message[]>(env.ok, { array: MessageLayout })"), "got: {out}");
+    assert!(out.contains("decode<Rejected>(env.err.body, RejectedLayout)"), "got: {out}");
 }
 
 #[test]
@@ -297,7 +297,12 @@ fn chat_units() -> Vec<FrozenUnit> {
         FrozenUnit::Protocol {
             docstring: "Chat".into(),
             name: "Chat".into(),
-            parameters: vec![],
+            // The lockstep `Client` / `Server`, which `datagram@1` keeps now
+            // that a connection is the default.
+            parameters: vec![FrozenUnit::Property {
+                name: "framing".into(),
+                value: ConfigValue::Str("datagram".into()),
+            }],
             functions: vec![
                 function(
                     "send",
@@ -349,56 +354,56 @@ fn protocol_emits_the_rpc_shape() {
         "export const CHAT_CALLS = [\"send\", \"history\", \"wipe\", \"note\"] as const;"
     ));
     assert!(out.contains("export class ChatDispatcher implements Dispatch {"));
-    assert!(out.contains("if (e instanceof RejectedError) { reply.err(RejectedError.ordinal, codec.encode(e.data)); return; }"));
+    assert!(out.contains("if (e instanceof RejectedError) { reply.err(RejectedError.ordinal, codec.encode(e.data, RejectedLayout)); return; }"));
     assert!(out.contains("await this.impl.note(p);")); // one-way: no reply
 
-    // client + serve helper, both wired to the datagram framing by default
+    // client + serve helper, on `datagram@1` and the package's `Format`
+    // unless told otherwise
+    assert!(out.contains("export const Format: Codec = new PackedCodec();"));
     assert!(out.contains("export class ChatClient {"));
-    assert!(out.contains("framing: Framing = new DatagramFraming()"));
+    assert!(out.contains("codec: Codec = Format, framing: Framing = new DatagramFraming()"));
     assert!(out.contains("case RejectedError.ordinal:"));
-    assert!(out.contains("await this.client.notify({ id: 3, name: \"note\" }, params);"));
+    assert!(out.contains("await this.client.notify({ id: 3, name: \"note\" }, params, { layout: ChatNoteParamsLayout });"));
     assert!(out.contains(
-        "export function serveChat(impl: Chat, transport: Transport, codec: Codec, framing: Framing = new DatagramFraming()): Promise<void> {"
+        "export function serveChat(impl: Chat, transport: Transport, codec: Codec = Format, framing: Framing = new DatagramFraming()): Promise<void> {"
     ));
 }
 
 #[test]
 fn framing_annotation_and_package_default_pick_jsonrpc() {
-    // @framing = "jsonrpc" on the protocol
+    // @framing = "jsonrpc" on the protocol (core writes the package's
+    // `wire.framing` the same way)
     let mut units = chat_units();
     if let FrozenUnit::Protocol { parameters, .. } = &mut units[2] {
-        parameters.push(FrozenUnit::Property {
+        parameters[0] = FrozenUnit::Property {
             name: "framing".into(),
             value: ConfigValue::Str("jsonrpc".into()),
-        });
+        };
     }
     let out = one(units);
     assert!(out.contains("    JsonRpcFraming,"));
     assert!(out.contains("framing: Framing = new JsonRpcFraming()"));
     assert!(!out.contains("new DatagramFraming()"));
+    // JSON-RPC carries JSON, whatever the package's format.
+    assert!(out.contains("codec: Codec = new JsonCodec()"), "{out}");
+    assert!(!out.contains("Format"), "{out}");
 
-    // …or the package default reaches an unannotated protocol
-    let schemas = vec![("account".to_string(), chat_units())];
-    let req = GenRequest {
-        default_framing: Some("jsonrpc".to_string()),
-        ..code_req(&schemas)
-    };
-    let out = generate_typescript(&req).unwrap().remove(0).contents;
-    assert!(out.contains("framing: Framing = new JsonRpcFraming()"));
 }
 
 #[test]
-fn an_unknown_package_default_framing_is_an_error_not_datagram() {
+fn an_unknown_wire_format_is_an_error() {
     let schemas = vec![("account".to_string(), chat_units())];
-    let req = GenRequest {
-        default_framing: Some("jsonrcp".to_string()),
-        ..code_req(&schemas)
-    };
+    let req = GenRequest { wire_format: "packed".into(), ..code_req(&schemas) };
     let error = generate_typescript(&req).unwrap_err();
-    assert_eq!(
-        error.to_string(),
-        "unknown default framing `jsonrcp` - expected one of `jsonrpc`, `datagram`, `datagram@2`"
-    );
+    assert_eq!(error.to_string(), "unknown wire format `packed` - expected `packed@1`, `json@1` or `msgpack@1`");
+}
+
+#[test]
+fn msgpack_is_refused_until_the_runtime_has_a_codec() {
+    let schemas = vec![("account".to_string(), chat_units())];
+    let req = GenRequest { wire_format: "msgpack@1".into(), ..code_req(&schemas) };
+    let error = generate_typescript(&req).unwrap_err().to_string();
+    assert!(error.contains("no MessagePack codec"), "{error}");
 }
 
 #[test]
@@ -412,7 +417,9 @@ fn a_schema_without_a_protocol_has_no_ir_hash_or_runtime_import() {
         span: (0, 0),
     }]);
     assert!(!out.contains("IR_HASH"));
-    assert!(!out.contains("@comline/runtime"));
+    // Only its `Layout`'s type, which loads nothing.
+    assert!(out.contains("import type { Layout } from \"@comline/runtime\";\n"), "{out}");
+    assert_eq!(out.matches("import").count(), 1, "{out}");
 }
 
 /// The generated `Chat` client / dispatcher, kept in
@@ -774,7 +781,7 @@ fn an_unused_use_emits_no_import() {
     ];
     let out = code_file(&schemas, "none");
     assert!(
-        !out.contains("import"),
+        !out.contains("http") && !out.contains("HttpMethod"),
         "nothing is referenced, so nothing is imported: {out}"
     );
 }
@@ -791,7 +798,7 @@ fn a_reference_to_a_schema_the_package_does_not_carry_stays_bare() {
         ],
     )];
     let out = code_file(&schemas, "none");
-    assert!(!out.contains("import type"), "got: {out}");
+    assert!(!out.contains("elsewhere"), "got: {out}");
     assert!(out.contains("thing: Thing;"), "got: {out}");
 }
 
@@ -1216,20 +1223,21 @@ fn wide_across_schemas() -> Vec<(String, Vec<FrozenUnit>)> {
 /// A shape from another schema is a value, so its name can't come in through
 /// `import type`; a name used only as a type still does.
 #[test]
-fn a_shape_from_another_schema_is_imported_as_a_value() {
+fn a_layout_from_another_schema_is_imported_as_a_value() {
     let schemas = wide_across_schemas();
     let out = code_file(&schemas, "events");
-    assert!(out.contains("import { Stamp } from \"./ids.js\";"), "got: {out}");
-    assert!(out.contains("import type { Tag } from \"./ids.js\";"), "got: {out}");
+    assert!(out.contains("import { StampLayout, TagLayout } from \"./ids.js\";"), "got: {out}");
+    assert!(out.contains("import type { Stamp, Tag } from \"./ids.js\";"), "got: {out}");
     assert!(
-        out.contains("export const Event: Shape = { fields: { stamp: () => Stamp } };"),
+        out.contains("export const EventLayout: Layout = { struct: [[\"stamp\", () => StampLayout], [\"tag\", () => TagLayout]] };"),
         "got: {out}"
     );
 }
 
-/// A package of plain data needs the runtime once a type has a `Shape`.
+/// A package of plain data names the runtime only in an erased
+/// `import type { Layout }`: an optional peer, not a dependency.
 #[test]
-fn lib_mode_declares_the_runtime_dep_for_a_shape() {
+fn lib_mode_makes_the_runtime_an_optional_peer_for_layouts() {
     let schemas = wide_across_schemas();
     let files = generate_typescript(&lib_req(&schemas)).unwrap();
     let pkg = &files
@@ -1237,7 +1245,12 @@ fn lib_mode_declares_the_runtime_dep_for_a_shape() {
         .find(|f| f.path.to_str().unwrap() == "package.json")
         .unwrap()
         .contents;
-    assert!(pkg.contains("\"@comline/runtime\""), "got: {pkg}");
+    assert!(!pkg.contains("\"dependencies\""), "got: {pkg}");
+    assert!(
+        pkg.contains("\"peerDependencies\": {\n    \"@comline/runtime\": \"^0.1.0\",\n"),
+        "got: {pkg}"
+    );
+    assert!(pkg.contains("\"@comline/runtime\": { \"optional\": true },"), "got: {pkg}");
 }
 
 #[test]
@@ -1257,6 +1270,29 @@ fn handshake_none_passes_no_handshake_and_documents_what_is_given_up() {
         functions: vec![function("ping", vec![], Some(TypeRef::Primitive(PrimitiveType::U32)), vec![])],
         span: (0, 0),
     }]);
+    // The lockstep `Client` / `Server` it was written against; on a connection
+    // see `the_package_connection_runs_its_handshake`.
+    let out = {
+        let _ = out;
+        let mut units = vec![FrozenUnit::Protocol {
+            docstring: String::new(),
+            parameters: vec![
+                FrozenUnit::Property { name: "handshake".into(), value: ConfigValue::Str("none".into()) },
+                FrozenUnit::Property {
+                    name: "unverified".into(),
+                    value: ConfigValue::Str("the 2009 gateway".into()),
+                },
+                FrozenUnit::Unverified(vec![Guarantee::SchemaAgreement, Guarantee::EncodingAgreement]),
+            ],
+            name: "Gate".into(),
+            functions: vec![function("ping", vec![], Some(TypeRef::Primitive(PrimitiveType::U32)), vec![])],
+            span: (0, 0),
+        }];
+        if let FrozenUnit::Protocol { parameters, .. } = &mut units[0] {
+            parameters.push(FrozenUnit::Property { name: "framing".into(), value: ConfigValue::Str("datagram".into()) });
+        }
+        one(units)
+    };
 
     assert!(out.contains("    NoHandshake,\n"), "{out}");
     assert!(out.contains("await Client.connect(transport, codec, IR_HASH, framing, new NoHandshake())"));
@@ -1419,4 +1455,68 @@ fn generated_jsonrpc_link_matches_the_runtime_test_fixture() {
         "generated link drifted from runtime/test/generated/link_jsonrpc.ts — \
          re-bless with TS_BLESS=1 cargo test -p comline-codegen-typescript"
     );
+}
+
+/// A package of protocols across schemas, none naming a framing: on one
+/// connection by default, served through the package's `Services`.
+const GAME: &str = "protocol Account {\n    function login(name: string) -> u32;\n}\n\n\
+                    protocol Player {\n    function level(id: u32) -> u64;\n}\n";
+const ITEMS: &str = "struct Item {\n    name: string\n    count: u8\n}\n\n\
+                     protocol Inventory {\n    function items(id: u32) -> Item[];\n}\n\n\
+                     @provider = Client\nprotocol Events {\n    function changed(count: u8);\n}\n";
+
+fn game_schemas() -> Vec<(String, Vec<FrozenUnit>)> {
+    use comline_core::schema::ir::compiler::interpreter::incremental::IncrementalInterpreter;
+    use comline_core::schema::ir::compiler::Compile;
+    vec![
+        ("game".to_string(), IncrementalInterpreter::from_source(GAME)),
+        ("items".to_string(), IncrementalInterpreter::from_source(ITEMS)),
+    ]
+}
+
+#[test]
+fn the_package_connection_gets_services_and_serve() {
+    let schemas = game_schemas();
+    let files = generate_typescript(&code_req(&schemas)).unwrap();
+    let module = &files.iter().find(|f| f.path.to_str() == Some("connection.ts")).unwrap().contents;
+    for expected in [
+        "import * as ns_game from \"./game.js\";",
+        "export const Format: Codec = new PackedCodec();",
+        "export interface Services {\n    account: ns_game.Account;\n    player: ns_game.Player;\n    inventory: ns_items.Inventory;\n}",
+        "export interface ClientServices {\n    events: ns_items.Events;\n}",
+        "    new ns_items.InventoryDispatcher(services.inventory).provideOn(conn);",
+        "export async function serve(transport: Transport, services: Services): Promise<void> {",
+        "const conn = await Connection.connect(transport, Format, CONNECTION_IR_HASH);",
+    ] {
+        assert!(module.contains(expected), "missing `{expected}` in:\n{module}");
+    }
+
+    // In `lib` mode it's beside the schemas, its names at the root.
+    let files = generate_typescript(&lib_req(&schemas)).unwrap();
+    let index = &files.iter().find(|f| f.path.to_str() == Some("src/index.ts")).unwrap().contents;
+    assert!(index.ends_with("export * from \"./connection.js\";\n"), "{index}");
+    assert!(files.iter().any(|f| f.path.to_str() == Some("src/connection.ts")));
+}
+
+/// The package's `serve` and `connect`, kept in
+/// `runtime/test/generated/services/` so the Node job type-checks and runs
+/// them over `packed@1`. Regenerate with `TS_BLESS=1`.
+#[test]
+fn generated_services_match_the_runtime_test_fixture() {
+    let schemas = game_schemas();
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../runtime/test/generated/services");
+    for file in generate_typescript(&code_req(&schemas)).unwrap() {
+        let path = std::path::Path::new(dir).join(&file.path);
+        if std::env::var_os("TS_BLESS").is_some() {
+            std::fs::create_dir_all(dir).unwrap();
+            std::fs::write(&path, &file.contents).unwrap();
+            continue;
+        }
+        let committed = std::fs::read_to_string(&path).unwrap_or_default();
+        assert_eq!(
+            file.contents, committed,
+            "generated services drifted from {} — re-bless with TS_BLESS=1 cargo test -p comline-codegen-typescript",
+            path.display()
+        );
+    }
 }

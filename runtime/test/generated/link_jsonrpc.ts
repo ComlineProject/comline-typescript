@@ -8,6 +8,7 @@ import {
     type Connection,
     type Dispatch,
     type Kind,
+    type Layout,
     type Peer,
     type Reply,
 } from "@comline/runtime";
@@ -23,6 +24,8 @@ export const CONNECTION_IR_HASH = 0xb4520b20f67b5ccbn;
 export interface ChatSendParams {
     text: string;
 }
+
+export const ChatSendParamsLayout: Layout = { struct: [["text", "string"]] };
 
 export interface Chat {
     send(peer: Peer, params: ChatSendParams): Promise<bigint>;
@@ -55,8 +58,8 @@ export class ChatDispatcher implements Dispatch {
         switch (resolveKind(call, CHAT_CALLS)) {
             case 0: {
                 try {
-                    const p = codec.decode<ChatSendParams>(params);
-                    reply.ok(codec.encode((await this.impl.send(peer, p)) ?? null));
+                    const p = codec.decode<ChatSendParams>(params, ChatSendParamsLayout);
+                    reply.ok(codec.encode((await this.impl.send(peer, p)) ?? null, "u64"));
                 } catch {
                     reply.fault();
                 }
@@ -64,7 +67,7 @@ export class ChatDispatcher implements Dispatch {
             }
             case 1: {
                 try {
-                    reply.ok(codec.encode((await this.impl.count(peer)) ?? null));
+                    reply.ok(codec.encode((await this.impl.count(peer)) ?? null, "u64"));
                 } catch {
                     reply.fault();
                 }
@@ -75,7 +78,7 @@ export class ChatDispatcher implements Dispatch {
         }
     }
 
-    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with `Connection.accept(transport, codec, CONNECTION_IR_HASH, new JsonRpcConnectionFraming())`. */
+    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with `Connection.accept(transport, new JsonCodec(), CONNECTION_IR_HASH, new JsonRpcConnectionFraming())`, or let the package's `serve` / `connect` do it. */
     provideOn(conn: Connection): void {
         conn.provide(ChatDispatcher.PROTOCOL, this);
     }
@@ -93,15 +96,15 @@ export class ChatSender {
     }
 
     async send(params: ChatSendParams): Promise<bigint> {
-        const env = await this.peer.call(ChatSender.PROTOCOL, { id: 0, name: "send" }, params);
-        if ("ok" in env) return this.peer.codec.decode<bigint>(env.ok, "bigint");
+        const env = await this.peer.call(ChatSender.PROTOCOL, { id: 0, name: "send" }, params, { layout: ChatSendParamsLayout });
+        if ("ok" in env) return this.peer.codec.decode<bigint>(env.ok, "u64");
         if ("fault" in env) throw RuntimeError.provider();
         throw RuntimeError.remote(env.err.id);
     }
 
     async count(): Promise<bigint> {
-        const env = await this.peer.call(ChatSender.PROTOCOL, { id: 1, name: "count" }, null);
-        if ("ok" in env) return this.peer.codec.decode<bigint>(env.ok, "bigint");
+        const env = await this.peer.call(ChatSender.PROTOCOL, { id: 1, name: "count" }, null, { layout: "unit" });
+        if ("ok" in env) return this.peer.codec.decode<bigint>(env.ok, "u64");
         if ("fault" in env) throw RuntimeError.provider();
         throw RuntimeError.remote(env.err.id);
     }
@@ -110,6 +113,8 @@ export class ChatSender {
 export interface EventsMessageParams {
     text: string;
 }
+
+export const EventsMessageParamsLayout: Layout = { struct: [["text", "string"]] };
 
 export interface Events {
     message(peer: Peer, params: EventsMessageParams): Promise<boolean>;
@@ -142,8 +147,8 @@ export class EventsDispatcher implements Dispatch {
         switch (resolveKind(call, EVENTS_CALLS)) {
             case 0: {
                 try {
-                    const p = codec.decode<EventsMessageParams>(params);
-                    reply.ok(codec.encode((await this.impl.message(peer, p)) ?? null));
+                    const p = codec.decode<EventsMessageParams>(params, EventsMessageParamsLayout);
+                    reply.ok(codec.encode((await this.impl.message(peer, p)) ?? null, "bool"));
                 } catch {
                     reply.fault();
                 }
@@ -162,7 +167,7 @@ export class EventsDispatcher implements Dispatch {
         }
     }
 
-    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with `Connection.accept(transport, codec, CONNECTION_IR_HASH, new JsonRpcConnectionFraming())`. */
+    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with `Connection.connect(transport, new JsonCodec(), CONNECTION_IR_HASH, new JsonRpcConnectionFraming())`, or let the package's `serve` / `connect` do it. */
     provideOn(conn: Connection): void {
         conn.provide(EventsDispatcher.PROTOCOL, this);
     }
@@ -180,14 +185,14 @@ export class EventsSender {
     }
 
     async message(params: EventsMessageParams): Promise<boolean> {
-        const env = await this.peer.call(EventsSender.PROTOCOL, { id: 0, name: "link.Events/message" }, params);
-        if ("ok" in env) return this.peer.codec.decode<boolean>(env.ok);
+        const env = await this.peer.call(EventsSender.PROTOCOL, { id: 0, name: "link.Events/message" }, params, { layout: EventsMessageParamsLayout });
+        if ("ok" in env) return this.peer.codec.decode<boolean>(env.ok, "bool");
         if ("fault" in env) throw RuntimeError.provider();
         throw RuntimeError.remote(env.err.id);
     }
 
     async ping(): Promise<void> {
-        await this.peer.notify(EventsSender.PROTOCOL, { id: 1, name: "link.Events/ping" }, null);
+        await this.peer.notify(EventsSender.PROTOCOL, { id: 1, name: "link.Events/ping" }, null, { layout: "unit" });
     }
 }
 

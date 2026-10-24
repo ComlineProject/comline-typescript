@@ -105,11 +105,11 @@ export class Connection implements Peer {
     return this.callFrom(protocol, call, params, options, false);
   }
 
-  async notify(protocol: number, call: Call, params: unknown): Promise<void> {
+  async notify(protocol: number, call: Call, params: unknown, options?: CallOptions): Promise<void> {
     if (!this.open) throw RuntimeError.transport();
     const requestId = this.nextId++;
     await this.transport.send(
-      this.framing.encodeRequest(protocol, call, requestId, this.codec.encode(params), true),
+      this.framing.encodeRequest(protocol, call, requestId, this.codec.encode(params, options?.layout), true),
     );
   }
 
@@ -138,7 +138,7 @@ export class Connection implements Peer {
     if (fromHandler) this.handlersWaiting++;
     try {
       await this.transport.send(
-        this.framing.encodeRequest(protocol, call, requestId, this.codec.encode(params)),
+        this.framing.encodeRequest(protocol, call, requestId, this.codec.encode(params, options?.layout)),
       );
       return await (timedOut ? Promise.race([reply, timedOut]) : reply);
     } finally {
@@ -255,7 +255,7 @@ export class Connection implements Peer {
         this.drain();
         return made;
       },
-      notify: (protocol, call, params) => this.notify(protocol, call, params),
+      notify: (protocol, call, params, options) => this.notify(protocol, call, params, options),
     };
   }
 }
