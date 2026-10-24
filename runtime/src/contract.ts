@@ -9,6 +9,7 @@
  */
 
 import type { Shape } from "./json.js";
+import type { Layout } from "./packed.js";
 
 /** Every way a call can fail below the application layer. */
 export type RuntimeErrorKind =
@@ -153,12 +154,18 @@ export type CallError<E> = { readonly app: E } | { readonly runtime: RuntimeErro
  */
 export interface Codec {
   readonly name: string;
-  encode(value: unknown): Uint8Array;
+  /**
+   * `layout`, from generated code, is the value's type. A self-describing
+   * format (JSON) ignores it; a positional one (`packed@1`) needs it.
+   */
+  encode(value: unknown, layout?: Layout): Uint8Array;
   /**
    * `shape`, from generated code, says where the value holds integers too
-   * wide for `number`; without one, every number is a `number`.
+   * wide for `number`; without one, every number is a `number`. A
+   * {@link Layout} says that and the rest of the type, which a positional
+   * format needs.
    */
-  decode<T>(bytes: Uint8Array, shape?: Shape): T;
+  decode<T>(bytes: Uint8Array, shape?: Shape | Layout): T;
 }
 
 /**

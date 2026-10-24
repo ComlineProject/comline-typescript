@@ -26,6 +26,14 @@
       "bytes": "2096d428c0c44c62"
     },
     {
+      "id": "name-hash/packed@1",
+      "op": "name_hash",
+      "input": {
+        "name": "packed@1"
+      },
+      "bytes": "e6960a0685106336"
+    },
+    {
       "id": "name-hash/datagram@1",
       "op": "name_hash",
       "input": {

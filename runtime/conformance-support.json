@@ -13,6 +13,7 @@
       "tracking": "comline-typescript#57",
       "failing": ["format-json/decode-unknown-variant", "format-json/decode-wider-integer-overflow"]
     },
-    "format-msgpack": { "state": "unsupported", "note": "only JSON ships" }
+    "format-msgpack": { "state": "unsupported", "note": "JSON and packed@1 ship" },
+    "format-packed": { "state": "supported" }
   }
 }

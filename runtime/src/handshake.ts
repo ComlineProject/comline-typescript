@@ -34,6 +34,8 @@ export const FRAMING_DATAGRAM2 = "datagram@2";
 export const FRAMING_JSONRPC = "jsonrpc@1";
 /** Name of the JSON wire format ({@link JsonCodec}). */
 export const FORMAT_JSON = "json@1";
+/** Name of the packed wire format (`PackedCodec`): fixed-width fields back to back. */
+export const FORMAT_PACKED = "packed@1";
 
 /** Name of Comline's own handshake ({@link ComlineHandshake}). */
 export const HANDSHAKE_COMLINE = "comline@1";

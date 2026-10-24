@@ -24,12 +24,14 @@ import {
   Datagram2Framing,
   FRAMING_DATAGRAM2,
   FORMAT_JSON,
+  FORMAT_PACKED,
   FRAMING_DATAGRAM,
   FRAMING_JSONRPC,
   HandshakeFrame,
   JsonCodec,
   JsonRpcConnectionFraming,
   JsonRpcFraming,
+  PackedCodec,
   call,
   decodeEnvelope,
   encodeEnvelopeErr,
@@ -39,6 +41,7 @@ import {
   type DecodedRequest,
   type Envelope,
   type Framing,
+  type Layout,
 } from "../src/index.js";
 import { jsonEqual, parseJson } from "../src/json.js";
 
@@ -134,10 +137,12 @@ function toJs(value: Json): unknown {
     case "i8":
     case "i16":
     case "i32":
+    case "f32":
     case "f64":
     case "string":
       return inner;
     case "array":
+    case "tuple":
       return (inner as Json[]).map(toJs);
     case "option":
       return inner === null ? undefined : toJs(inner);
@@ -152,7 +157,56 @@ function toJs(value: Json): unknown {
   }
 }
 
+/**
+ * The {@link Layout} generated code would declare for a vector's typed value.
+ * An empty array or an absent optional says nothing of its element, which
+ * takes no bytes then anyway; an enum's variants other than the one written
+ * are placeholders, the index being what's on the wire.
+ */
+function layoutOf(value: Json): Layout {
+  const [[kind, inner]] = Object.entries(value as { [key: string]: Json }) as [[string, Json]];
+  switch (kind) {
+    case "bool":
+    case "u8":
+    case "u16":
+    case "u32":
+    case "u64":
+    case "f32":
+    case "f64":
+    case "string":
+      return kind;
+    case "i8":
+    case "i16":
+    case "i32":
+    case "i64":
+      return `s${kind.slice(1)}` as Layout;
+    case "array": {
+      const [first] = inner as Json[];
+      return { array: first === undefined ? "u8" : layoutOf(first) };
+    }
+    case "tuple": {
+      const items = inner as Json[];
+      return { fixed: items.length === 0 ? "u8" : layoutOf(items[0]!), length: items.length };
+    }
+    case "option":
+      return { option: inner === null ? "u8" : layoutOf(inner) };
+    case "struct": {
+      const { fields } = inner as { fields: [string, Json][] };
+      return { struct: fields.map(([name, v]) => [name, layoutOf(v)] as const) };
+    }
+    case "unit_variant": {
+      const { index, variant } = inner as { index: number; variant: string };
+      const variants = Array.from({ length: index + 1 }, (_, i) => `#${i}`);
+      variants[index] = variant;
+      return { enum: variants };
+    }
+    default:
+      throw new Error(`unknown value kind \`${kind}\``);
+  }
+}
+
 function encodeValue(format: string, value: Json): Uint8Array {
+  if (format === FORMAT_PACKED) return new PackedCodec().encode(toJs(value), layoutOf(value));
   if (format !== FORMAT_JSON) throw new NotImplemented(`format \`${format}\``);
   return new JsonCodec().encode(toJs(value));
 }
@@ -261,6 +315,7 @@ function encode(c: Case): Uint8Array {
 
 /** A reader type, as a `decode` case describes it. */
 type Type =
+  | "bool"
   | "u32"
   | "i32"
   | "string"
@@ -275,6 +330,7 @@ type Type =
  * comes through.
  */
 function fromJs(type: Type, v: unknown): Json {
+  if (type === "bool") return { bool: v as boolean };
   if (type === "u32" || type === "i32") return { [type]: v as number };
   if (type === "string") return { string: v as string };
   if ("option" in type) return { option: v === undefined || v === null ? null : fromJs(type.option, v) };
@@ -295,6 +351,17 @@ function fromJs(type: Type, v: unknown): Json {
       variant,
     },
   };
+}
+
+/** A reader type as the {@link Layout} generated code declares for it. */
+function layoutOfType(type: Type): Layout {
+  if (type === "i32") return "s32";
+  if (typeof type === "string") return type;
+  if ("option" in type) return { option: layoutOfType(type.option) };
+  if ("struct" in type) {
+    return { struct: type.struct.fields.map(([name, t]) => [name, layoutOfType(t)] as const) };
+  }
+  return { enum: type.enum.variants };
 }
 
 /** The input `bytes` decode to, or `undefined` when the runtime refuses them. */
@@ -392,8 +459,16 @@ function decode(c: Case, bytes: Uint8Array): unknown {
       };
     }
     case "decode": {
-      if (i.format !== FORMAT_JSON) throw new NotImplemented(`format \`${i.format as string}\``);
       let parsed: unknown;
+      if (i.format === FORMAT_PACKED) {
+        try {
+          parsed = new PackedCodec().decode(bytes, layoutOfType(i.type as Type));
+        } catch {
+          return undefined;
+        }
+        return { format: i.format, type: i.type, value: fromJs(i.type as Type, parsed) };
+      }
+      if (i.format !== FORMAT_JSON) throw new NotImplemented(`format \`${i.format as string}\``);
       try {
         parsed = new JsonCodec().decode(bytes);
       } catch {
