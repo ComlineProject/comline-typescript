@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import type { Call, Codec, Envelope, Framing } from "./contract.js";
+import type { Call, CallOptions, Codec, Envelope, Framing } from "./contract.js";
 import { RuntimeError } from "./contract.js";
 import { ComlineHandshake, type Handshake } from "./handshake.js";
 import type { Transport } from "./transport.js";
@@ -55,10 +55,10 @@ export class Client {
   }
 
   /** Make `call` with `params`, block for the response, return its {@link Envelope}. */
-  async call(call: Call, params: unknown): Promise<Envelope> {
+  async call(call: Call, params: unknown, options?: CallOptions): Promise<Envelope> {
     const requestId = this.nextId++;
     await this.transport.send(
-      this.framing.encodeRequest(call, requestId, this.codec.encode(params)),
+      this.framing.encodeRequest(call, requestId, this.codec.encode(params, options?.layout)),
     );
     const res = this.framing.decodeResponse(await this.transport.recv());
     if (!res) throw RuntimeError.framing();
@@ -67,10 +67,10 @@ export class Client {
   }
 
   /** Fire-and-forget: send the call, expect no response (a one-way function). */
-  async notify(call: Call, params: unknown): Promise<void> {
+  async notify(call: Call, params: unknown, options?: CallOptions): Promise<void> {
     const requestId = this.nextId++;
     await this.transport.send(
-      this.framing.encodeRequest(call, requestId, this.codec.encode(params)),
+      this.framing.encodeRequest(call, requestId, this.codec.encode(params, options?.layout)),
     );
   }
 }

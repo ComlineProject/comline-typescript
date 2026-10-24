@@ -65,7 +65,7 @@ fn main() -> eyre::Result<()> {
         // The one generator this repo registers, so the version it registers
         // under is the one `@comline/std`'s own manifest states.
         lang_version: comline_codegen_typescript::LANG_VERSION.to_string(),
-        default_framing: None,
+        wire_format: "packed@1".into(),
         // `@comline/std` *is* std, generated as an ordinary standalone
         // package - `external_std` only matters to a consumer referencing
         // std, not to std's own generation.

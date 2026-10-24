@@ -89,6 +89,9 @@ with the fixtures that prove each claim, is in
 | no handshake <br><sub>`handshake-none`</sub> | ✅ supported |
 | connections <br><sub>`connections`</sub> | ✅ supported |
 | `async` <br><sub>`async`</sub> | ⚪ ignored: handlers and senders always return Promises: the output is async either way |
+| the `packed@1` format <br><sub>`format-packed`</sub> | ✅ supported |
+| the `json@1` format <br><sub>`format-json`</sub> | ✅ supported |
+| the `msgpack@1` format <br><sub>`format-msgpack`</sub> | ❌ unsupported: `@comline/runtime` has no MessagePack codec yet |
 
 <!-- features:end -->
 

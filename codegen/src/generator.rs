@@ -36,7 +36,7 @@
 
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 
 use comline_core::schema::ir::frozen::types::{Literal, PrimitiveType, TypeRef};
@@ -50,7 +50,7 @@ use eyre::Result;
 use comline_codegen::connections;
 use comline_codegen::collisions::{self, Derived};
 use comline_codegen::modules::{NamespaceTree, TreeLayout};
-use comline_codegen::naming::{pascal, screaming_snake};
+use comline_codegen::naming::{camel, pascal, screaming_snake};
 use comline_codegen::stdlib::{self, is_std_namespace};
 use comline_codegen::symbols::{error_names, SymbolTable, UseTracker};
 use comline_codegen::{GenRequest, GeneratedFile, Mode, PackageMeta};
@@ -77,26 +77,17 @@ pub fn generate_typescript(req: &GenRequest) -> Result<Vec<GeneratedFile>> {
     // named, before a single file is produced.
     comline_codegen::features::refuse_unsupported("typescript", req, crate::SUPPORT)?;
 
-    let default_framing = req.default_framing.as_deref();
-    // A name `framing_for` doesn't know would fall through to datagram below,
-    // and the mismatch would only surface as a refused handshake. `@framing`
-    // is checked by core; the package default arrives unchecked from the
-    // caller, so it's checked here.
-    if let Some(name) = default_framing {
-        if framing_for(name).is_none() {
-            return Err(eyre::eyre!(
-                "unknown default framing `{name}` - expected one of {}",
-                comline_core::schema::idl::annotations::value_spellings("framing")
-                    .iter()
-                    .map(|n| format!("`{n}`"))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ));
-        }
-    }
+    // The package's codec. MessagePack has none yet, which the support table
+    // has already refused, so only a name nobody knows gets here.
+    let codec = codec_class(&req.wire_format).ok_or_else(|| {
+        eyre::eyre!(
+            "unknown wire format `{}` - expected `packed@1`, `json@1` or `msgpack@1`",
+            req.wire_format
+        )
+    })?;
     // JSON-RPC protocols sharing a connection whose bare method names one
     // side couldn't tell apart.
-    connections::check(req.schemas, default_framing)?;
+    connections::check(req.schemas)?;
     let external_std = req.external_std;
 
     // With `external_std`, std's schemas aren't this package's to emit - it
@@ -124,15 +115,23 @@ pub fn generate_typescript(req: &GenRequest) -> Result<Vec<GeneratedFile>> {
     // collision in the last one does not arrive after the earlier files are
     // already written.
     for (namespace, units) in emitted {
-        collisions::check(namespace, units, derived_names(units, req.schemas, default_framing))?;
+        collisions::check(namespace, units, derived_names(units, req.schemas))?;
+    }
+    // Loose files or a `src/` tree, the package module has a file of its own,
+    // which a schema of that name would be.
+    let package = package_module(&header, req, emitted, codec);
+    if package.is_some() && emitted.iter().any(|(namespace, _)| namespace == PACKAGE_MODULE) {
+        return Err(eyre::eyre!(
+            "a schema named `{PACKAGE_MODULE}` would be overwritten by the package's \
+             `{PACKAGE_MODULE}.ts` (its `Services` and `serve`) - rename the schema"
+        ));
     }
 
     match req.mode {
         Mode::Code => Ok(emitted
             .iter()
             .map(|(namespace, units)| {
-                let source =
-                    schema_source(&header, namespace, units, req.schemas, default_framing, external_std);
+                let source = schema_source(&header, namespace, units, req.schemas, codec, external_std);
                 // `code` mode has no manifest to add the dependency to, so
                 // the file says what it needs - the same courtesy the Rust
                 // generator extends for `Cargo.toml`.
@@ -149,6 +148,10 @@ pub fn generate_typescript(req: &GenRequest) -> Result<Vec<GeneratedFile>> {
                     contents,
                 }
             })
+            .chain(package.map(|contents| GeneratedFile {
+                path: PathBuf::from(format!("{PACKAGE_MODULE}.ts")),
+                contents,
+            }))
             .collect()),
 
         Mode::Lib => {
@@ -158,18 +161,39 @@ pub fn generate_typescript(req: &GenRequest) -> Result<Vec<GeneratedFile>> {
             // the ones in this tree: a reference resolves against all of
             // them, including an external `std` this package emits no file
             // for.
-            let sources = tree.emit("src", &TsLayout, &|namespace, units| {
-                schema_source(&header, namespace, units, req.schemas, default_framing, external_std)
+            let mut sources = tree.emit("src", &TsLayout, &|namespace, units| {
+                schema_source(&header, namespace, units, req.schemas, codec, external_std)
             });
-            // A protocol needs the runtime, and so does a type's `Shape`.
-            let needs_runtime = sources
-                .iter()
-                .any(|f| f.contents.contains(&format!("from \"{RUNTIME_PACKAGE}\"")));
+            // The package module beside the schemas, its names at the root.
+            if let Some(contents) = package {
+                let root = sources
+                    .iter_mut()
+                    .find(|f| f.path == std::path::Path::new("src/index.ts"))
+                    .ok_or_else(|| eyre::eyre!("no root barrel to export the package's `serve` from"))?;
+                root.contents.push_str(&format!("export * from \"./{PACKAGE_MODULE}.js\";\n"));
+                sources.push(GeneratedFile { path: PathBuf::from(format!("src/{PACKAGE_MODULE}.ts")), contents });
+            }
+            // A protocol needs the runtime. A type's `Layout` only names it
+            // in an erased `import type`, so types alone make it an optional
+            // peer: whoever encodes them has the runtime already.
+            let layouts_only = format!("import type {{ Layout }} from \"{RUNTIME_PACKAGE}\";");
+            let imports_runtime = |f: &GeneratedFile| {
+                f.contents
+                    .replace(&layouts_only, "")
+                    .contains(&format!("from \"{RUNTIME_PACKAGE}\""))
+            };
+            let runtime = if sources.iter().any(imports_runtime) {
+                RuntimeDep::Required
+            } else if sources.iter().any(|f| f.contents.contains(&layouts_only)) {
+                RuntimeDep::Peer
+            } else {
+                RuntimeDep::None
+            };
 
             let mut files = vec![
                 GeneratedFile {
                     path: PathBuf::from("package.json"),
-                    contents: package_json(&req.package, &req.lang_version, needs_runtime, std.needs_std_dependency),
+                    contents: package_json(&req.package, &req.lang_version, runtime, std.needs_std_dependency),
                 },
                 GeneratedFile {
                     path: PathBuf::from("tsconfig.json"),
@@ -245,13 +269,24 @@ const TSCONFIG: &str = "{\n\
     \x20 \"include\": [\"src/**/*.ts\"]\n\
     }\n";
 
+/// How a package depends on `@comline/runtime`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RuntimeDep {
+    /// Nothing names it.
+    None,
+    /// Only erased type imports name it: an optional peer dependency.
+    Peer,
+    /// Code imports it: a dependency.
+    Required,
+}
+
 /// The package's manifest. `typescript` is an optional peer dependency at the
 /// declared version and up: npm then warns a consumer whose compiler is older,
 /// and never refuses a newer one, which a ceiling would.
-fn package_json(pkg: &PackageMeta, lang_version: &str, needs_runtime: bool, needs_std_dep: bool) -> String {
+fn package_json(pkg: &PackageMeta, lang_version: &str, runtime: RuntimeDep, needs_std_dep: bool) -> String {
     let name = pkg.name.to_lowercase();
     let mut entries: Vec<String> = Vec::new();
-    if needs_runtime {
+    if runtime == RuntimeDep::Required {
         entries.push(format!("    \"{RUNTIME_PACKAGE}\": \"{RUNTIME_VERSION}\""));
     }
     if needs_std_dep {
@@ -261,6 +296,14 @@ fn package_json(pkg: &PackageMeta, lang_version: &str, needs_runtime: bool, need
         String::new()
     } else {
         format!("\n  \"dependencies\": {{\n{}\n  }},", entries.join(",\n"))
+    };
+    let (runtime_peer, runtime_peer_meta) = if runtime == RuntimeDep::Peer {
+        (
+            format!("    \"{RUNTIME_PACKAGE}\": \"{RUNTIME_VERSION}\",\n"),
+            format!("    \"{RUNTIME_PACKAGE}\": {{ \"optional\": true }},\n"),
+        )
+    } else {
+        (String::new(), String::new())
     };
     format!(
         "{{\n\
@@ -281,10 +324,10 @@ fn package_json(pkg: &PackageMeta, lang_version: &str, needs_runtime: bool, need
         \x20 \"scripts\": {{\n\
         \x20   \"build\": \"tsc\"\n\
         \x20 }},{dep}\n\
-        \x20 \"peerDependencies\": {{\n\
+        \x20 \"peerDependencies\": {{\n{runtime_peer}\
         \x20   \"typescript\": \">={lang_version}\"\n\
         \x20 }},\n\
-        \x20 \"peerDependenciesMeta\": {{\n\
+        \x20 \"peerDependenciesMeta\": {{\n{runtime_peer_meta}\
         \x20   \"typescript\": {{ \"optional\": true }}\n\
         \x20 }},\n\
         \x20 \"devDependencies\": {{\n\
@@ -309,23 +352,23 @@ fn package_json(pkg: &PackageMeta, lang_version: &str, needs_runtime: bool, need
 /// The shapes differ from Rust's - there is no per-function error type and no
 /// protocol-wide union here, but every `error` grows an `Error` suffix, which
 /// Rust has no equivalent of. Keep it in step with the emitters below.
-fn derived_names(
-    units: &[FrozenUnit],
-    schemas: &[(String, Vec<FrozenUnit>)],
-    default_framing: Option<&str>,
-) -> Vec<Derived> {
+fn derived_names(units: &[FrozenUnit], schemas: &[(String, Vec<FrozenUnit>)]) -> Vec<Derived> {
     let mut derived = Vec::new();
     let mut any_protocol = false;
     let mut any_connection = false;
+    let mut any_formatted = false;
 
     for unit in units {
         match unit {
             // `error Rude` -> `export class RudeError extends Error`, which a
             // declared `RudeError` of any kind would collide with.
-            FrozenUnit::Error { name, .. } => derived.push(Derived::new(
-                format!("{name}Error"),
-                format!("the thrown class for error `{name}`"),
-            )),
+            FrozenUnit::Error { name, .. } => {
+                derived.push(Derived::new(format!("{name}Error"), format!("the thrown class for error `{name}`")));
+                derived.push(Derived::new(format!("{name}Layout"), format!("error `{name}`'s layout")));
+            }
+            FrozenUnit::Struct { name, .. } | FrozenUnit::Enum { name, .. } | FrozenUnit::TypeAlias { name, .. } => {
+                derived.push(Derived::new(format!("{name}Layout"), format!("`{name}`'s layout")));
+            }
             FrozenUnit::Protocol {
                 name: proto,
                 functions,
@@ -333,11 +376,12 @@ fn derived_names(
                 ..
             } => {
                 any_protocol = true;
+                any_formatted |= connections::framing(parameters).name != FRAMING_JSONRPC;
                 derived.push(Derived::new(
                     format!("{proto}Dispatcher"),
                     format!("protocol `{proto}`'s dispatcher"),
                 ));
-                if connections::on_connection(schemas, parameters, default_framing) {
+                if connections::on_connection(schemas, parameters) {
                     any_connection = true;
                     derived.push(Derived::new(
                         format!("{proto}Sender"),
@@ -369,6 +413,10 @@ fn derived_names(
                             format!("{proto}{}Params", pascal(name)),
                             format!("protocol `{proto}`, function `{name}`'s params type"),
                         ));
+                        derived.push(Derived::new(
+                            format!("{proto}{}ParamsLayout", pascal(name)),
+                            format!("protocol `{proto}`, function `{name}`'s params layout"),
+                        ));
                     }
                 }
             }
@@ -382,6 +430,9 @@ fn derived_names(
     if any_connection {
         derived.push(Derived::new("CONNECTION_IR_HASH", "the package's connection hash constant"));
     }
+    if any_formatted {
+        derived.push(Derived::new("Format", "the package's codec"));
+    }
     derived
 }
 
@@ -390,21 +441,21 @@ fn schema_source(
     namespace: &str,
     units: &[FrozenUnit],
     schemas: &[(String, Vec<FrozenUnit>)],
-    default_framing: Option<&str>,
+    codec: &str,
     external_std: bool,
 ) -> String {
-    let types = TypeMapper::new(namespace, units, schemas, external_std);
+    let types = TypeMapper::new(units, schemas, external_std);
     let errors = error_names(units);
 
     // The declarations, built before the headers: rendering them is what
     // tells `types` which imported names this file actually refers to, and
-    // whether it declares a `Shape`.
+    // whether it declares a `Layout`.
     let mut decls = String::new();
     for unit in units {
         match unit {
             FrozenUnit::Struct { name, fields, .. } => {
                 decls.push_str(&interface(name, fields, &types));
-                decls.push_str(&fields_shape(name, fields, &types));
+                decls.push_str(&fields_layout(name, fields, &types));
             }
             FrozenUnit::Error {
                 name,
@@ -413,17 +464,23 @@ fn schema_source(
                 ..
             } => {
                 decls.push_str(&interface(name, fields, &types));
-                decls.push_str(&fields_shape(name, fields, &types));
+                decls.push_str(&fields_layout(name, fields, &types));
                 decls.push_str(&error_class(name, *ordinal));
             }
             FrozenUnit::Enum { name, variants, .. } => {
                 decls.push_str(&string_enum(name, variants));
+                let names: Vec<String> = variants
+                    .iter()
+                    .filter_map(|v| match v {
+                        FrozenUnit::EnumVariant(v, _) => Some(format!("\"{v}\"")),
+                        _ => None,
+                    })
+                    .collect();
+                decls.push_str(&types.layout_decl(name, &format!("{{ enum: [{}] }}", names.join(", "))));
             }
             FrozenUnit::TypeAlias { name, target, .. } => {
                 decls.push_str(&type_alias(name, target, &types));
-                if let Some(shape) = types.shape(target) {
-                    decls.push_str(&types.companion(name, &shape));
-                }
+                decls.push_str(&types.layout_decl(name, &types.layout(target, true)));
             }
             FrozenUnit::Constant {
                 docstring,
@@ -440,21 +497,22 @@ fn schema_source(
                 parameters,
                 ..
             } => {
-                let number = connections::on_connection(schemas, parameters, default_framing)
+                let number = connections::on_connection(schemas, parameters)
                     .then(|| connections::protocol_number(schemas, namespace, name))
                     .flatten();
                 // JSON-RPC names a call by its method: bare, or qualified by
                 // protocol.
-                let method_names = connections::framing(parameters, default_framing)
-                    .filter(|f| f.name == FRAMING_JSONRPC)
-                    .map(|f| f.method_names)
-                    .unwrap_or_default();
+                let framing = connections::framing(parameters);
+                let method_names = match framing.name {
+                    FRAMING_JSONRPC => framing.method_names,
+                    _ => Default::default(),
+                };
                 decls.push_str(&protocol(
                     name,
                     namespace,
                     functions,
                     parameters,
-                    &framing_choice(parameters, default_framing),
+                    &framing_choice(parameters),
                     method_names,
                     number,
                     &errors,
@@ -471,12 +529,12 @@ fn schema_source(
 
     // Which framings the protocols in this file reach for: the lockstep ones
     // only, since a protocol on a connection names none of its own.
-    let on_connection = |parameters: &[FrozenUnit]| connections::on_connection(schemas, parameters, default_framing);
+    let on_connection = |parameters: &[FrozenUnit]| connections::on_connection(schemas, parameters);
     let picks: Vec<FramingChoice> = units
         .iter()
         .filter_map(|u| match u {
             FrozenUnit::Protocol { parameters, .. } if !on_connection(parameters) => {
-                Some(framing_choice(parameters, default_framing))
+                Some(framing_choice(parameters))
             }
             _ => None,
         })
@@ -485,6 +543,11 @@ fn schema_source(
     let has_connection = units.iter().any(
         |u| matches!(u, FrozenUnit::Protocol { parameters, .. } if on_connection(parameters)),
     );
+    // Whether a protocol here encodes with the package's codec: JSON-RPC
+    // carries JSON whatever it says.
+    let formatted = units.iter().any(|u| {
+        matches!(u, FrozenUnit::Protocol { parameters, .. } if connections::framing(parameters).name != FRAMING_JSONRPC)
+    });
 
     // The runtime import and the `IR_HASH` const, which only depend on the
     // schema's own shape.
@@ -501,6 +564,13 @@ fn schema_source(
         }
         if picks.iter().any(|p| p.jsonrpc) {
             values.push("JsonRpcFraming");
+        }
+        // The package's codec, and JSON for a lockstep JSON-RPC protocol.
+        if formatted {
+            values.push(codec);
+        }
+        if codec != "JsonCodec" && picks.iter().any(|p| p.jsonrpc) {
+            values.push("JsonCodec");
         }
         let any_none = units.iter().any(|u| {
             matches!(u, FrozenUnit::Protocol { parameters, .. } if no_handshake(parameters) && !on_connection(parameters))
@@ -521,13 +591,13 @@ fn schema_source(
             type_names.push("Framing");
         }
         type_names.push("Kind");
+        if types.declares_layouts() {
+            type_names.push("Layout");
+        }
         if has_connection {
             type_names.push("Peer");
         }
         type_names.push("Reply");
-        if types.declares_shapes() {
-            type_names.push("Shape");
-        }
         if has_lockstep {
             type_names.push("Transport");
         }
@@ -550,8 +620,15 @@ fn schema_source(
                 connections::connection_ir_hash(schemas)
             ));
         }
-    } else if types.declares_shapes() {
-        runtime_import.push_str(&format!("import type {{ Shape }} from \"{RUNTIME_PACKAGE}\";\n\n"));
+        if formatted {
+            ir_hash.push_str(&format!(
+                "/** The package's wire format (`wire.format`): what this file's helpers\n\
+                 *  encode with, and what the peer has to speak too. */\n\
+                 export const Format: Codec = new {codec}();\n\n"
+            ));
+        }
+    } else if types.declares_layouts() {
+        runtime_import.push_str(&format!("import type {{ Layout }} from \"{RUNTIME_PACKAGE}\";\n\n"));
     }
 
     // External package first, then relative imports, then the file's own
@@ -638,37 +715,29 @@ fn interface(name: &str, fields: &[FrozenUnit], types: &TypeMapper) -> String {
     s
 }
 
-/// A shape as a decode call passes it: by then every module has loaded, so a
-/// named type's shape is passed as itself rather than through a function.
-fn at_call(shape: String) -> String {
-    match shape.strip_prefix("() => ") {
-        Some(name) if !name.contains(' ') => name.to_string(),
-        _ => shape,
-    }
-}
-
-/// The `Shape` of a struct, an `error` or a params interface, when any of its
-/// fields holds a `bigint`: just those fields. Empty otherwise.
-fn fields_shape(name: &str, fields: &[FrozenUnit], types: &TypeMapper) -> String {
-    let shapes: Vec<(&str, &TypeRef)> = fields
+/// The `Layout` of a struct, an `error` or a params interface: its fields,
+/// in declaration order, an optional one wrapped.
+fn fields_layout(name: &str, fields: &[FrozenUnit], types: &TypeMapper) -> String {
+    let members: Vec<(&str, &TypeRef, bool)> = fields
         .iter()
         .filter_map(|f| match f {
-            FrozenUnit::Field { name, ty, .. } => Some((name.as_str(), ty)),
+            FrozenUnit::Field { name, ty, optional, .. } => Some((name.as_str(), ty, *optional)),
             _ => None,
         })
         .collect();
-    args_shape(name, &shapes, types)
+    args_layout(name, &members, types)
 }
 
-fn args_shape(name: &str, fields: &[(&str, &TypeRef)], types: &TypeMapper) -> String {
+fn args_layout(name: &str, fields: &[(&str, &TypeRef, bool)], types: &TypeMapper) -> String {
     let members: Vec<String> = fields
         .iter()
-        .filter_map(|(field, ty)| Some(format!("{field}: {}", types.shape(ty)?)))
+        .map(|(field, ty, optional)| {
+            let layout = types.layout(ty, true);
+            let layout = if *optional { format!("{{ option: {layout} }}") } else { layout };
+            format!("[\"{field}\", {layout}]")
+        })
         .collect();
-    if members.is_empty() {
-        return String::new();
-    }
-    types.companion(name, &format!("{{ fields: {{ {} }} }}", members.join(", ")))
+    types.layout_decl(name, &format!("{{ struct: [{}] }}", members.join(", ")))
 }
 
 /// The throwable for an `error`: a provider `throw`s `new <Name>Error(data)`;
@@ -732,15 +801,21 @@ fn framing_for(name: &str) -> Option<FramingChoice> {
     }
 }
 
-/// A protocol's framing, most specific first: its own `@framing`, then the
-/// package `default_framing`, then datagram.
-fn framing_choice(parameters: &[FrozenUnit], default_framing: Option<&str>) -> FramingChoice {
-    connections::framing(parameters, default_framing)
-        .and_then(|f| framing_for(f.name))
-        .unwrap_or(FramingChoice {
-            ctor: "DatagramFraming",
-            jsonrpc: false,
-        })
+/// A protocol's framing: its `@framing`, which core has filled in from the
+/// package's `wire.framing`, else `datagram@2`.
+fn framing_choice(parameters: &[FrozenUnit]) -> FramingChoice {
+    framing_for(connections::framing(parameters).name).expect("core only lets known framings through")
+}
+
+/// The runtime's codec class for a wire format name. `None` for one it has
+/// no codec for.
+fn codec_class(name: &str) -> Option<&'static str> {
+    use comline_core::schema::idl::annotations::{FORMAT_JSON, FORMAT_PACKED};
+    match name {
+        FORMAT_PACKED => Some("PackedCodec"),
+        FORMAT_JSON => Some("JsonCodec"),
+        _ => None,
+    }
 }
 
 /// The text of a scalar `@key = value` annotation (a
@@ -756,6 +831,153 @@ fn annotation<'a>(parameters: &'a [FrozenUnit], key: &str) -> Option<Cow<'a, str
     })
 }
 
+/// What a lockstep protocol's helpers encode with when not told: JSON for a
+/// JSON-RPC protocol, the package's `Format` otherwise.
+fn default_codec(parameters: &[FrozenUnit]) -> &'static str {
+    if connections::framing(parameters).name == FRAMING_JSONRPC {
+        "new JsonCodec()"
+    } else {
+        "Format"
+    }
+}
+
+// ── the package's connection ───────────────────────────────────────────────
+
+/// The package module's file, beside the schemas: `connection.ts`.
+const PACKAGE_MODULE: &str = "connection";
+
+/// The package's one connection, set up in one call: `Services` (what the
+/// accepting side provides), `ClientServices` (what the dialling side does),
+/// and `accept` / `serve` / `connect`. `None` when no protocol this package
+/// emits is on a connection, or when its protocols don't share one
+/// (`comline generate` says why).
+fn package_module(header: &str, req: &GenRequest, emitted: &[(String, Vec<FrozenUnit>)], codec: &str) -> Option<String> {
+    let package = connections::package_connection(req.schemas).ok()??;
+    // Only what this package emits: an external `std` provides nothing here.
+    let emitted_only = |side: &[connections::Provided]| -> Vec<connections::Provided> {
+        side.iter().filter(|p| emitted.iter().any(|(ns, _)| *ns == p.namespace)).cloned().collect()
+    };
+    let (server, client) = (emitted_only(&package.server), emitted_only(&package.client));
+    if server.is_empty() && client.is_empty() {
+        return None;
+    }
+    let jsonrpc = package.framing == FRAMING_JSONRPC;
+    let unverified = package.handshake == HANDSHAKE_NONE;
+    // Each schema the module reaches, under a name of its own.
+    let module = |namespace: &str| format!("ns_{}", namespace.replace(['/', ':', '-', '.'], "_"));
+
+    let mut values = vec!["Connection"];
+    // JSON-RPC carries JSON whatever the package's format is.
+    let connection_codec = if jsonrpc { "new JsonCodec()" } else { "Format" };
+    if jsonrpc {
+        values.push("JsonCodec");
+        values.push("JsonRpcConnectionFraming");
+    }
+    if !values.contains(&codec) {
+        values.push(codec);
+    }
+    if unverified {
+        values.push("NoHandshake");
+    }
+    let mut s = format!("{header}\nimport {{\n");
+    for v in &values {
+        s.push_str(&format!("    {v},\n"));
+    }
+    s.push_str("    type Codec,\n    type Transport,\n} from \"@comline/runtime\";\n");
+    let namespaces: BTreeSet<&str> = server.iter().chain(&client).map(|p| p.namespace.as_str()).collect();
+    for namespace in &namespaces {
+        s.push_str(&format!(
+            "import * as {} from \"{}\";\n",
+            module(namespace),
+            relative_specifier(PACKAGE_MODULE, namespace)
+        ));
+    }
+    s.push_str(&format!(
+        "\n/** The package's wire format (`wire.format`). */\n\
+         export const Format: Codec = new {codec}();\n\n\
+         /** Digest of every schema in the package — what a connection's handshake\n\
+         *  checks, so both ends agree on each protocol's number. */\n\
+         export const CONNECTION_IR_HASH = {:#018x}n;\n\n",
+        connections::connection_ir_hash(req.schemas)
+    ));
+
+    let mut side = |ty: &str, provide: &str, provided: &[connections::Provided], who: &str| {
+        if provided.is_empty() {
+            return false;
+        }
+        s.push_str(&format!(
+            "/** What {who} provides: one field per protocol, so leaving one out doesn't type-check. */\n\
+             export interface {ty} {{\n"
+        ));
+        for p in provided {
+            s.push_str(&format!("    {}: {}.{};\n", camel(&p.field), module(&p.namespace), p.name));
+        }
+        s.push_str("}\n\n");
+        s.push_str(&format!(
+            "/** Provide every protocol in `services` on `conn`: the peer's calls to them come here. */\n\
+             export function {provide}(conn: Connection, services: {ty}): void {{\n"
+        ));
+        for p in provided {
+            s.push_str(&format!(
+                "    new {}.{}Dispatcher(services.{}).provideOn(conn);\n",
+                module(&p.namespace),
+                p.name,
+                camel(&p.field)
+            ));
+        }
+        s.push_str("}\n\n");
+        true
+    };
+    let has_server = side("Services", "provideServices", &server, "the accepting side");
+    let has_client = side("ClientServices", "provideClientServices", &client, "the dialling side");
+
+    let framing_arg = if jsonrpc { ", new JsonRpcConnectionFraming()" } else if unverified { ", undefined" } else { "" };
+    let handshake_arg = if unverified { ", new NoHandshake()" } else { "" };
+    let open = |side: &str| {
+        format!("await Connection.{side}(transport, {connection_codec}, CONNECTION_IR_HASH{framing_arg}{handshake_arg})")
+    };
+    let (server_params, server_provide) = if has_server {
+        ("transport: Transport, services: Services", "    provideServices(conn, services);\n")
+    } else {
+        ("transport: Transport", "")
+    };
+    let (client_params, client_provide) = if has_client {
+        ("transport: Transport, services: ClientServices", "    provideClientServices(conn, services);\n")
+    } else {
+        ("transport: Transport", "")
+    };
+    let pass = if has_server { "transport, services" } else { "transport" };
+    s.push_str(&format!(
+        "/**\n\
+         * Accept a connection over `transport`: run the handshake, then provide\n\
+         * every protocol in `services` on it. The connection comes back serving,\n\
+         * so the server can call the client through it.\n\
+         */\n\
+         export async function accept({server_params}): Promise<Connection> {{\n\
+         \x20   const conn = {};\n\
+         {server_provide}\
+         \x20   return conn;\n\
+         }}\n\n\
+         /** {{@link accept}}, then serve every call until the peer leaves. */\n\
+         export async function serve({server_params}): Promise<void> {{\n\
+         \x20   await (await accept({pass})).closed;\n\
+         }}\n\n\
+         /**\n\
+         * Dial over `transport`: run the handshake, then provide every protocol in\n\
+         * `services`, which the server calls. Call the server's protocols through\n\
+         * their senders.\n\
+         */\n\
+         export async function connect({client_params}): Promise<Connection> {{\n\
+         \x20   const conn = {};\n\
+         {client_provide}\
+         \x20   return conn;\n\
+         }}\n",
+        open("accept"),
+        open("connect"),
+    ));
+    Some(s)
+}
+
 // ── protocol ───────────────────────────────────────────────────────────────
 
 struct FnInfo {
@@ -765,16 +987,16 @@ struct FnInfo {
     method: String,
     params_ty: Option<String>,
     args: Vec<(String, String)>,
-    /// The params interface's `Shape`, when an argument holds a `bigint`.
-    params_shape: Option<String>,
+    /// The params interface's `Layout` declaration, beside the interface.
+    params_layout: Option<String>,
     /// The declared return type; `void` for a one-way call or a `()` return.
     ret: String,
-    /// The return type's `Shape`, when it holds a `bigint`.
-    ret_shape: Option<String>,
+    /// The return value's `Layout`, as a call passes it.
+    ret_layout: String,
     one_way: bool,
-    /// `(ordinal, error interface name, whether it has a Shape)` for each `!`.
-    /// Empty for a one-way call.
-    throws: Vec<(u16, String, bool)>,
+    /// `(ordinal, error interface name)` for each `!`. Empty for a one-way
+    /// call.
+    throws: Vec<(u16, String)>,
 }
 
 /// `@handshake = "none"` (or the package default, which core has already
@@ -835,16 +1057,16 @@ fn protocol(
                     .collect();
                 let params_ty =
                     (!args.is_empty()).then(|| format!("{proto}{}Params", pascal(name)));
-                let params_shape = params_ty.as_ref().map(|ty| {
-                    let fields: Vec<(&str, &TypeRef)> =
-                        arguments.iter().map(|a| (a.name.as_str(), &a.ty)).collect();
-                    args_shape(ty, &fields, types)
+                let params_layout = params_ty.as_ref().map(|ty| {
+                    let fields: Vec<(&str, &TypeRef, bool)> =
+                        arguments.iter().map(|a| (a.name.as_str(), &a.ty, false)).collect();
+                    args_layout(ty, &fields, types)
                 });
-                let (ret, ret_shape) = match _return {
-                    None | Some(TypeRef::Unit) => ("void".to_string(), None),
-                    Some(ty) => (types.ts_type(ty), types.shape(ty).map(at_call)),
+                let (ret, ret_layout) = match _return {
+                    None | Some(TypeRef::Unit) => ("void".to_string(), "\"unit\"".to_string()),
+                    Some(ty) => (types.ts_type(ty), types.layout(ty, false)),
                 };
-                let throws: Vec<(u16, String, bool)> = if one_way {
+                let throws: Vec<(u16, String)> = if one_way {
                     Vec::new()
                 } else {
                     throws
@@ -854,8 +1076,7 @@ fn protocol(
                                 .get(o)
                                 .cloned()
                                 .unwrap_or_else(|| format!("UnknownError{o}"));
-                            let shaped = types.shape(&TypeRef::Named(name.clone())).is_some();
-                            (*o, name, shaped)
+                            (*o, name)
                         })
                         .collect()
                 };
@@ -864,9 +1085,9 @@ fn protocol(
                     method: connections::method_name(namespace, proto, name, method_names),
                     params_ty,
                     args,
-                    params_shape: params_shape.filter(|decl| !decl.is_empty()),
+                    params_layout,
                     ret,
-                    ret_shape,
+                    ret_layout,
                     one_way,
                     throws,
                 })
@@ -885,8 +1106,8 @@ fn protocol(
                 s.push_str(&format!("    {name}: {tsty};\n"));
             }
             s.push_str("}\n\n");
-            if let Some(shape) = &f.params_shape {
-                s.push_str(shape);
+            if let Some(layout) = &f.params_layout {
+                s.push_str(layout);
             }
         }
     }
@@ -903,7 +1124,7 @@ fn protocol(
             let names = f
                 .throws
                 .iter()
-                .map(|(_, n, _)| format!("{n}Error"))
+                .map(|(_, n)| format!("{n}Error"))
                 .collect::<Vec<_>>()
                 .join(" | ");
             s.push_str(&format!("    /** @throws {{{names}}} */\n"));
@@ -977,10 +1198,7 @@ fn protocol(
         // Emitted *inside* the `try` below, so params that will not decode are
         // handled with the same arity awareness as a handler that throws.
         let decode_line = match &f.params_ty {
-            Some(ty) => {
-                let shape = if f.params_shape.is_some() { format!(", {ty}") } else { String::new() };
-                format!("                    const p = codec.decode<{ty}>(params{shape});\n")
-            }
+            Some(ty) => format!("                    const p = codec.decode<{ty}>(params, {ty}Layout);\n"),
             None => String::new(),
         };
         let call_arg = peer_arg
@@ -1014,13 +1232,13 @@ fn protocol(
             if f.ret == "void" {
                 s.push_str(&format!(
                     "                    await this.impl.{}({call_arg});\n\
-                    \x20                   reply.ok(codec.encode(null));\n",
+                    \x20                   reply.ok(codec.encode(null, \"unit\"));\n",
                     f.name
                 ));
             } else {
                 s.push_str(&format!(
-                    "                    reply.ok(codec.encode((await this.impl.{}({call_arg})) ?? null));\n",
-                    f.name
+                    "                    reply.ok(codec.encode((await this.impl.{}({call_arg})) ?? null, {}));\n",
+                    f.name, f.ret_layout
                 ));
             }
             // Only bind the exception when there is a declared error to test
@@ -1030,9 +1248,9 @@ fn protocol(
             } else {
                 s.push_str("                } catch (e) {\n");
             }
-            for (_, err, _) in &f.throws {
+            for (_, err) in &f.throws {
                 s.push_str(&format!(
-                    "                    if (e instanceof {err}Error) {{ reply.err({err}Error.ordinal, codec.encode(e.data)); return; }}\n"
+                    "                    if (e instanceof {err}Error) {{ reply.err({err}Error.ordinal, codec.encode(e.data, {err}Layout)); return; }}\n"
                 ));
             }
             s.push_str("                    reply.fault();\n");
@@ -1049,15 +1267,21 @@ fn protocol(
     );
     if number.is_some() {
         let open = match (framing.jsonrpc, no_handshake(parameters)) {
-            (false, true) => "`Connection.accept(transport, codec, CONNECTION_IR_HASH, framing, new NoHandshake())`",
-            (false, false) => "`Connection.accept(transport, codec, CONNECTION_IR_HASH)`",
+            (false, true) => "`Connection.accept(transport, Format, CONNECTION_IR_HASH, framing, new NoHandshake())`",
+            (false, false) => "`Connection.accept(transport, Format, CONNECTION_IR_HASH)`",
             (true, true) => {
-                "`Connection.accept(transport, codec, CONNECTION_IR_HASH, new JsonRpcConnectionFraming(), new NoHandshake())`"
+                "`Connection.accept(transport, new JsonCodec(), CONNECTION_IR_HASH, new JsonRpcConnectionFraming(), new NoHandshake())`"
             }
-            (true, false) => "`Connection.accept(transport, codec, CONNECTION_IR_HASH, new JsonRpcConnectionFraming())`",
+            (true, false) => "`Connection.accept(transport, new JsonCodec(), CONNECTION_IR_HASH, new JsonRpcConnectionFraming())`",
+        };
+        // The side that provides it opens: a client-provided protocol dials.
+        let open = if connections::Provider::of(parameters) == connections::Provider::Client {
+            open.replace("Connection.accept", "Connection.connect")
+        } else {
+            open.to_string()
         };
         s.push_str(&format!(
-            "\n    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with {open}. */\n\
+            "\n    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with {open}, or let the package's `serve` / `connect` do it. */\n\
             \x20   provideOn(conn: Connection): void {{\n\
             \x20       conn.provide({proto}Dispatcher.PROTOCOL, this);\n\
             \x20   }}\n"
@@ -1082,13 +1306,14 @@ fn protocol(
             ("peer", format!("{proto}Sender.PROTOCOL, "))
         }
         None => {
+            let codec = default_codec(parameters);
             s.push_str(&format!(
                 "export class {proto}Client {{\n\
                 \x20   private readonly client: Client;\n\n\
                 \x20   constructor(client: Client) {{\n\
                 \x20       this.client = client;\n\
                 \x20   }}\n\n\
-                \x20   static async connect(transport: Transport, codec: Codec, framing: Framing = new {ctor}()): Promise<{proto}Client> {{\n\
+                \x20   static async connect(transport: Transport, codec: Codec = {codec}, framing: Framing = new {ctor}()): Promise<{proto}Client> {{\n\
                 {handshake_note}\
                 \x20       return new {proto}Client(await Client.connect(transport, codec, IR_HASH, framing{handshake_arg}));\n\
                 \x20   }}\n",
@@ -1107,11 +1332,12 @@ fn protocol(
         } else {
             "null"
         };
+        let layout = f.params_ty.as_ref().map_or("\"unit\"".to_string(), |ty| format!("{ty}Layout"));
         s.push('\n');
         if f.one_way {
             s.push_str(&format!(
                 "    async {}({sig_params}): Promise<void> {{\n\
-                 \x20       await this.{field}.notify({call_prefix}{{ id: {i}, name: \"{}\" }}, {arg});\n\
+                 \x20       await this.{field}.notify({call_prefix}{{ id: {i}, name: \"{}\" }}, {arg}, {{ layout: {layout} }});\n\
                  \x20   }}\n",
                 f.name, f.method
             ));
@@ -1119,16 +1345,15 @@ fn protocol(
         }
         s.push_str(&format!(
             "    async {}({sig_params}): Promise<{}> {{\n\
-             \x20       const env = await this.{field}.call({call_prefix}{{ id: {i}, name: \"{}\" }}, {arg});\n",
+             \x20       const env = await this.{field}.call({call_prefix}{{ id: {i}, name: \"{}\" }}, {arg}, {{ layout: {layout} }});\n",
             f.name, f.ret, f.method
         ));
         if f.ret == "void" {
             s.push_str("        if (\"ok\" in env) return;\n");
         } else {
-            let shape = f.ret_shape.as_ref().map_or(String::new(), |s| format!(", {s}"));
             s.push_str(&format!(
-                "        if (\"ok\" in env) return this.{field}.codec.decode<{}>(env.ok{shape});\n",
-                f.ret
+                "        if (\"ok\" in env) return this.{field}.codec.decode<{}>(env.ok, {});\n",
+                f.ret, f.ret_layout
             ));
         }
         // A fault is not an `err`, so it has to be taken off the union before
@@ -1139,11 +1364,10 @@ fn protocol(
             s.push_str("        throw RuntimeError.remote(env.err.id);\n");
         } else {
             s.push_str("        switch (env.err.id) {\n");
-            for (_, err, shaped) in &f.throws {
-                let shape = if *shaped { format!(", {err}") } else { String::new() };
+            for (_, err) in &f.throws {
                 s.push_str(&format!(
                     "            case {err}Error.ordinal:\n\
-                     \x20               throw new {err}Error(this.{field}.codec.decode<{err}>(env.err.body{shape}));\n"
+                     \x20               throw new {err}Error(this.{field}.codec.decode<{err}>(env.err.body, {err}Layout));\n"
                 ));
             }
             s.push_str("            default:\n");
@@ -1157,11 +1381,12 @@ fn protocol(
     // 6. the serve helper, for the lockstep `Server`
     if number.is_none() {
         s.push_str(&format!(
-            "export function serve{proto}(impl: {proto}, transport: Transport, codec: Codec, framing: Framing = new {ctor}()): Promise<void> {{\n\
+            "export function serve{proto}(impl: {proto}, transport: Transport, codec: Codec = {codec}, framing: Framing = new {ctor}()): Promise<void> {{\n\
             {handshake_note}\
             \x20   return new Server(new {proto}Dispatcher(impl), codec, framing).serve(transport, IR_HASH{handshake_arg});\n\
             }}\n\n",
-            ctor = framing.ctor
+            ctor = framing.ctor,
+            codec = default_codec(parameters),
         ));
     }
 
@@ -1177,26 +1402,22 @@ fn protocol(
 /// Interior mutability rather than `&mut` threading: every caller
 /// (`interface`, `type_alias`, `protocol`) only ever reads, and the
 /// alternative is a `&mut` parameter on each of them for no gain.
-struct TypeMapper<'a> {
-    /// The schema being rendered.
-    namespace: String,
+struct TypeMapper {
     uses: UseTracker,
     /// Whether a std namespace resolves to `@comline/std` instead of a file
     /// in this package.
     external_std: bool,
-    wide: Wide<'a>,
-    /// Imported names used as values - a `Shape` - not only as types, so
-    /// their import can't be `import type`.
-    values: RefCell<BTreeSet<String>>,
-    /// Whether this file declares a `Shape`, and so imports the type.
-    shapes: Cell<bool>,
+    /// Imported names whose `<Name>Layout` value this file uses, so it's
+    /// imported beside the type.
+    layouts: RefCell<BTreeSet<String>>,
+    /// Whether this file declares a `Layout`, and so imports the type.
+    declares_layouts: Cell<bool>,
 }
 
-impl<'a> TypeMapper<'a> {
+impl TypeMapper {
     fn new(
-        namespace: &str,
         units: &[FrozenUnit],
-        schemas: &'a [(String, Vec<FrozenUnit>)],
+        schemas: &[(String, Vec<FrozenUnit>)],
         external_std: bool,
     ) -> Self {
         // With `external_std`, std is nameable even though no file is
@@ -1206,54 +1427,54 @@ impl<'a> TypeMapper<'a> {
             external_std && is_std_namespace(namespace)
         });
         Self {
-            namespace: namespace.to_string(),
             uses: UseTracker::new(table),
             external_std,
-            wide: Wide::new(schemas),
-            values: RefCell::new(BTreeSet::new()),
-            shapes: Cell::new(false),
+            layouts: RefCell::new(BTreeSet::new()),
+            declares_layouts: Cell::new(false),
         }
     }
 
-    /// The `Shape` expression `@comline/runtime`'s decoder needs for a value
-    /// of `ty`, or `None` when nothing in it is a `bigint` and a plain
-    /// `JSON.parse` reading is right.
+    /// The `Layout` of a value of `ty`: everything about it the bytes of a
+    /// positional format leave out, which `@comline/runtime`'s codecs read
+    /// (the JSON codec only for where a `bigint` goes).
     ///
-    /// A named type is referred to through a function, `() => Message`, so
-    /// the reference resolves when decoding rather than when the module
-    /// loads: types can name each other in any order, across files, and
-    /// recursively.
-    fn shape(&self, ty: &TypeRef) -> Option<String> {
+    /// `lazy` refers to a named type through a function, `() => MessageLayout`,
+    /// so the reference resolves when encoding rather than when the module
+    /// loads: declarations can name each other in any order, across files,
+    /// and recursively. At a call every module has loaded, so it's direct.
+    fn layout(&self, ty: &TypeRef, lazy: bool) -> String {
         match ty {
-            TypeRef::Primitive(p) if is_wide(*p) => Some("\"bigint\"".to_string()),
-            TypeRef::Named(name) if self.wide.holds_bigint(&self.namespace, ty) => {
+            TypeRef::Primitive(p) => format!("\"{}\"", primitive_layout(*p)),
+            TypeRef::Named(name) => {
                 self.uses.resolve(name);
-                self.values.borrow_mut().insert(name.clone());
-                Some(format!("() => {name}"))
+                self.layouts.borrow_mut().insert(name.clone());
+                if lazy {
+                    format!("() => {name}Layout")
+                } else {
+                    format!("{name}Layout")
+                }
             }
-            TypeRef::Array { element, .. } => {
-                Some(format!("{{ array: {} }}", self.shape(element)?))
+            TypeRef::Array { element, length: None } => format!("{{ array: {} }}", self.layout(element, lazy)),
+            TypeRef::Array { element, length: Some(n) } => {
+                format!("{{ fixed: {}, length: {n} }}", self.layout(element, lazy))
             }
-            TypeRef::Union(members) if self.wide.holds_bigint(&self.namespace, ty) => {
-                let members = members
-                    .iter()
-                    .map(|m| self.shape(m).unwrap_or_else(|| self.wide.kind(&self.namespace, m)))
-                    .collect::<Vec<_>>();
-                Some(format!("{{ union: [{}] }}", members.join(", ")))
-            }
-            _ => None,
+            TypeRef::Union(members) => format!(
+                "{{ union: [{}] }}",
+                members.iter().map(|m| self.layout(m, lazy)).collect::<Vec<_>>().join(", ")
+            ),
+            TypeRef::Unit => "\"unit\"".to_string(),
         }
     }
 
-    /// `export const NAME: Shape = SHAPE;`, the value companion of the type
-    /// `name` declares.
-    fn companion(&self, name: &str, shape: &str) -> String {
-        self.shapes.set(true);
-        format!("export const {name}: Shape = {shape};\n\n")
+    /// `export const NAMELayout: Layout = LAYOUT;`, beside the type `name`
+    /// declares.
+    fn layout_decl(&self, name: &str, layout: &str) -> String {
+        self.declares_layouts.set(true);
+        format!("export const {name}Layout: Layout = {layout};\n\n")
     }
 
-    fn declares_shapes(&self) -> bool {
-        self.shapes.get()
+    fn declares_layouts(&self) -> bool {
+        self.declares_layouts.get()
     }
 
     /// `import type` lines for every imported name the rendering reached for,
@@ -1270,31 +1491,26 @@ impl<'a> TypeMapper<'a> {
                 .insert((origin.declared, bound));
         }
 
-        let values = self.values.borrow();
+        let layouts = self.layouts.borrow();
         let mut s = String::new();
         for (module, names) in by_module {
             let specifier = self.specifier_for(namespace, &module);
-            // A name whose `Shape` is used is imported as a value, which
-            // brings its type along; the rest stay `import type`.
-            let (as_values, as_types): (Vec<_>, Vec<_>) =
-                names.iter().partition(|(_, bound)| values.contains(bound));
-            for (keyword, names) in [("import", as_values), ("import type", as_types)] {
-                if names.is_empty() {
-                    continue;
+            let named = |(declared, bound): &(String, String), suffix: &str| {
+                if declared == bound {
+                    format!("{declared}{suffix}")
+                } else {
+                    format!("{declared}{suffix} as {bound}{suffix}")
                 }
-                let list = names
-                    .iter()
-                    .map(|(declared, bound)| {
-                        if declared == bound {
-                            declared.clone()
-                        } else {
-                            format!("{declared} as {bound}")
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                s.push_str(&format!("{keyword} {{ {list} }} from \"{specifier}\";\n"));
+            };
+            // A name whose `Layout` is used imports that as a value; every
+            // name is imported as a type.
+            let values: Vec<String> =
+                names.iter().filter(|(_, bound)| layouts.contains(bound)).map(|n| named(n, "Layout")).collect();
+            let types: Vec<String> = names.iter().map(|n| named(n, "")).collect();
+            if !values.is_empty() {
+                s.push_str(&format!("import {{ {} }} from \"{specifier}\";\n", values.join(", ")));
             }
+            s.push_str(&format!("import type {{ {} }} from \"{specifier}\";\n", types.join(", ")));
         }
         if !s.is_empty() {
             s.push('\n');
@@ -1343,97 +1559,6 @@ impl<'a> TypeMapper<'a> {
     }
 }
 
-/// Which types hold a `bigint` somewhere inside, followed through every
-/// named type to its declaration, in whichever schema declares it.
-struct Wide<'a> {
-    schemas: &'a [(String, Vec<FrozenUnit>)],
-    /// Each schema's own name bindings: a type's fields are named in the
-    /// scope of the schema declaring it.
-    tables: HashMap<&'a str, SymbolTable>,
-}
-
-impl<'a> Wide<'a> {
-    fn new(schemas: &'a [(String, Vec<FrozenUnit>)]) -> Self {
-        let tables = schemas
-            .iter()
-            .map(|(namespace, units)| (namespace.as_str(), SymbolTable::new(units, schemas)))
-            .collect();
-        Self { schemas, tables }
-    }
-
-    /// The declaration `name` refers to in `namespace`, with the namespace
-    /// declaring it. `None` for a name the request doesn't carry.
-    fn declaration(&self, namespace: &str, name: &str) -> Option<(&'a str, &'a FrozenUnit)> {
-        let (home, declared) = match self.tables.get(namespace).and_then(|t| t.origin(name)) {
-            Some(origin) => (origin.namespace.clone(), origin.declared.clone()),
-            None => (namespace.to_string(), name.to_string()),
-        };
-        let (home, units) = self.schemas.iter().find(|(n, _)| *n == home)?;
-        let unit = units.iter().find(|u| match u {
-            FrozenUnit::Struct { name, .. }
-            | FrozenUnit::Error { name, .. }
-            | FrozenUnit::Enum { name, .. }
-            | FrozenUnit::TypeAlias { name, .. } => *name == declared,
-            _ => false,
-        })?;
-        Some((home.as_str(), unit))
-    }
-
-    fn holds_bigint(&self, namespace: &str, ty: &TypeRef) -> bool {
-        self.reaches(namespace, ty, &mut HashSet::new())
-    }
-
-    /// `seen` stops a recursive type; whatever is reachable from the root
-    /// is still visited once.
-    fn reaches(&self, namespace: &str, ty: &TypeRef, seen: &mut HashSet<(String, String)>) -> bool {
-        match ty {
-            TypeRef::Primitive(p) => is_wide(*p),
-            TypeRef::Array { element, .. } => self.reaches(namespace, element, seen),
-            TypeRef::Union(members) => members.iter().any(|m| self.reaches(namespace, m, seen)),
-            TypeRef::Unit => false,
-            TypeRef::Named(name) => {
-                let Some((home, unit)) = self.declaration(namespace, name) else {
-                    return false;
-                };
-                if !seen.insert((home.to_string(), name.clone())) {
-                    return false;
-                }
-                match unit {
-                    FrozenUnit::Struct { fields, .. } | FrozenUnit::Error { fields, .. } => {
-                        fields.iter().any(|f| match f {
-                            FrozenUnit::Field { ty, .. } => self.reaches(home, ty, seen),
-                            _ => false,
-                        })
-                    }
-                    FrozenUnit::TypeAlias { target, .. } => self.reaches(home, target, seen),
-                    _ => false,
-                }
-            }
-        }
-    }
-
-    /// The `Shape` of a union member holding no `bigint`: only its kind
-    /// matters, to tell it apart from the members that do.
-    fn kind(&self, namespace: &str, ty: &TypeRef) -> String {
-        match ty {
-            TypeRef::Primitive(PrimitiveType::Bool) => "\"boolean\"".into(),
-            TypeRef::Primitive(PrimitiveType::String) => "\"string\"".into(),
-            TypeRef::Primitive(_) => "\"number\"".into(),
-            TypeRef::Array { element, .. } => format!("{{ array: {} }}", self.kind(namespace, element)),
-            TypeRef::Union(members) => format!(
-                "{{ union: [{}] }}",
-                members.iter().map(|m| self.kind(namespace, m)).collect::<Vec<_>>().join(", ")
-            ),
-            TypeRef::Named(name) => match self.declaration(namespace, name) {
-                Some((home, FrozenUnit::TypeAlias { target, .. })) => self.kind(home, target),
-                Some((_, FrozenUnit::Enum { .. })) => "\"string\"".into(),
-                _ => "{ fields: {} }".into(),
-            },
-            TypeRef::Unit => "\"number\"".into(),
-        }
-    }
-}
-
 /// The namespace an `import type` specifier should point at, relative to the
 /// importing schema, as a module specifier NodeNext accepts (`.js`, and
 /// explicitly relative).
@@ -1466,6 +1591,26 @@ fn relative_specifier(from: &str, to: &str) -> String {
     s.push_str(&to_segments[shared..].join("/"));
     s.push_str(".js");
     s
+}
+
+/// A primitive's `Layout` name: the IDL's own (`s32`, not `i32`).
+fn primitive_layout(p: PrimitiveType) -> &'static str {
+    match p {
+        PrimitiveType::S8 => "s8",
+        PrimitiveType::S16 => "s16",
+        PrimitiveType::S32 => "s32",
+        PrimitiveType::S64 => "s64",
+        PrimitiveType::S128 => "s128",
+        PrimitiveType::U8 => "u8",
+        PrimitiveType::U16 => "u16",
+        PrimitiveType::U32 => "u32",
+        PrimitiveType::U64 => "u64",
+        PrimitiveType::U128 => "u128",
+        PrimitiveType::F32 => "f32",
+        PrimitiveType::F64 => "f64",
+        PrimitiveType::Bool => "bool",
+        PrimitiveType::String => "string",
+    }
 }
 
 /// The TypeScript type for an IDL primitive.

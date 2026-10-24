@@ -17,9 +17,11 @@
     "build": "tsc"
   },
   "peerDependencies": {
+    "@comline/runtime": "^0.1.0",
     "typescript": ">=5.0"
   },
   "peerDependenciesMeta": {
+    "@comline/runtime": { "optional": true },
     "typescript": { "optional": true }
   },
   "devDependencies": {

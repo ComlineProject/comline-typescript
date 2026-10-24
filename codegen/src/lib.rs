@@ -67,6 +67,9 @@ pub const SUPPORT: SupportTable = &[
         Feature::Async,
         Support::ignored("handlers and senders always return Promises: the output is async either way"),
     ),
+    (Feature::FormatPacked, Support::supported()),
+    (Feature::FormatJson, Support::supported()),
+    (Feature::FormatMsgPack, Support::unsupported("`@comline/runtime` has no MessagePack codec yet")),
 ];
 
 /// Contribute the TypeScript generator to a CLI's [`Registry`](comline_codegen::Registry),

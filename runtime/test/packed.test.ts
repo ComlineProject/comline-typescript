@@ -27,10 +27,13 @@ test("the proposal's example is nineteen bytes, and reads back", () => {
   assert.deepEqual(codec.decode(bytes, Player), player);
 });
 
-test("64-bit integers are bigints, at their edges", () => {
-  const layout: Layout = { struct: [["u", "u64"], ["s", "s64"]] };
-  const value = { u: (1n << 64n) - 1n, s: -(1n << 63n) };
+test("64- and 128-bit integers are bigints, at their edges", () => {
+  const layout: Layout = { struct: [["u", "u64"], ["s", "s64"], ["uu", "u128"], ["ss", "s128"]] };
+  const value = { u: (1n << 64n) - 1n, s: -(1n << 63n), uu: (1n << 128n) - 1n, ss: -(1n << 127n) };
   assert.deepEqual(codec.decode(codec.encode(value, layout), layout), value);
+  // Low half first, as the Rust runtime writes a `u128`.
+  assert.deepEqual([...codec.encode(1n, "u128")], [1, ...new Array(15).fill(0)]);
+  assert.deepEqual([...codec.encode(-2n, "s128")], [0xfe, ...new Array(15).fill(0xff)]);
 });
 
 test("a value its layout can't hold is refused, not wrapped", () => {
@@ -70,4 +73,24 @@ test("the JSON codec reads bigints where a layout says so", () => {
   const layout: Layout = { struct: [["big", "u64"], ["small", "u32"], ["xs", { array: "s64" }]] };
   const json = new TextEncoder().encode(`{"big":9007199254740993,"small":1,"xs":[-1]}`);
   assert.deepEqual(new JsonCodec().decode(json, layout), { big: 9007199254740993n, small: 1, xs: [-1n] });
+});
+
+test("a union writes the first member that holds the value, after its index", () => {
+  const layout: Layout = { union: ["u8", "string", "u64", { array: "u8" }] };
+  for (const [value, bytes] of [
+    [7, [0, 7]],
+    ["hi", [1, 2, 0x68, 0x69]],
+    [1n, [2, 1, 0, 0, 0, 0, 0, 0, 0]],
+    [[1, 2], [3, 2, 1, 2]],
+  ] as const) {
+    const encoded = codec.encode(value, layout);
+    assert.deepEqual([...encoded], bytes);
+    assert.deepEqual(codec.decode(encoded, layout), value);
+  }
+  // 300 is no `u8`, and nothing else is a number.
+  assert.throws(() => codec.encode(300, layout), RuntimeError);
+  assert.throws(() => codec.decode(new Uint8Array([4]), layout), RuntimeError);
+  // The JSON codec reads the union's `bigint` member exactly.
+  const json = new TextEncoder().encode("9007199254740993");
+  assert.equal(new JsonCodec().decode(json, { union: ["string", "u64"] }), 9007199254740993n);
 });

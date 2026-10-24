@@ -30,7 +30,7 @@ import type { Shape } from "./json.js";
 /**
  * Everything about a type the packed bytes leave out, as generated code
  * declares it. The value it describes is the one generated TypeScript holds:
- * a 64-bit integer a `bigint`, every narrower one and every float a
+ * a 64- or 128-bit integer a `bigint`, every narrower one and every float a
  * `number`, an absent optional `undefined`, an enum value its variant's name.
  *
  * - A scalar by name. Signed integers are `s`-prefixed, as in the IDL;
@@ -39,6 +39,8 @@ import type { Shape } from "./json.js";
  * - `{ option }`: an optional field.
  * - `{ struct }`: the fields, in declaration order.
  * - `{ enum }`: the variant names, in declaration order.
+ * - `{ union }`: the members, in declaration order. A value is written as
+ *   the first member that can hold it, after its index.
  * - A function: a named type's layout, looked up only when it's needed, so
  *   types can refer to each other in any order, and recursively.
  */
@@ -48,10 +50,12 @@ export type Layout =
   | "u16"
   | "u32"
   | "u64"
+  | "u128"
   | "s8"
   | "s16"
   | "s32"
   | "s64"
+  | "s128"
   | "f32"
   | "f64"
   | "string"
@@ -61,6 +65,7 @@ export type Layout =
   | { readonly option: Layout }
   | { readonly struct: readonly (readonly [name: string, layout: Layout])[] }
   | { readonly enum: readonly string[] }
+  | { readonly union: readonly Layout[] }
   | (() => Layout);
 
 type Resolved = Exclude<Layout, () => Layout>;
@@ -82,6 +87,9 @@ const INTEGERS = {
 type Integer = keyof typeof INTEGERS;
 
 const U64_MAX = (1n << 64n) - 1n;
+const U128_MAX = (1n << 128n) - 1n;
+const S128_MIN = -(1n << 127n);
+const S128_MAX = (1n << 127n) - 1n;
 const S64_MIN = -(1n << 63n);
 const S64_MAX = (1n << 63n) - 1n;
 
@@ -158,6 +166,14 @@ class Writer {
     this.view.setBigInt64(at, v, true);
   }
 
+  /** 128 bits, two's complement, low half first. */
+  u128(v: bigint): void {
+    const bits = BigInt.asUintN(128, v);
+    const at = this.reserve(16);
+    this.view.setBigUint64(at, BigInt.asUintN(64, bits), true);
+    this.view.setBigUint64(at + 8, bits >> 64n, true);
+  }
+
   f32(v: number): void {
     const at = this.reserve(4);
     this.view.setFloat32(at, v, true);
@@ -190,6 +206,13 @@ function write(w: Writer, layout: Layout, value: unknown): void {
         const v = value as bigint;
         if (l === "u64" ? v < 0n || v > U64_MAX : v < S64_MIN || v > S64_MAX) refuse();
         return l === "u64" ? w.u64(v) : w.s64(v);
+      }
+      case "u128":
+      case "s128": {
+        if (typeof value !== "bigint") refuse();
+        const v = value as bigint;
+        if (l === "u128" ? v < 0n || v > U128_MAX : v < S128_MIN || v > S128_MAX) refuse();
+        return w.u128(v);
       }
       case "f32":
       case "f64":
@@ -234,9 +257,52 @@ function write(w: Writer, layout: Layout, value: unknown): void {
     for (const [name, field] of l.struct) write(w, field, o[name]);
     return;
   }
+  if ("union" in l) {
+    const index = l.union.findIndex((member) => holds(member, value));
+    if (index < 0) refuse();
+    w.varint(index);
+    return write(w, l.union[index]!, value);
+  }
   const index = l.enum.indexOf(value as string);
   if (index < 0) refuse();
   w.varint(index);
+}
+
+/**
+ * Whether a value of `layout` can be `value`, by its JavaScript kind: what
+ * picks a union's member. A value two members could both be goes to the
+ * first.
+ */
+function holds(layout: Layout, value: unknown): boolean {
+  const l = resolve(layout);
+  if (typeof l === "string") {
+    switch (l) {
+      case "bool":
+        return typeof value === "boolean";
+      case "u64":
+      case "s64":
+      case "u128":
+      case "s128":
+        return typeof value === "bigint";
+      case "string":
+        return typeof value === "string";
+      case "unit":
+        return value === undefined || value === null;
+      case "f32":
+      case "f64":
+        return typeof value === "number";
+      default: {
+        const { min, max } = INTEGERS[l as Integer];
+        return Number.isInteger(value) && (value as number) >= min && (value as number) <= max;
+      }
+    }
+  }
+  if ("array" in l) return Array.isArray(value);
+  if ("fixed" in l) return Array.isArray(value) && value.length === l.length;
+  if ("option" in l) return value === undefined || value === null || holds(l.option, value);
+  if ("struct" in l) return typeof value === "object" && value !== null && !Array.isArray(value);
+  if ("union" in l) return l.union.some((member) => holds(member, value));
+  return typeof value === "string" && l.enum.includes(value);
 }
 
 /** A cursor over the bytes being decoded. */
@@ -320,6 +386,12 @@ class Reader {
     return this.view.getBigInt64(this.take(8), true);
   }
 
+  /** 128 bits, low half first, as unsigned. */
+  u128(): bigint {
+    const at = this.take(16);
+    return (this.view.getBigUint64(at + 8, true) << 64n) | this.view.getBigUint64(at, true);
+  }
+
   f32(): number {
     return this.view.getFloat32(this.take(4), true);
   }
@@ -349,6 +421,10 @@ function read(r: Reader, layout: Layout): unknown {
         return r.u64();
       case "s64":
         return r.s64();
+      case "u128":
+        return r.u128();
+      case "s128":
+        return BigInt.asIntN(128, r.u128());
       case "f32":
         return r.f32();
       case "f64":
@@ -375,6 +451,11 @@ function read(r: Reader, layout: Layout): unknown {
     return items;
   }
   if ("option" in l) return r.tag() ? read(r, l.option) : undefined;
+  if ("union" in l) {
+    const index = r.varint();
+    if (index >= BigInt(l.union.length)) refuse();
+    return read(r, l.union[Number(index)]!);
+  }
   if ("struct" in l) {
     // An absent optional is left out, as the JSON codec leaves it.
     // `fromEntries` defines own properties, so a `__proto__` field stays data.
@@ -397,6 +478,8 @@ export function jsonShape(s: Shape | Layout): Shape {
     switch (s) {
       case "u64":
       case "s64":
+      case "u128":
+      case "s128":
       case "bigint":
         return "bigint";
       case "bool":
@@ -415,6 +498,9 @@ export function jsonShape(s: Shape | Layout): Shape {
     return { fields: Object.fromEntries(s.struct.map(([name, f]) => [name, jsonShape(f)])) };
   }
   if ("enum" in s) return "string";
+  // A `Shape`'s union holds `Shape`s, a `Layout`'s `Layout`s: either way,
+  // each member maps on its own.
+  if ("union" in s) return { union: (s.union as readonly (Shape | Layout)[]).map(jsonShape) };
   return s;
 }
 

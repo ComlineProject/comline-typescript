@@ -53,7 +53,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm ci
+      # `@comline/runtime` is an optional peer of `@comline/std` (its types
+      # name `Layout`), and isn't on npm yet: link the sibling, built.
+      - run: npm ci && npm run build
+        working-directory: runtime
+      - run: npm ci && mkdir -p node_modules/@comline && ln -s ../../../runtime node_modules/@comline/runtime
       # Compiling `@comline/std` is what catches a generator change that
       # emits TypeScript which doesn't typecheck - in CI rather than in
       # someone's project.
@@ -74,5 +78,7 @@ jobs:
         working-directory: runtime
       - run: npx -y -p typescript@5.0.4 tsc -p tsconfig.generated.json
         working-directory: runtime
-      - run: npm ci && npx -y -p typescript@5.0.4 tsc --noEmit
+      - run: npm ci && mkdir -p node_modules/@comline && ln -s ../../../runtime node_modules/@comline/runtime
+        working-directory: std-extra
+      - run: npx -y -p typescript@5.0.4 tsc --noEmit
         working-directory: std-extra
