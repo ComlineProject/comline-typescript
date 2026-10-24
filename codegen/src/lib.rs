@@ -65,6 +65,9 @@ pub const SUPPORT: SupportTable = &[
         Support::partial("over `datagram@2`; JSON-RPC on a connection isn't supported yet")
             .tracked("runtime#19"),
     ),
+    // Handlers and senders return Promises whether or not `async` is asked
+    // for, so the output is the same either way.
+    (Feature::Async, Support::supported()),
 ];
 
 /// Contribute the TypeScript generator to a CLI's [`Registry`](comline_codegen::Registry),

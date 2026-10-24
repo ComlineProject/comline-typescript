@@ -15,6 +15,7 @@ fn code_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenRequest<'_> {
         default_framing: None,
         external_std: false,
         validate_on_decode: Default::default(),
+        async_api: false,
     }
 }
 
@@ -30,6 +31,7 @@ fn lib_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenRequest<'_> {
         default_framing: None,
         external_std: false,
         validate_on_decode: Default::default(),
+        async_api: false,
     }
 }
 
@@ -1310,6 +1312,17 @@ fn a_connection_protocol_gets_a_sender_and_peer_taking_handlers() {
     assert!(out.contains("export const CONNECTION_IR_HASH = "));
     assert!(!out.contains("ChatClient"), "no lockstep client for a connection protocol");
     assert!(!out.contains("serveChat"));
+}
+
+/// `async` asks for what TypeScript always generates: handlers and senders
+/// that return Promises. The output is the same with it or without.
+#[test]
+fn async_changes_nothing_in_typescript() {
+    let schemas = vec![("link".to_string(), link_units())];
+    let plain = generate_typescript(&code_req(&schemas)).unwrap();
+    let asynchronous = generate_typescript(&GenRequest { async_api: true, ..code_req(&schemas) }).unwrap();
+    assert_eq!(plain[0].contents, asynchronous[0].contents);
+    assert!(plain[0].contents.contains("Promise<"));
 }
 
 #[test]
