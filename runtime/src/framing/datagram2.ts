@@ -65,6 +65,7 @@ export class Datagram2Framing implements ConnectionFraming {
       return {
         kind: "request",
         protocol,
+        oneWay: false,
         request: {
           call: { id: view.getUint16(at, true) },
           requestId: view.getBigUint64(at + 2, true),

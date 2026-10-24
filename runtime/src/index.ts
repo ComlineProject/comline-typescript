@@ -63,7 +63,7 @@ export {
 
 export { DatagramFraming } from "./framing/datagram.js";
 export { Datagram2Framing } from "./framing/datagram2.js";
-export { JsonRpcFraming } from "./framing/jsonrpc.js";
+export { JsonRpcConnectionFraming, JsonRpcFraming } from "./framing/jsonrpc.js";
 
 export { type Transport, type InMemoryTransport, duplex } from "./transport.js";
 

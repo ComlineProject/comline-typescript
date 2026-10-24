@@ -47,7 +47,7 @@ export class Connection implements Peer {
 
   private readonly providers = new Map<number, Dispatch>();
   private readonly waiting = new Map<bigint, Waiting>();
-  private readonly queue: { protocol: number; request: DecodedRequest }[] = [];
+  private readonly queue: { protocol: number | undefined; request: DecodedRequest; oneWay: boolean }[] = [];
   private nextId = 0n;
   /** Handlers running now. */
   private running = 0;
@@ -109,7 +109,7 @@ export class Connection implements Peer {
     if (!this.open) throw RuntimeError.transport();
     const requestId = this.nextId++;
     await this.transport.send(
-      this.framing.encodeRequest(protocol, call, requestId, this.codec.encode(params)),
+      this.framing.encodeRequest(protocol, call, requestId, this.codec.encode(params), true),
     );
   }
 
@@ -165,7 +165,7 @@ export class Connection implements Peer {
         this.waiting.get(decoded.requestId)?.resolve(decoded.envelope);
         continue;
       }
-      this.queue.push({ protocol: decoded.protocol, request: decoded.request });
+      this.queue.push({ protocol: decoded.protocol, request: decoded.request, oneWay: decoded.oneWay });
       this.drain();
     }
     this.open = false;
@@ -178,17 +178,22 @@ export class Connection implements Peer {
     while (this.queue.length > 0 && (this.running === 0 || this.handlersWaiting >= this.running)) {
       const next = this.queue.shift()!;
       this.running++;
-      void this.serve(next.protocol, next.request).finally(() => {
+      void this.serve(next.protocol, next.request, next.oneWay).finally(() => {
         this.running--;
         this.drain();
       });
     }
   }
 
-  private async serve(protocol: number, request: DecodedRequest): Promise<void> {
+  private async serve(
+    protocol: number | undefined,
+    request: DecodedRequest,
+    oneWay: boolean,
+  ): Promise<void> {
     const reply = new Reply();
-    const provider = this.providers.get(protocol);
-    const index = provider && resolveKind(request.call, provider.calls());
+    const found = this.find(protocol, request);
+    const provider = found?.provider;
+    const index = found?.index;
     if (provider === undefined || index === undefined) {
       // A protocol or call this side doesn't have: the caller hears a fault.
       reply.fault();
@@ -205,7 +210,7 @@ export class Connection implements Peer {
     }
 
     const outcome = reply.outcome;
-    if (outcome.kind === "none" || !this.open) return;
+    if (oneWay || outcome.kind === "none" || !this.open) return;
     const envelope: Envelope =
       outcome.kind === "ok"
         ? { ok: reply.body }
@@ -213,10 +218,29 @@ export class Connection implements Peer {
           ? { err: { id: outcome.id, body: reply.body } }
           : { fault: true };
     try {
-      await this.transport.send(this.framing.encodeReply(protocol, request.requestId, envelope));
+      const number = found?.protocol ?? protocol ?? 0;
+      await this.transport.send(this.framing.encodeReply(number, request.requestId, envelope));
     } catch {
       // The transport closed; the read loop ends the connection.
     }
+  }
+
+  /**
+   * The provider a request is for and its call's index there: by protocol
+   * number, or, when the framing names only the call, the protocol that has a
+   * call by that name.
+   */
+  private find(
+    protocol: number | undefined,
+    request: DecodedRequest,
+  ): { protocol: number; provider: Dispatch; index: number } | undefined {
+    const numbers = protocol === undefined ? [...this.providers.keys()].sort((a, b) => a - b) : [protocol];
+    for (const number of numbers) {
+      const provider = this.providers.get(number);
+      const index = provider && resolveKind(request.call, provider.calls());
+      if (provider && index !== undefined) return { protocol: number, provider, index };
+    }
+    return undefined;
   }
 
   /** What a handler is given: this connection, with its calls counted as nested. */

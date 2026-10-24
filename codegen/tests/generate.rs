@@ -1325,26 +1325,62 @@ fn async_changes_nothing_in_typescript() {
     assert!(plain[0].contents.contains("Promise<"));
 }
 
+/// [`LINK`] over JSON-RPC: `Chat` names only its framing, and joins the
+/// connection because `Events`, which the client provides, is on one;
+/// `Events` qualifies its method names.
+const LINK_JSONRPC: &str = r#"
+@framing = "jsonrpc"
+protocol Chat {
+    function send(text: string) -> u64;
+    function count() -> u64;
+}
+
+@provider = Client
+@framing = { name = "jsonrpc", method_names = qualified }
+protocol Events {
+    function message(text: string) -> bool;
+    function ping();
+}
+"#;
+
+fn link_jsonrpc_units() -> Vec<FrozenUnit> {
+    use comline_core::schema::ir::compiler::interpreter::incremental::IncrementalInterpreter;
+    use comline_core::schema::ir::compiler::Compile;
+    IncrementalInterpreter::from_source(LINK_JSONRPC)
+}
+
 #[test]
-fn jsonrpc_on_a_connection_is_refused_for_now() {
-    let units = link_units()
-        .into_iter()
-        .map(|mut u| {
-            if let FrozenUnit::Protocol { parameters, .. } = &mut u {
-                for p in parameters.iter_mut() {
-                    if let FrozenUnit::Property { name, value } = p {
-                        if name == "framing" {
-                            *value = comline_core::schema::ir::frozen::unit::ConfigValue::Str("jsonrpc".into());
-                        }
-                    }
-                }
-            }
-            u
-        })
-        .collect();
-    let schemas = vec![("link".to_string(), units)];
-    let error = generate_typescript(&code_req(&schemas)).unwrap_err().to_string();
-    assert!(error.contains("JSON-RPC on a connection isn't supported yet"), "{error}");
+fn jsonrpc_on_a_connection_names_calls_by_method() {
+    let schemas = vec![("link".to_string(), link_jsonrpc_units())];
+    let out = generate_typescript(&code_req(&schemas)).unwrap().remove(0).contents;
+    assert!(out.contains(r#"export const CHAT_CALLS = ["send", "count"] as const;"#), "{out}");
+    assert!(out.contains(r#"export const EVENTS_CALLS = ["link.Events/message", "link.Events/ping"] as const;"#), "{out}");
+    assert!(out.contains(r#"name: "link.Events/message""#), "the sender calls the qualified method: {out}");
+    assert!(!out.contains("ChatClient"), "Chat is on the connection too");
+    assert!(out.contains("new JsonRpcConnectionFraming()"), "the dispatcher's doc says how to open it: {out}");
+}
+
+/// Two JSON-RPC protocols the server provides on one connection, both with
+/// a `send`: bare method names can't tell them apart.
+#[test]
+fn bare_jsonrpc_names_that_would_clash_on_a_connection_are_refused() {
+    use comline_core::schema::ir::compiler::interpreter::incremental::IncrementalInterpreter;
+    use comline_core::schema::ir::compiler::Compile;
+
+    let source = |admin_framing: &str| {
+        format!(
+            "@framing = \"jsonrpc\"\nprotocol Chat {{\n    function send(text: string) -> u64;\n}}\n\n\
+             @framing = {admin_framing}\nprotocol Admin {{\n    function send(text: string) -> u64;\n}}\n\n\
+             @provider = Client\n@framing = \"jsonrpc\"\nprotocol Events {{\n    function ping();\n}}\n"
+        )
+    };
+    let generate = |admin_framing: &str| {
+        let schemas = vec![("link".to_string(), IncrementalInterpreter::from_source(&source(admin_framing)))];
+        generate_typescript(&code_req(&schemas)).map(|_| ())
+    };
+    let err = generate("\"jsonrpc\"").unwrap_err().to_string();
+    assert!(err.contains("`link::Chat` and `link::Admin` both have a function `send`"), "{err}");
+    generate("{ name = \"jsonrpc\", method_names = qualified }").unwrap();
 }
 
 /// The generated connection protocols, kept in
@@ -1363,6 +1399,24 @@ fn generated_link_matches_the_runtime_test_fixture() {
     assert_eq!(
         generated, committed,
         "generated link drifted from runtime/test/generated/link.ts — \
+         re-bless with TS_BLESS=1 cargo test -p comline-codegen-typescript"
+    );
+}
+
+/// The same over JSON-RPC, in `runtime/test/generated/link_jsonrpc.ts`.
+#[test]
+fn generated_jsonrpc_link_matches_the_runtime_test_fixture() {
+    let schemas = vec![("link".to_string(), link_jsonrpc_units())];
+    let generated = generate_typescript(&code_req(&schemas)).unwrap().remove(0).contents;
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../runtime/test/generated/link_jsonrpc.ts");
+    if std::env::var_os("TS_BLESS").is_some() {
+        std::fs::write(path, &generated).unwrap();
+        return;
+    }
+    let committed = std::fs::read_to_string(path).unwrap_or_default();
+    assert_eq!(
+        generated, committed,
+        "generated link drifted from runtime/test/generated/link_jsonrpc.ts — \
          re-bless with TS_BLESS=1 cargo test -p comline-codegen-typescript"
     );
 }

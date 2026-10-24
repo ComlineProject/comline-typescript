@@ -86,7 +86,7 @@ with the fixtures that prove each claim, is in
 | `validate_on_decode` <br><sub>`validate-on-decode`</sub> | ⚪ ignored: no checks are generated to run on decode yet (core#96) |
 | JSON-RPC framing <br><sub>`framing-jsonrpc`</sub> | ✅ supported |
 | no handshake <br><sub>`handshake-none`</sub> | ✅ supported |
-| connections <br><sub>`connections`</sub> | 🟡 partial: over `datagram@2`; JSON-RPC on a connection isn't supported yet (runtime#19) |
+| connections <br><sub>`connections`</sub> | ✅ supported |
 | `async` <br><sub>`async`</sub> | ⚪ ignored: handlers and senders always return Promises: the output is async either way |
 
 <!-- features:end -->

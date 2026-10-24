@@ -18,7 +18,7 @@ package, and a stream transport.
 | `Framing` + `DatagramFraming` + `JsonRpcFraming` — wire-compatible with `comline-runtime` | ✅ |
 | `Transport` interface + `duplex()` in-memory pair | ✅ |
 | `Client` (`connect` / `unverified` / `call` / `notify`) and `Server` (`serve` / `serveUnverified`) | ✅ |
-| `Connection` (`connect` / `accept` / `unverified`, `provide`, `call` / `notify`, `closed`): calls in both directions, several protocols, a `Peer` handle for handlers (`Dispatch.dispatchWith`), `Extensions`; `ConnectionFraming` + `Datagram2Framing` (`datagram@2`), wire-compatible with `comline-runtime` | ✅ |
+| `Connection` (`connect` / `accept` / `unverified`, `provide`, `call` / `notify`, `closed`): calls in both directions, several protocols, a `Peer` handle for handlers (`Dispatch.dispatchWith`), `Extensions`; `ConnectionFraming` + `Datagram2Framing` (`datagram@2`) and `JsonRpcConnectionFraming` (JSON-RPC, a one-way call as a notification), wire-compatible with `comline-runtime` | ✅ |
 | A stream `Transport`; a MessagePack `Codec` | — |
 
 ## Wire conformance

@@ -60,11 +60,7 @@ pub const SUPPORT: SupportTable = &[
     (Feature::ExternalStd, Support::supported()),
     (Feature::FramingJsonRpc, Support::supported()),
     (Feature::HandshakeNone, Support::supported()),
-    (
-        Feature::Connections,
-        Support::partial("over `datagram@2`; JSON-RPC on a connection isn't supported yet")
-            .tracked("runtime#19"),
-    ),
+    (Feature::Connections, Support::supported()),
     // Conformance's word for "the same output without it" - here because
     // the output is async already.
     (

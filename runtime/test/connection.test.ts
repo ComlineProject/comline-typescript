@@ -197,6 +197,7 @@ test("datagram@2 frames round trip", () => {
   assert.deepEqual(f.decode(request), {
     kind: "request",
     protocol: 300,
+    oneWay: false,
     request: { call: { id: 5 }, requestId: 42n, params: new Uint8Array([9]) },
   });
   const reply = f.encodeReply(1, 7n, { err: { id: 2, body: new Uint8Array([1]) } });
