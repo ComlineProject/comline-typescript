@@ -30,7 +30,8 @@ export type Op =
   | "encode"
   | "decode"
   | "check"
-  | "version";
+  | "version"
+  | "session";
 
 /** One question: with no `bytes`, an encode; with `bytes` (hex), a decode. */
 export interface Request {
@@ -45,7 +46,8 @@ export type Answer =
   | { kind: "accept"; input: { [key: string]: Json } }
   | { kind: "reject" }
   | { kind: "check"; ok: boolean; why?: string }
-  | { kind: "version"; version: { [key: string]: Json } };
+  | { kind: "version"; version: { [key: string]: Json } }
+  | { kind: "steps"; steps: Json[] };
 
 /**
  * The reference answered with `error` (the question was malformed) or
@@ -123,6 +125,7 @@ function answerOf(raw: Raw, request: Request): Answer {
     return { kind: "check", ok: raw.ok, ...(typeof raw.why === "string" ? { why: raw.why } : {}) };
   }
   if (raw.version) return { kind: "version", version: raw.version as Raw };
+  if (Array.isArray(raw.steps)) return { kind: "steps", steps: raw.steps };
   throw new ReferenceError(`unexpected reply ${JSON.stringify(raw)}`);
 }
 

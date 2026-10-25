@@ -63,6 +63,17 @@ any failure.
 - **Frames** (`frames.test.ts`): name hashes, handshakes, envelopes, and
   requests and responses in every framing encode alike, and decode their
   mutations alike.
+- **Connection sequences** (`sequences.test.ts`): a random list of events
+  (local calls, one-way ones too, frames from the peer, abandoned calls,
+  replies to the peer's requests) runs through a `Connection` and through
+  the reference's `session` op, which drives the Rust runtime's sans-IO
+  `connection::State`, and every event's step is the same: the frame a call
+  writes and its request id, what a received frame means (the peer's
+  request, the reply to a waiting call, a stale reply, a malformed frame),
+  and the frame a reply writes. Under `datagram@2` and `jsonrpc@1`, against
+  the ordered (nested) and unordered State. The sequences nest calls, answer
+  them in and out of order, answer abandoned and one-way calls and ids never
+  handed out, and answer the peer's requests in any order.
 
 The types and values follow the reference's own generator: no unions, no
 array of data-less elements (core#141), finite floats, bounded depth and
@@ -113,8 +124,23 @@ predicate fails the suite.
 Both runtimes take bytes after a `fault` envelope's tag and after the
 handshake's 31 bytes (runtime#33). They agree, so it isn't a divergence.
 
-TODO: connection sequences, once the reference has a `session` op
-(runtime#39).
+TypeScript's `Connection` has no sans-IO state; it owns its read loop. The
+sequences drive one over an in-memory transport and read its steps off what
+it does (the header of `sequences.test.ts` says how), within what the State
+decides:
+
+- the connection ends on a malformed frame, as both Rust drivers do, so a
+  sequence's malformed frame comes last;
+- the peer's requests are served one at a time, in order, as the Rust
+  drivers serve them, so a reply's frame is the one sent for that request,
+  whenever it is;
+- the peer's requests name a protocol and a call this side provides: a
+  failed lookup is the driver's fault reply, which the State doesn't know;
+- request ids don't wrap: a session starts at 0, as the State does, so
+  `u64::MAX` is out of reach.
+
+A sequence is compared up to its first divergence: after one, the two
+sides' states differ.
 
 ## Layout
 
