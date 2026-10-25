@@ -133,9 +133,24 @@ const scalarValue = fc
   .integer({ min: 0, max: 0x10ffff - 0x800 })
   .map((n) => (n >= 0xd800 ? n + 0x800 : n));
 
-export const stringArb = fc
-  .array(fc.oneof(scalarValue, fc.integer({ min: 0x20, max: 0x7e })), { maxLength: 16 })
-  .map((cps) => String.fromCodePoint(...cps));
+/**
+ * Lengths about where a varint takes another byte (127/128, 16383/16384):
+ * a short value never writes a length of more than one byte.
+ */
+const longLength = fc.oneof(
+  fc.constantFrom(127, 128, 129, 255, 256, 16383, 16384),
+  fc.integer({ min: 100, max: 400 }),
+);
+
+export const stringArb = fc.oneof(
+  {
+    arbitrary: fc
+      .array(fc.oneof(scalarValue, fc.integer({ min: 0x20, max: 0x7e })), { maxLength: 16 })
+      .map((cps) => String.fromCodePoint(...cps)),
+    weight: 3,
+  },
+  { arbitrary: fc.tuple(longLength, fc.integer({ min: 0x20, max: 0x7e })).map(([n, c]) => String.fromCharCode(c).repeat(n)), weight: 1 },
+);
 
 /** A value of `t`, in the corpus's typed encoding. */
 export function valueArb(t: Type): fc.Arbitrary<Json> {
@@ -169,7 +184,17 @@ export function valueArb(t: Type): fc.Arbitrary<Json> {
     return fc.option(valueArb(t.option), { nil: null }).map((v) => ({ option: v }));
   }
   if ("array" in t) {
-    return fc.array(valueArb(t.array), { maxLength: MAX_ELEMENTS }).map((items) => ({ array: items }));
+    const items = fc.array(valueArb(t.array), { maxLength: MAX_ELEMENTS });
+    // An array of scalars is sometimes long, so its count takes two bytes.
+    const long =
+      typeof t.array === "string" && t.array !== "string"
+        ? longLength
+            .filter((n) => n < 1000)
+            .chain((n) => fc.array(valueArb(t.array), { minLength: n, maxLength: n }))
+        : undefined;
+    return (long ? fc.oneof({ arbitrary: items, weight: 3 }, { arbitrary: long, weight: 1 }) : items).map(
+      (items) => ({ array: items }),
+    );
   }
   if ("fixed" in t) {
     const { of, len } = t.fixed;
