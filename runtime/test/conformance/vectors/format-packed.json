@@ -380,6 +380,194 @@
       "bytes": "01"
     },
     {
+      "id": "format-packed/u128-max",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "u128": "340282366920938463463374607431768211455"
+        }
+      },
+      "bytes": "ffffffffffffffffffffffffffffffff"
+    },
+    {
+      "id": "format-packed/i128-min",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "i128": "-170141183460469231731687303715884105728"
+        }
+      },
+      "bytes": "00000000000000000000000000000080"
+    },
+    {
+      "id": "format-packed/tuple-u8",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "tuple": [
+            {
+              "u8": 1
+            },
+            {
+              "u8": 2
+            },
+            {
+              "u8": 3
+            },
+            {
+              "u8": 4
+            }
+          ]
+        }
+      },
+      "bytes": "01020304"
+    },
+    {
+      "id": "format-packed/tuple-u8-33",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "tuple": [
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            }
+          ]
+        }
+      },
+      "bytes": "070707070707070707070707070707070707070707070707070707070707070707"
+    },
+    {
+      "id": "format-packed/array-of-options",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "array": [
+            {
+              "option": {
+                "u16": 1
+              }
+            },
+            {
+              "option": null
+            }
+          ]
+        }
+      },
+      "bytes": "0201010000"
+    },
+    {
+      "id": "format-packed/unit",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "unit": null
+        }
+      },
+      "bytes": ""
+    },
+    {
       "id": "format-packed/f32",
       "op": "encode",
       "input": {
@@ -1481,6 +1669,23 @@
       "expect": "reject"
     },
     {
+      "id": "format-packed/reject-count-past-input",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "array": {
+            "struct": {
+              "fields": [],
+              "name": "Empty"
+            }
+          }
+        }
+      },
+      "bytes": "01",
+      "expect": "reject"
+    },
+    {
       "id": "format-packed/decode-fields-reordered",
       "op": "decode",
       "input": {
@@ -1635,6 +1840,244 @@
       },
       "bytes": "0000000000010000",
       "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-u128",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": "u128",
+        "value": {
+          "u128": "340282366920938463463374607431768211455"
+        }
+      },
+      "bytes": "ffffffffffffffffffffffffffffffff"
+    },
+    {
+      "id": "format-packed/decode-i128",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": "i128",
+        "value": {
+          "i128": "-170141183460469231731687303715884105728"
+        }
+      },
+      "bytes": "00000000000000000000000000000080"
+    },
+    {
+      "id": "format-packed/decode-unit",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": "unit",
+        "value": {
+          "unit": null
+        }
+      },
+      "bytes": ""
+    },
+    {
+      "id": "format-packed/decode-fixed-array",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "fixed": {
+            "len": 4,
+            "of": "u8"
+          }
+        },
+        "value": {
+          "tuple": [
+            {
+              "u8": 1
+            },
+            {
+              "u8": 2
+            },
+            {
+              "u8": 3
+            },
+            {
+              "u8": 4
+            }
+          ]
+        }
+      },
+      "bytes": "01020304"
+    },
+    {
+      "id": "format-packed/decode-fixed-array-33",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "fixed": {
+            "len": 33,
+            "of": "u8"
+          }
+        },
+        "value": {
+          "tuple": [
+            {
+              "u8": 1
+            },
+            {
+              "u8": 2
+            },
+            {
+              "u8": 3
+            },
+            {
+              "u8": 4
+            },
+            {
+              "u8": 5
+            },
+            {
+              "u8": 6
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 8
+            },
+            {
+              "u8": 9
+            },
+            {
+              "u8": 10
+            },
+            {
+              "u8": 11
+            },
+            {
+              "u8": 12
+            },
+            {
+              "u8": 13
+            },
+            {
+              "u8": 14
+            },
+            {
+              "u8": 15
+            },
+            {
+              "u8": 16
+            },
+            {
+              "u8": 17
+            },
+            {
+              "u8": 18
+            },
+            {
+              "u8": 19
+            },
+            {
+              "u8": 20
+            },
+            {
+              "u8": 21
+            },
+            {
+              "u8": 22
+            },
+            {
+              "u8": 23
+            },
+            {
+              "u8": 24
+            },
+            {
+              "u8": 25
+            },
+            {
+              "u8": 26
+            },
+            {
+              "u8": 27
+            },
+            {
+              "u8": 28
+            },
+            {
+              "u8": 29
+            },
+            {
+              "u8": 30
+            },
+            {
+              "u8": 31
+            },
+            {
+              "u8": 32
+            },
+            {
+              "u8": 33
+            }
+          ]
+        }
+      },
+      "bytes": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2021"
+    },
+    {
+      "id": "format-packed/decode-fixed-array-short",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "fixed": {
+            "len": 4,
+            "of": "u8"
+          }
+        }
+      },
+      "bytes": "010203",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-fixed-array-long",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "fixed": {
+            "len": 4,
+            "of": "u8"
+          }
+        }
+      },
+      "bytes": "0102030405",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-array-of-options",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "array": {
+            "option": "u16"
+          }
+        },
+        "value": {
+          "array": [
+            {
+              "option": {
+                "u16": 1
+              }
+            },
+            {
+              "option": null
+            }
+          ]
+        }
+      },
+      "bytes": "0201010000"
     }
   ]
 }

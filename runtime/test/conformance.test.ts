@@ -41,9 +41,9 @@ import {
   type DecodedRequest,
   type Envelope,
   type Framing,
-  type Layout,
 } from "../src/index.js";
 import { jsonEqual, parseJson } from "../src/json.js";
+import { fromJs, layoutOf, layoutOfType, toJs, type Json, type Type } from "./values.js";
 
 // Tests run from `dist/test/`; the vendored corpus and the claims stay in
 // the source tree.
@@ -51,8 +51,6 @@ const RUNTIME = new URL("../../", import.meta.url);
 const CORPUS = new URL("test/conformance/", RUNTIME);
 const SUPPORT = new URL("conformance-support.json", RUNTIME);
 const REPORT = new URL("conformance-report.json", RUNTIME);
-
-type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 
 interface Case {
   id: string;
@@ -117,92 +115,6 @@ function canon(value: unknown): string {
       ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : 1)))
       : v,
   );
-}
-
-/**
- * A vector's typed value as generated TypeScript holds it: a 64-bit integer
- * a `bigint`, every narrower one a `number`, an absent optional `undefined`,
- * a unit enum variant its name.
- */
-function toJs(value: Json): unknown {
-  const [[kind, inner]] = Object.entries(value as { [key: string]: Json }) as [[string, Json]];
-  switch (kind) {
-    case "u64":
-    case "i64":
-      return BigInt(inner as string);
-    case "bool":
-    case "u8":
-    case "u16":
-    case "u32":
-    case "i8":
-    case "i16":
-    case "i32":
-    case "f32":
-    case "f64":
-    case "string":
-      return inner;
-    case "array":
-    case "tuple":
-      return (inner as Json[]).map(toJs);
-    case "option":
-      return inner === null ? undefined : toJs(inner);
-    case "struct": {
-      const { fields } = inner as { fields: [string, Json][] };
-      return Object.fromEntries(fields.map(([name, v]) => [name, toJs(v)]));
-    }
-    case "unit_variant":
-      return (inner as { variant: string }).variant;
-    default:
-      throw new Error(`unknown value kind \`${kind}\``);
-  }
-}
-
-/**
- * The {@link Layout} generated code would declare for a vector's typed value.
- * An empty array or an absent optional says nothing of its element, which
- * takes no bytes then anyway; an enum's variants other than the one written
- * are placeholders, the index being what's on the wire.
- */
-function layoutOf(value: Json): Layout {
-  const [[kind, inner]] = Object.entries(value as { [key: string]: Json }) as [[string, Json]];
-  switch (kind) {
-    case "bool":
-    case "u8":
-    case "u16":
-    case "u32":
-    case "u64":
-    case "f32":
-    case "f64":
-    case "string":
-      return kind;
-    case "i8":
-    case "i16":
-    case "i32":
-    case "i64":
-      return `s${kind.slice(1)}` as Layout;
-    case "array": {
-      const [first] = inner as Json[];
-      return { array: first === undefined ? "u8" : layoutOf(first) };
-    }
-    case "tuple": {
-      const items = inner as Json[];
-      return { fixed: items.length === 0 ? "u8" : layoutOf(items[0]!), length: items.length };
-    }
-    case "option":
-      return { option: inner === null ? "u8" : layoutOf(inner) };
-    case "struct": {
-      const { fields } = inner as { fields: [string, Json][] };
-      return { struct: fields.map(([name, v]) => [name, layoutOf(v)] as const) };
-    }
-    case "unit_variant": {
-      const { index, variant } = inner as { index: number; variant: string };
-      const variants = Array.from({ length: index + 1 }, (_, i) => `#${i}`);
-      variants[index] = variant;
-      return { enum: variants };
-    }
-    default:
-      throw new Error(`unknown value kind \`${kind}\``);
-  }
 }
 
 function encodeValue(format: string, value: Json): Uint8Array {
@@ -313,57 +225,6 @@ function encode(c: Case): Uint8Array {
   }
 }
 
-/** A reader type, as a `decode` case describes it. */
-type Type =
-  | "bool"
-  | "u32"
-  | "i32"
-  | "string"
-  | { option: Type }
-  | { struct: { name: string; fields: [string, Type][] } }
-  | { enum: { name: string; variants: string[] } };
-
-/**
- * What generated TypeScript holds after decoding `v` as `type`, as a vector
- * value. Generated code takes the parsed JSON as it is, so nothing here
- * checks more than it does: an unknown variant or an out-of-range integer
- * comes through.
- */
-function fromJs(type: Type, v: unknown): Json {
-  if (type === "bool") return { bool: v as boolean };
-  if (type === "u32" || type === "i32") return { [type]: v as number };
-  if (type === "string") return { string: v as string };
-  if ("option" in type) return { option: v === undefined || v === null ? null : fromJs(type.option, v) };
-  if ("struct" in type) {
-    const o = v as { [field: string]: unknown };
-    return {
-      struct: {
-        name: type.struct.name,
-        fields: type.struct.fields.map(([field, t]) => [field, fromJs(t, o[field])]),
-      },
-    };
-  }
-  const variant = v as string;
-  return {
-    unit_variant: {
-      enum: type.enum.name,
-      index: type.enum.variants.indexOf(variant),
-      variant,
-    },
-  };
-}
-
-/** A reader type as the {@link Layout} generated code declares for it. */
-function layoutOfType(type: Type): Layout {
-  if (type === "i32") return "s32";
-  if (typeof type === "string") return type;
-  if ("option" in type) return { option: layoutOfType(type.option) };
-  if ("struct" in type) {
-    return { struct: type.struct.fields.map(([name, t]) => [name, layoutOfType(t)] as const) };
-  }
-  return { enum: type.enum.variants };
-}
-
 /** The input `bytes` decode to, or `undefined` when the runtime refuses them. */
 function decode(c: Case, bytes: Uint8Array): unknown {
   const i = c.input ?? {};
@@ -470,7 +331,7 @@ function decode(c: Case, bytes: Uint8Array): unknown {
       }
       if (i.format !== FORMAT_JSON) throw new NotImplemented(`format \`${i.format as string}\``);
       try {
-        parsed = new JsonCodec().decode(bytes);
+        parsed = new JsonCodec().decode(bytes, layoutOfType(i.type as Type));
       } catch {
         return undefined;
       }

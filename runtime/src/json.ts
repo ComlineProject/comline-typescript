@@ -194,7 +194,9 @@ export function stringifyJson(value: unknown): string {
  * - `"number"`, `"string"`, `"boolean"`: a value read as `JSON.parse` would.
  *   They only matter as union members, to tell the members apart.
  * - `{ array }`, `{ fields }`: the shape of each element, or of the named
- *   fields. A field not listed is read as `JSON.parse` would.
+ *   fields. A field not listed is read as `JSON.parse` would. An array
+ *   with a `length` (a fixed-size array, `T[N]`) must have exactly that
+ *   many elements.
  * - `{ union }`: the first member whose kind the JSON value has.
  * - A function: a named type's shape, looked up only when it's needed, so
  *   types can refer to each other in any order, and recursively.
@@ -204,7 +206,7 @@ export type Shape =
   | "number"
   | "string"
   | "boolean"
-  | { readonly array: Shape }
+  | { readonly array: Shape; readonly length?: number }
   | { readonly fields: { readonly [name: string]: Shape } }
   | { readonly union: readonly Shape[] }
   | (() => Shape);
@@ -254,8 +256,11 @@ export function decodeJson(node: JsonNode, shape?: Shape): unknown {
       return n;
     }
     case "array": {
-      const element = s && typeof s === "object" && "array" in s ? s.array : undefined;
-      return node.items.map((item) => decodeJson(item, element));
+      const array = s && typeof s === "object" && "array" in s ? s : undefined;
+      if (array?.length !== undefined && node.items.length !== array.length) {
+        throw new SyntaxError(`expected ${array.length} elements, got ${node.items.length}`);
+      }
+      return node.items.map((item) => decodeJson(item, array?.array));
     }
     case "object": {
       const fields = s && typeof s === "object" && "fields" in s ? s.fields : undefined;
