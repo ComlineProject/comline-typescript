@@ -22,6 +22,8 @@ export type JsonNode = { readonly start: number; readonly end: number } & (
 const NUMBER = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
 const STRING = /"(?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"/y;
 const SPACE = /[ \t\n\r]*/y;
+/** Half a surrogate pair, alone: `\ud800` escapes to no Unicode scalar value. */
+const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
 
 /** Parses `text` as one JSON value; throws `SyntaxError` on anything else. */
 export function parseJson(text: string): JsonNode {
@@ -33,6 +35,13 @@ export function parseJson(text: string): JsonNode {
     SPACE.lastIndex = at;
     SPACE.exec(text);
     at = SPACE.lastIndex;
+  };
+  // A string's value; one escaping half a surrogate pair is refused, as
+  // serde_json refuses it.
+  const string = (): string => {
+    const value = JSON.parse(token(STRING) ?? fail()) as string;
+    if (LONE_SURROGATE.test(value)) fail();
+    return value;
   };
   const token = (re: RegExp): string | undefined => {
     re.lastIndex = at;
@@ -55,10 +64,10 @@ export function parseJson(text: string): JsonNode {
       }
       for (;;) {
         space();
-        const key = token(STRING) ?? fail();
+        const key = string();
         space();
         if (text[at++] !== ":") fail();
-        members.set(JSON.parse(key) as string, value());
+        members.set(key, value());
         space();
         const next = text[at++];
         if (next === "}") return { kind: "object", members, start, end: at };
@@ -82,8 +91,7 @@ export function parseJson(text: string): JsonNode {
       }
     }
     if (c === '"') {
-      const raw = token(STRING) ?? fail();
-      return { kind: "string", value: JSON.parse(raw) as string, start, end: at };
+      return { kind: "string", value: string(), start, end: at };
     }
     for (const kind of ["null", "true", "false"] as const) {
       if (text.startsWith(kind, at)) {
@@ -194,7 +202,9 @@ export function stringifyJson(value: unknown): string {
  * - `"number"`, `"string"`, `"boolean"`: a value read as `JSON.parse` would.
  *   They only matter as union members, to tell the members apart.
  * - `{ array }`, `{ fields }`: the shape of each element, or of the named
- *   fields. A field not listed is read as `JSON.parse` would.
+ *   fields. A field not listed is read as `JSON.parse` would. An array
+ *   with a `length` (a fixed-size array, `T[N]`) must have exactly that
+ *   many elements.
  * - `{ union }`: the first member whose kind the JSON value has.
  * - A function: a named type's shape, looked up only when it's needed, so
  *   types can refer to each other in any order, and recursively.
@@ -204,7 +214,7 @@ export type Shape =
   | "number"
   | "string"
   | "boolean"
-  | { readonly array: Shape }
+  | { readonly array: Shape; readonly length?: number }
   | { readonly fields: { readonly [name: string]: Shape } }
   | { readonly union: readonly Shape[] }
   | (() => Shape);
@@ -254,8 +264,11 @@ export function decodeJson(node: JsonNode, shape?: Shape): unknown {
       return n;
     }
     case "array": {
-      const element = s && typeof s === "object" && "array" in s ? s.array : undefined;
-      return node.items.map((item) => decodeJson(item, element));
+      const array = s && typeof s === "object" && "array" in s ? s : undefined;
+      if (array?.length !== undefined && node.items.length !== array.length) {
+        throw new SyntaxError(`expected ${array.length} elements, got ${node.items.length}`);
+      }
+      return node.items.map((item) => decodeJson(item, array?.array));
     }
     case "object": {
       const fields = s && typeof s === "object" && "fields" in s ? s.fields : undefined;

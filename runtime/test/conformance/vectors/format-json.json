@@ -404,6 +404,200 @@
       "compare": "json"
     },
     {
+      "id": "format-json/u128-max",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "value": {
+          "u128": "340282366920938463463374607431768211455"
+        }
+      },
+      "bytes": "333430323832333636393230393338343633343633333734363037343331373638323131343535",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/i128-min",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "value": {
+          "i128": "-170141183460469231731687303715884105728"
+        }
+      },
+      "bytes": "2d313730313431313833343630343639323331373331363837333033373135383834313035373238",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/tuple-u8",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "value": {
+          "tuple": [
+            {
+              "u8": 1
+            },
+            {
+              "u8": 2
+            },
+            {
+              "u8": 3
+            },
+            {
+              "u8": 4
+            }
+          ]
+        }
+      },
+      "bytes": "5b312c322c332c345d",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/tuple-u8-33",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "value": {
+          "tuple": [
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 7
+            }
+          ]
+        }
+      },
+      "bytes": "5b372c372c372c372c372c372c372c372c372c372c372c372c372c372c372c372c372c372c372c372c372c372c372c372c372c372c372c372c372c372c372c372c375d",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/array-of-options",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "value": {
+          "array": [
+            {
+              "option": {
+                "u16": 1
+              }
+            },
+            {
+              "option": null
+            }
+          ]
+        }
+      },
+      "bytes": "5b312c6e756c6c5d",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/unit",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "value": {
+          "unit": null
+        }
+      },
+      "bytes": "6e756c6c",
+      "compare": "json"
+    },
+    {
       "id": "format-json/decode-fields-reordered",
       "op": "decode",
       "input": {
@@ -596,6 +790,256 @@
       },
       "bytes": "31303939353131363237373736",
       "expect": "reject"
+    },
+    {
+      "id": "format-json/decode-u128",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": "u128",
+        "value": {
+          "u128": "340282366920938463463374607431768211455"
+        }
+      },
+      "bytes": "333430323832333636393230393338343633343633333734363037343331373638323131343535"
+    },
+    {
+      "id": "format-json/decode-i128",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": "i128",
+        "value": {
+          "i128": "-170141183460469231731687303715884105728"
+        }
+      },
+      "bytes": "2d313730313431313833343630343639323331373331363837333033373135383834313035373238"
+    },
+    {
+      "id": "format-json/decode-unit",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": "unit",
+        "value": {
+          "unit": null
+        }
+      },
+      "bytes": "6e756c6c"
+    },
+    {
+      "id": "format-json/decode-fixed-array",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "fixed": {
+            "len": 4,
+            "of": "u8"
+          }
+        },
+        "value": {
+          "tuple": [
+            {
+              "u8": 1
+            },
+            {
+              "u8": 2
+            },
+            {
+              "u8": 3
+            },
+            {
+              "u8": 4
+            }
+          ]
+        }
+      },
+      "bytes": "5b312c322c332c345d"
+    },
+    {
+      "id": "format-json/decode-fixed-array-33",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "fixed": {
+            "len": 33,
+            "of": "u8"
+          }
+        },
+        "value": {
+          "tuple": [
+            {
+              "u8": 1
+            },
+            {
+              "u8": 2
+            },
+            {
+              "u8": 3
+            },
+            {
+              "u8": 4
+            },
+            {
+              "u8": 5
+            },
+            {
+              "u8": 6
+            },
+            {
+              "u8": 7
+            },
+            {
+              "u8": 8
+            },
+            {
+              "u8": 9
+            },
+            {
+              "u8": 10
+            },
+            {
+              "u8": 11
+            },
+            {
+              "u8": 12
+            },
+            {
+              "u8": 13
+            },
+            {
+              "u8": 14
+            },
+            {
+              "u8": 15
+            },
+            {
+              "u8": 16
+            },
+            {
+              "u8": 17
+            },
+            {
+              "u8": 18
+            },
+            {
+              "u8": 19
+            },
+            {
+              "u8": 20
+            },
+            {
+              "u8": 21
+            },
+            {
+              "u8": 22
+            },
+            {
+              "u8": 23
+            },
+            {
+              "u8": 24
+            },
+            {
+              "u8": 25
+            },
+            {
+              "u8": 26
+            },
+            {
+              "u8": 27
+            },
+            {
+              "u8": 28
+            },
+            {
+              "u8": 29
+            },
+            {
+              "u8": 30
+            },
+            {
+              "u8": 31
+            },
+            {
+              "u8": 32
+            },
+            {
+              "u8": 33
+            }
+          ]
+        }
+      },
+      "bytes": "5b312c322c332c342c352c362c372c382c392c31302c31312c31322c31332c31342c31352c31362c31372c31382c31392c32302c32312c32322c32332c32342c32352c32362c32372c32382c32392c33302c33312c33322c33335d"
+    },
+    {
+      "id": "format-json/decode-fixed-array-short",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "fixed": {
+            "len": 4,
+            "of": "u8"
+          }
+        }
+      },
+      "bytes": "5b312c322c335d",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/decode-fixed-array-long",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "fixed": {
+            "len": 4,
+            "of": "u8"
+          }
+        }
+      },
+      "bytes": "5b312c322c332c342c355d",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/decode-array-of-options",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "array": {
+            "option": "u16"
+          }
+        },
+        "value": {
+          "array": [
+            {
+              "option": {
+                "u16": 1
+              }
+            },
+            {
+              "option": null
+            }
+          ]
+        }
+      },
+      "bytes": "5b312c6e756c6c5d"
+    },
+    {
+      "id": "format-json/found-f64-exact-digits",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": "f64",
+        "value": {
+          "f64": 4.520618856987477e-279
+        }
+      },
+      "bytes": "342e353230363138383536393837343737652d323739"
     }
   ]
 }

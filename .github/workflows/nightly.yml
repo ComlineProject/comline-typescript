@@ -1,0 +1,68 @@
+name: Nightly differential tests
+
+# The property tests against the Rust reference (runtime/test/prop/), at
+# many more runs than a pull request's. A failure opens an issue, or comments
+# on the open one with the same title, rather than blocking anything.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  properties:
+    name: runtime - properties against the reference
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: runtime
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - id: reference
+        run: echo "rev=$(cat test/conformance/VECTORS_REV)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: reference-cache
+        with:
+          path: ~/.cargo/bin/comline-reference
+          key: comline-reference-${{ steps.reference.outputs.rev }}
+      - if: steps.reference-cache.outputs.cache-hit != 'true'
+        run: |
+          rustup update stable && rustup default stable
+          cargo install --locked --git https://github.com/ComlineProject/runtime --rev "${{ steps.reference.outputs.rev }}" comline-reference
+      - run: echo "COMLINE_REFERENCE=$HOME/.cargo/bin/comline-reference" >> "$GITHUB_ENV"
+      - run: npm ci
+      - run: npx tsc -p tsconfig.json
+      - name: Properties, 20000 runs each
+        run: |
+          set -o pipefail
+          FC_NUM_RUNS=20000 node --test dist/test/prop/*.test.js 2>&1 | tee "$RUNNER_TEMP/properties.log"
+      - name: Open or update an issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: "Nightly: the differential property tests found a divergence"
+        run: |
+          log="$RUNNER_TEMP/properties.log"
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          {
+            echo "The nightly property tests against \`comline-reference\` (VECTORS_REV \`${{ steps.reference.outputs.rev }}\`, commit ${{ github.sha }}) failed: $run_url"
+            echo
+            echo "A divergence in no class \`known-divergences.json\` lists, with its shrunk counterexample. Replay it with \`FC_SEED\` and \`FC_PATH\` from the report."
+            echo
+            echo '```'
+            grep -E "Counterexample|Got error|^ +(type|value|bytes|input):|\(in |seed" "$log" | head -60 || true
+            echo '```'
+          } > "$RUNNER_TEMP/body.md"
+          existing="$(gh issue list --repo "${{ github.repository }}" --state open --search "in:title \"$TITLE\"" --json number,title --jq ".[] | select(.title == env.TITLE) | .number" | head -1)"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "${{ github.repository }}" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh issue create --repo "${{ github.repository }}" --title "$TITLE" --label bug --body-file "$RUNNER_TEMP/body.md"
+          fi

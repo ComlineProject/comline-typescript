@@ -32,6 +32,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      # The Rust reference the property tests (test/prop/) compare against,
+      # built at the commit the vectors are vendored from. Without it they
+      # fail in CI rather than skip.
+      - id: reference
+        run: echo "rev=$(cat test/conformance/VECTORS_REV)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: reference-cache
+        with:
+          path: ~/.cargo/bin/comline-reference
+          key: comline-reference-${{ steps.reference.outputs.rev }}
+      - if: steps.reference-cache.outputs.cache-hit != 'true'
+        run: |
+          rustup update stable && rustup default stable
+          cargo install --locked --git https://github.com/ComlineProject/runtime --rev "${{ steps.reference.outputs.rev }}" comline-reference
+      - run: echo "COMLINE_REFERENCE=$HOME/.cargo/bin/comline-reference" >> "$GITHUB_ENV"
       - run: npm ci
       - run: npm run typecheck
       - run: npm test

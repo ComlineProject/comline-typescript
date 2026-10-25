@@ -15,7 +15,8 @@ import type {
 import { type JsonNode, jsonInteger, parseJson } from "../json.js";
 
 const enc = new TextEncoder();
-const dec = new TextDecoder();
+// Strict, as serde_json is: a frame that isn't UTF-8 is refused, not repaired.
+const dec = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 const U64_MAX = (1n << 64n) - 1n;
 const I64_MIN = -(1n << 63n);

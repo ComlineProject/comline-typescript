@@ -492,7 +492,7 @@ export function jsonShape(s: Shape | Layout): Shape {
     }
   }
   if ("array" in s) return { array: jsonShape(s.array) };
-  if ("fixed" in s) return { array: jsonShape(s.fixed) };
+  if ("fixed" in s) return { array: jsonShape(s.fixed), length: s.length };
   if ("option" in s) return jsonShape(s.option);
   if ("struct" in s) {
     return { fields: Object.fromEntries(s.struct.map(([name, f]) => [name, jsonShape(f)])) };

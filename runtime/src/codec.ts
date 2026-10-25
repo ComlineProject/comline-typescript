@@ -14,6 +14,8 @@ import { FORMAT_JSON } from "./handshake.js";
 import { type Shape, decodeJson, parseJson, stringifyJson } from "./json.js";
 import { type Layout, jsonShape } from "./packed.js";
 
+const strictUtf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+
 /**
  * UTF-8 JSON, written as the Rust runtime's serde writes the same shape: a
  * `bigint` with all its digits, and an absent optional as `null`. Reading
@@ -29,7 +31,9 @@ export class JsonCodec implements Codec {
   }
 
   decode<T>(bytes: Uint8Array, shape?: Shape | Layout): T {
-    const text = new TextDecoder().decode(bytes);
+    // Strict, as serde_json is: invalid UTF-8 is refused, not replaced, and
+    // a byte-order mark is a character, not something to skip.
+    const text = strictUtf8.decode(bytes);
     if (shape !== undefined) return decodeJson(parseJson(text), jsonShape(shape)) as T;
     return JSON.parse(text, (_key, v: unknown) => (v === null ? undefined : v)) as T;
   }
