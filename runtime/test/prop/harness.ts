@@ -76,7 +76,7 @@ export function withReference(name: string, body: (reference: () => Reference) =
 
 /** One case where the two runtimes answered differently. */
 export interface Divergence {
-  /** Which property found it: `encode`, `decode`, or a frame op. */
+  /** Which property found it: `encode`, `decode`, a frame op, or `session`. */
   property: string;
   format?: string;
   /** For a frame: its framing, and the op's input. */
@@ -95,6 +95,21 @@ export interface Divergence {
   /** For a decode: whether each side accepted the bytes. */
   tsAccepted?: boolean;
   referenceAccepted?: boolean;
+  /** For a connection sequence: the session, and where the two sides' steps part. */
+  session?: SessionDivergence;
+}
+
+/** A connection sequence whose steps differ first at `at`. */
+export interface SessionDivergence {
+  ordered: boolean;
+  /** The session's events, all of them. */
+  events: Json[];
+  at: number;
+  /** Each side's steps, up to and including `at`. */
+  ts: Json[];
+  reference: Json[];
+  /** When the event at `at` is a received frame: the request id the reference reads it as a reply to. */
+  referenceRead?: string;
 }
 
 interface Known {
@@ -328,10 +343,42 @@ const CLASSES: Record<string, true> = {
   "jsonrpc-decode-lenient": true,
   "reference-jsonrpc-method-escapes": true,
   "reference-jsonrpc-ignored-members-unvalidated": true,
+  "connection-replies-in-any-order": true,
 };
+
+/**
+ * Whether a connection sequence parts where an ordered (nested) State
+ * refuses a reply that skips the innermost waiting call, and TypeScript, which
+ * has only the async model, hands the reply to the call it answers: the
+ * reference reads the frame as a reply to that call, which its own steps say
+ * is waiting but not innermost, and TypeScript's step is exactly that reply.
+ */
+function skipsInnermost(s: SessionDivergence): boolean {
+  const event = s.events[s.at] as { [key: string]: Json } | undefined;
+  const ours = s.ts[s.at] as { event?: { reply?: { request_id?: Json } } } | undefined;
+  const id = ours?.event?.reply?.request_id;
+  if (!s.ordered || typeof event?.receive !== "string" || typeof id !== "string") return false;
+  if (stringify(s.reference[s.at]) !== stringify({ error: "framing" }) || s.referenceRead !== id) return false;
+  const waiting: string[] = [];
+  for (let i = 0; i < s.at; i++) {
+    const e = s.events[i] as { [key: string]: { [key: string]: Json } | string };
+    const step = s.reference[i] as { request_id?: string; event?: { reply?: { request_id: string } } };
+    const drop = (id: string) => {
+      const at = waiting.indexOf(id);
+      if (at >= 0) waiting.splice(at, 1);
+    };
+    if (typeof e.call === "object" && !e.call.one_way && step.request_id) waiting.push(step.request_id);
+    else if (e.receive !== undefined && step.event?.reply) drop(step.event.reply.request_id);
+    else if (typeof e.abandon === "string") drop(e.abandon);
+  }
+  return waiting.includes(id) && waiting[waiting.length - 1] !== id;
+}
 
 /** The classes that explain `d`, or `undefined` if none does. */
 function explain(d: Divergence): string[] | undefined {
+  if (d.property === "session") {
+    return d.session && skipsInnermost(d.session) ? ["connection-replies-in-any-order"] : undefined;
+  }
   if (d.framing === "jsonrpc@1") {
     // TypeScript took a JSON-RPC frame the reference refuses, for one of the
     // two reasons above.
@@ -429,6 +476,7 @@ export function describeDivergence(d: Divergence): string {
   if (d.value !== undefined) lines.push(`  value: ${stringify(d.value)}`);
   if (d.input !== undefined) lines.push(`  input: ${stringify(d.input)}`);
   if (d.bytes) lines.push(`  bytes: ${hex(d.bytes)}`);
+  if (d.session) lines.push(`  at event ${d.session.at}`);
   return lines.join("\n");
 }
 
