@@ -97,3 +97,25 @@ test("JsonCodec decodes with a shape, and round-trips a bigint", () => {
   const value = { seq: 18446744073709551615n, body: "x" };
   assert.deepEqual(codec.decode(codec.encode(value), shape), value);
 });
+
+test("parseJson refuses half a surrogate pair, as serde_json does", () => {
+  for (const text of ['"\\ud800"', '"\\udc00x"', '{"\\udbff": 1}']) {
+    assert.throws(() => parseJson(text), SyntaxError, text);
+  }
+  const pair = parseJson('"\\ud83d\\ude00"');
+  assert.equal(pair.kind === "string" && pair.value, "\u{1f600}");
+});
+
+test("JsonCodec refuses bytes that aren't UTF-8, and doesn't skip a BOM", () => {
+  const codec = new JsonCodec();
+  assert.throws(() => codec.decode(Uint8Array.of(0x22, 0x61, 0xff, 0x22), "string"));
+  assert.throws(() => codec.decode(Uint8Array.of(0xef, 0xbb, 0xbf, 0x31), "u8"));
+});
+
+test("a fixed array's JSON must have exactly its length", () => {
+  const codec = new JsonCodec();
+  const bytes = (text: string) => new TextEncoder().encode(text);
+  assert.deepEqual(codec.decode(bytes("[1,2]"), { fixed: "u8", length: 2 }), [1, 2]);
+  assert.throws(() => codec.decode(bytes("[1]"), { fixed: "u8", length: 2 }), SyntaxError);
+  assert.throws(() => codec.decode(bytes("[1,2,3]"), { fixed: "u8", length: 2 }), SyntaxError);
+});

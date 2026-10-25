@@ -1,0 +1,29 @@
+{
+  "runtime": "typescript",
+  "classes": {
+    "json-decode-unchecked-variants-and-ranges": {
+      "issue": "comline-typescript#57",
+      "note": "json@1 decoding accepts a string that isn't one of the enum's variants, and an integer outside its type's range; the reference refuses both"
+    },
+    "json-decode-unchecked-shape": {
+      "issue": "comline-typescript#73",
+      "note": "json@1 decoding accepts the wrong JSON kind, a missing or repeated struct field, an integer spelled 1.0, 1e0 or -0, and a float past its range; the reference refuses them"
+    },
+    "json-encode-f32-digits": {
+      "issue": "comline-typescript#74",
+      "note": "json@1 writes an f32 with the shortest digits of a double (1.401298464324817e-45), the reference with those of the f32 (1e-45): the same f32, not the same JSON number"
+    },
+    "jsonrpc-decode-lenient": {
+      "issue": "comline-typescript#75",
+      "note": "jsonrpc@1 decoding accepts a declared member twice, and an id or error code spelled 1.0, 1e0 or -0; the reference refuses both"
+    },
+    "reference-jsonrpc-method-escapes": {
+      "issue": "runtime#41",
+      "note": "the reference refuses a JSON-RPC method name written with any escape, and writes a name that needs one unescaped; TypeScript escapes, and reads any spelling"
+    },
+    "reference-jsonrpc-ignored-members-unvalidated": {
+      "issue": "runtime#42",
+      "note": "the reference accepts invalid UTF-8 inside JSON-RPC members it ignores (jsonrpc, error.message, undeclared ones); TypeScript refuses any frame that isn't UTF-8"
+    }
+  }
+}

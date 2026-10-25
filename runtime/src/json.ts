@@ -22,6 +22,8 @@ export type JsonNode = { readonly start: number; readonly end: number } & (
 const NUMBER = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
 const STRING = /"(?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"/y;
 const SPACE = /[ \t\n\r]*/y;
+/** Half a surrogate pair, alone: `\ud800` escapes to no Unicode scalar value. */
+const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
 
 /** Parses `text` as one JSON value; throws `SyntaxError` on anything else. */
 export function parseJson(text: string): JsonNode {
@@ -33,6 +35,13 @@ export function parseJson(text: string): JsonNode {
     SPACE.lastIndex = at;
     SPACE.exec(text);
     at = SPACE.lastIndex;
+  };
+  // A string's value; one escaping half a surrogate pair is refused, as
+  // serde_json refuses it.
+  const string = (): string => {
+    const value = JSON.parse(token(STRING) ?? fail()) as string;
+    if (LONE_SURROGATE.test(value)) fail();
+    return value;
   };
   const token = (re: RegExp): string | undefined => {
     re.lastIndex = at;
@@ -55,10 +64,10 @@ export function parseJson(text: string): JsonNode {
       }
       for (;;) {
         space();
-        const key = token(STRING) ?? fail();
+        const key = string();
         space();
         if (text[at++] !== ":") fail();
-        members.set(JSON.parse(key) as string, value());
+        members.set(key, value());
         space();
         const next = text[at++];
         if (next === "}") return { kind: "object", members, start, end: at };
@@ -82,8 +91,7 @@ export function parseJson(text: string): JsonNode {
       }
     }
     if (c === '"') {
-      const raw = token(STRING) ?? fail();
-      return { kind: "string", value: JSON.parse(raw) as string, start, end: at };
+      return { kind: "string", value: string(), start, end: at };
     }
     for (const kind of ["null", "true", "false"] as const) {
       if (text.startsWith(kind, at)) {
