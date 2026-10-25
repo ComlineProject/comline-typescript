@@ -180,9 +180,17 @@
         "framing-jsonrpc/response-fault",
         "framing-jsonrpc/request-qualified-method",
         "framing-jsonrpc/notification",
+        "framing-jsonrpc/found-request-method-needs-escapes",
         "framing-jsonrpc/reject-request-not-json",
         "framing-jsonrpc/reject-request-without-method",
-        "framing-jsonrpc/reject-response-without-id"
+        "framing-jsonrpc/reject-response-without-id",
+        "framing-jsonrpc/found-reject-request-invalid-utf8-in-jsonrpc",
+        "framing-jsonrpc/found-reject-request-invalid-utf8-in-unknown-member",
+        "framing-jsonrpc/found-reject-response-invalid-utf8-in-jsonrpc",
+        "framing-jsonrpc/found-reject-response-invalid-utf8-in-unknown-member",
+        "framing-jsonrpc/found-reject-response-invalid-utf8-in-error-message",
+        "framing-jsonrpc/found-request-method-escaped-slash",
+        "framing-jsonrpc/found-request-method-unicode-escapes"
       ]
     },
     "handshake": {
