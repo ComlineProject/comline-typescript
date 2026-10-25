@@ -130,6 +130,26 @@
       "compare": "json"
     },
     {
+      "id": "framing-jsonrpc/found-request-method-needs-escapes",
+      "op": "request",
+      "input": {
+        "call_id": 0,
+        "format": "json@1",
+        "framing": "jsonrpc@1",
+        "method": "app.Chat/say \"hi\" \\ \n\t\u0001\u001f é😀",
+        "params": {
+          "array": [
+            {
+              "string": "hi"
+            }
+          ]
+        },
+        "request_id": "6"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226d6574686f64223a226170702e436861742f736179205c2268695c22205c5c205c6e5c745c75303030315c75303031667f20c3a9f09f9880222c22706172616d73223a5b226869225d2c226964223a367d",
+      "compare": "json"
+    },
+    {
       "id": "framing-jsonrpc/reject-request-not-json",
       "op": "request",
       "input": {
@@ -155,6 +175,83 @@
       },
       "bytes": "7b226a736f6e727063223a22322e30222c22726573756c74223a317d",
       "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/found-reject-request-invalid-utf8-in-jsonrpc",
+      "op": "request",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322eff222c226d6574686f64223a226772656574222c22706172616d73223a5b5d2c226964223a317d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/found-reject-request-invalid-utf8-in-unknown-member",
+      "op": "request",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226d6574686f64223a226772656574222c22706172616d73223a5b5d2c2278223a22ff222c226964223a317d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/found-reject-response-invalid-utf8-in-jsonrpc",
+      "op": "response",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322eff222c22726573756c74223a312c226964223a317d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/found-reject-response-invalid-utf8-in-unknown-member",
+      "op": "response",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c22726573756c74223a312c2278223a22ff222c226964223a317d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/found-reject-response-invalid-utf8-in-error-message",
+      "op": "response",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226572726f72223a7b22636f6465223a312c226d657373616765223a22ff227d2c226964223a317d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/found-request-method-escaped-slash",
+      "op": "request",
+      "input": {
+        "call_id": 0,
+        "format": "json@1",
+        "framing": "jsonrpc@1",
+        "method": "app.Chat/count",
+        "params": {
+          "array": []
+        },
+        "request_id": "1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226d6574686f64223a226170702e436861745c2f636f756e74222c22706172616d73223a5b5d2c226964223a317d",
+      "compare": "json"
+    },
+    {
+      "id": "framing-jsonrpc/found-request-method-unicode-escapes",
+      "op": "request",
+      "input": {
+        "call_id": 0,
+        "format": "json@1",
+        "framing": "jsonrpc@1",
+        "method": "greeté😀",
+        "params": {
+          "array": []
+        },
+        "request_id": "1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226d6574686f64223a225c7530303637726565745c75303045395c75643833645c7564653030222c22706172616d73223a5b5d2c226964223a317d",
+      "compare": "json"
     }
   ]
 }

@@ -269,56 +269,6 @@ function jsonRpcLenient(bytes: Uint8Array): boolean {
   );
 }
 
-/**
- * Whether the reference took a JSON-RPC frame that isn't UTF-8 only because
- * every invalid byte is inside the value of a member it ignores (`jsonrpc`,
- * `error.message`, one it doesn't declare): `serde_json` skips such a value
- * without checking it, and TypeScript refuses a frame that isn't UTF-8.
- */
-function invalidOnlyWhereIgnored(bytes: Uint8Array): boolean {
-  try {
-    text.decode(bytes);
-    return false;
-  } catch {
-    // not UTF-8, as it must be to get here
-  }
-  const source = new TextDecoder("utf-8", { fatal: false, ignoreBOM: true }).decode(bytes);
-  let root: JsonNode;
-  try {
-    root = parseJson(source);
-  } catch {
-    return false;
-  }
-  if (root.kind !== "object") return false;
-  const ignored: JsonNode[] = [];
-  for (const [key, member] of root.members) {
-    if (!["method", "params", "id", "result", "error"].includes(key)) ignored.push(member);
-    else if (key === "error" && member.kind === "object") {
-      for (const [k, m] of member.members) if (k !== "code" && k !== "data") ignored.push(m);
-    }
-  }
-  for (let at = source.indexOf("\ufffd"); at >= 0; at = source.indexOf("\ufffd", at + 1)) {
-    if (!ignored.some((m) => m.start <= at && at < m.end)) return false;
-  }
-  return true;
-}
-
-/**
- * Whether a JSON-RPC request's method name is written with an escape in it.
- * The reference reads the name as a borrowed string, which can't hold one
- * that needs unescaping, so it refuses the frame.
- */
-function escapedMethod(bytes: Uint8Array): boolean {
-  try {
-    const source = text.decode(bytes);
-    const root = parseJson(source);
-    const method = root.kind === "object" ? root.members.get("method") : undefined;
-    return method?.kind === "string" && source.slice(method.start, method.end).includes("\\");
-  } catch {
-    return false;
-  }
-}
-
 /** The classes a JSON-decode violation belongs to. */
 const VIOLATION_CLASS: Record<string, string> = {
   variant: "json-decode-unchecked-variants-and-ranges",
@@ -341,8 +291,6 @@ const CLASSES: Record<string, true> = {
   "json-decode-unchecked-shape": true,
   "json-encode-f32-digits": true,
   "jsonrpc-decode-lenient": true,
-  "reference-jsonrpc-method-escapes": true,
-  "reference-jsonrpc-ignored-members-unvalidated": true,
   "connection-replies-in-any-order": true,
 };
 
@@ -380,30 +328,10 @@ function explain(d: Divergence): string[] | undefined {
     return d.session && skipsInnermost(d.session) ? ["connection-replies-in-any-order"] : undefined;
   }
   if (d.framing === "jsonrpc@1") {
-    // TypeScript took a JSON-RPC frame the reference refuses, for one of the
-    // two reasons above.
-    if (d.property.endsWith(" decode") && d.tsAccepted && !d.referenceAccepted && d.bytes) {
-      if (jsonRpcLenient(d.bytes)) return ["jsonrpc-decode-lenient"];
-      return d.property === "request decode" && escapedMethod(d.bytes) ? ["reference-jsonrpc-method-escapes"] : undefined;
-    }
-    if (d.property.endsWith(" decode") && !d.tsAccepted && d.referenceAccepted && d.bytes) {
-      return invalidOnlyWhereIgnored(d.bytes) ? ["reference-jsonrpc-ignored-members-unvalidated"] : undefined;
-    }
-    // The reference writes a method name into the frame as it is, so one
-    // with a quote, a backslash or a control character in it comes out as
-    // invalid JSON; TypeScript escapes it. (And reading, the reference
-    // refuses a method name with any escape in it: see `escapedMethod`.)
-    const method = (d.input as { method?: unknown } | undefined)?.method;
-    if (d.property === "request encode" && typeof method === "string" && /["\\\u0000-\u001f]/.test(method) && d.tsBytes) {
-      try {
-        const root = parseJson(text.decode(d.tsBytes));
-        const written = root.kind === "object" ? root.members.get("method") : undefined;
-        return written?.kind === "string" && written.value === method
-          ? ["reference-jsonrpc-method-escapes"]
-          : undefined;
-      } catch {
-        return undefined;
-      }
+    // TypeScript took a JSON-RPC frame the reference refuses, for the reason
+    // above.
+    if (d.property.endsWith(" decode") && d.tsAccepted && !d.referenceAccepted && d.bytes && jsonRpcLenient(d.bytes)) {
+      return ["jsonrpc-decode-lenient"];
     }
     return undefined;
   }

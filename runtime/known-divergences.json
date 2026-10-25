@@ -17,14 +17,6 @@
       "issue": "comline-typescript#75",
       "note": "jsonrpc@1 decoding accepts a declared member twice, and an id or error code spelled 1.0, 1e0 or -0; the reference refuses both"
     },
-    "reference-jsonrpc-method-escapes": {
-      "issue": "runtime#41",
-      "note": "the reference refuses a JSON-RPC method name written with any escape, and writes a name that needs one unescaped; TypeScript escapes, and reads any spelling"
-    },
-    "reference-jsonrpc-ignored-members-unvalidated": {
-      "issue": "runtime#42",
-      "note": "the reference accepts invalid UTF-8 inside JSON-RPC members it ignores (jsonrpc, error.message, undeclared ones); TypeScript refuses any frame that isn't UTF-8"
-    },
     "connection-replies-in-any-order": {
       "issue": "comline-typescript#77",
       "note": "Connection hands a reply to the call it answers in any order; an ordered (nested, blocking) Rust State refuses a reply that skips the innermost waiting call as a framing error. TypeScript has only the async model"
