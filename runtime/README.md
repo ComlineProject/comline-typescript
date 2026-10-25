@@ -62,7 +62,11 @@ any failure.
   runtimes accept, as the same value, or both refuse.
 - **Frames** (`frames.test.ts`): name hashes, handshakes, envelopes, and
   requests and responses in every framing encode alike, and decode their
-  mutations alike.
+  mutations alike. A JSON-RPC frame is also changed as JSON: a member made
+  twice, an `id` or error `code` respelled (`1.0`, `1e0`, `-0`), the method
+  name written with escapes (`\/`, `\uXXXX`, surrogate pairs), whitespace
+  between tokens, members reordered. A response's result and error data
+  compare as JSON: the reference returns the text it read, spaces and all.
 - **Connection sequences** (`sequences.test.ts`): a random list of events
   (local calls, one-way ones too, frames from the peer, abandoned calls,
   replies to the peer's requests) runs through a `Connection` and through

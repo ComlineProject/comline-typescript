@@ -244,6 +244,210 @@ export function mutate(bytes: Uint8Array, m: Mutation): Uint8Array {
 }
 
 /**
+ * A change to a JSON-RPC frame made as JSON, not as bytes: a flipped byte
+ * almost never makes a member twice, an `id` spelled `1.0`, a method name
+ * written with escapes, or whitespace between tokens, and these are where
+ * the two runtimes' JSON-RPC readers could part.
+ */
+export type JsonMutation =
+  | { duplicate: { member: number; inError: boolean; at: number; fresh: boolean } }
+  | { respell: { target: "id" | "code"; style: number } }
+  | { escape: { mask: number[]; all: boolean; upper: boolean; slash: boolean } }
+  | { space: { mask: number[]; widths: number[] } }
+  | { reorder: { keys: number[]; inError: boolean } };
+
+const spaceArb = fc.array(fc.integer({ min: 0, max: 3 }), { minLength: 1, maxLength: 8 });
+
+export const jsonMutationArb: fc.Arbitrary<JsonMutation> = fc.oneof(
+  fc
+    .record({ member: fc.nat(), inError: fc.boolean(), at: fc.nat(), fresh: fc.boolean() })
+    .map((duplicate) => ({ duplicate })),
+  fc
+    .record({ target: fc.constantFrom("id" as const, "code" as const), style: fc.integer({ min: 0, max: 4 }) })
+    .map((respell) => ({ respell })),
+  fc
+    .record({
+      mask: fc.array(fc.integer({ min: 0, max: 1 }), { minLength: 1, maxLength: 12 }),
+      all: fc.boolean(),
+      upper: fc.boolean(),
+      slash: fc.boolean(),
+    })
+    .map((escape) => ({ escape })),
+  fc.record({ mask: fc.array(fc.integer({ min: 0, max: 1 }), { minLength: 1, maxLength: 12 }), widths: spaceArb })
+    .map((space) => ({ space })),
+  fc
+    .record({ keys: fc.array(fc.nat(), { minLength: 1, maxLength: 8 }), inError: fc.boolean() })
+    .map((reorder) => ({ reorder })),
+);
+
+/** One member of a JSON object: its key, and its text as written, key included. */
+interface Member {
+  key: string;
+  text: string;
+}
+
+const STRING_LITERAL = /"(?:[^"\\]|\\.)*"/y;
+
+/** The members of the object written in `source` (which starts with `{`), or `undefined`. */
+function members(source: string): Member[] | undefined {
+  if (source[0] !== "{" || source[source.length - 1] !== "}") return undefined;
+  const out: Member[] = [];
+  let depth = 0;
+  let from = 1;
+  for (let at = 0; at < source.length; at++) {
+    const c = source[at]!;
+    if (c === '"') {
+      STRING_LITERAL.lastIndex = at;
+      const m = STRING_LITERAL.exec(source);
+      if (!m) return undefined;
+      at += m[0].length - 1;
+    } else if (c === "{" || c === "[") depth++;
+    else if (c === "}" || c === "]") depth--;
+    if ((c === "," && depth === 1) || (c === "}" && depth === 0)) {
+      const text = source.slice(from, at);
+      STRING_LITERAL.lastIndex = 0;
+      const key = STRING_LITERAL.exec(text);
+      if (!key || text[key[0].length] !== ":") return undefined;
+      out.push({ key: JSON.parse(key[0]) as string, text });
+      from = at + 1;
+    }
+  }
+  return out;
+}
+
+const valueOf = (m: Member): string => m.text.slice(m.text.indexOf(":", JSON.stringify(m.key).length - 1) + 1);
+const join = (ms: Member[]): string => `{${ms.map((m) => m.text).join(",")}}`;
+const nth = <T>(xs: readonly T[], n: number): T => xs[n % xs.length]!;
+
+/** `frame` with its `error` object's members changed by `edit`, or `undefined`. */
+function inError(ms: Member[], edit: (error: Member[]) => Member[] | undefined): Member[] | undefined {
+  const at = ms.findIndex((m) => m.key === "error");
+  const error = at < 0 ? undefined : members(valueOf(ms[at]!));
+  const edited = error && edit(error);
+  if (!edited) return undefined;
+  return ms.map((m, i) => (i === at ? { key: "error", text: `"error":${join(edited)}` } : m));
+}
+
+/** A non-negative integer `n` as another spelling of itself. */
+function respelled(n: string, style: number): string {
+  switch (style) {
+    case 0:
+      return `${n}.0`;
+    case 1:
+      return `${n}e0`;
+    case 2:
+      return n === "0" ? "-0" : `${n}.0`;
+    case 3:
+      return `${n}.00`;
+    default:
+      return `${n}0e-1`;
+  }
+}
+
+/** A string as JSON written with escapes in places `m` chooses. */
+function escapedString(value: string, m: Extract<JsonMutation, { escape: unknown }>["escape"]): string {
+  const unit = (u: number) => {
+    const h = u.toString(16).padStart(4, "0");
+    return `\\u${m.upper ? h.toUpperCase() : h}`;
+  };
+  let out = "";
+  let i = 0;
+  for (const ch of value) {
+    if (!m.all && nth(m.mask, i++) !== 1) out += JSON.stringify(ch).slice(1, -1);
+    else if (ch === "/" && m.slash) out += "\\/";
+    else for (let u = 0; u < ch.length; u++) out += unit(ch.charCodeAt(u));
+  }
+  return `"${out}"`;
+}
+
+/** `source` with whitespace between its tokens, where `m` chooses. */
+function spaced(source: string, m: Extract<JsonMutation, { space: unknown }>["space"]): string {
+  const WS = [" ", "\t", "\n", "\r"];
+  let out = "";
+  let n = 0;
+  const gap = () => (nth(m.mask, n++) === 1 ? WS[nth(m.widths, n)]!.repeat(1 + (n % 3)) : "");
+  out += gap();
+  for (let at = 0; at < source.length; at++) {
+    const c = source[at]!;
+    if (c === '"') {
+      STRING_LITERAL.lastIndex = at;
+      const lit = STRING_LITERAL.exec(source)![0];
+      out += lit;
+      at += lit.length - 1;
+    } else if ("{}[],:".includes(c)) out += gap() + c + gap();
+    else out += c;
+  }
+  return out + gap();
+}
+
+/**
+ * `valid`, a JSON-RPC frame, changed by `mutations`, or `undefined` if it
+ * isn't one or a mutation doesn't apply to it.
+ */
+export function mutateJson(valid: Uint8Array, mutations: JsonMutation[]): Uint8Array | undefined {
+  let source: string;
+  try {
+    source = new TextDecoder("utf-8", { fatal: true }).decode(valid);
+  } catch {
+    return undefined;
+  }
+  // Whitespace last: the others read the frame as the compact JSON it was written as.
+  const ordered = [...mutations].sort((a, b) => Number("space" in a) - Number("space" in b));
+  for (const mutation of ordered) {
+    const next = mutateOnce(source, mutation);
+    if (next === undefined) return undefined;
+    source = next;
+  }
+  return new TextEncoder().encode(source);
+}
+
+function mutateOnce(source: string, mutation: JsonMutation): string | undefined {
+  if ("space" in mutation) return source[0] === "{" ? spaced(source, mutation.space) : undefined;
+  const root = members(source.trim());
+  if (!root) return undefined;
+  if ("duplicate" in mutation) {
+    const d = mutation.duplicate;
+    const dup = (ms: Member[]): Member[] => {
+      // Either a member there already, or an undeclared one, twice.
+      const copy: Member = d.fresh ? { key: "x", text: '"x":1' } : nth(ms, d.member);
+      const out = [...ms];
+      out.splice(d.at % (ms.length + 1), 0, ...(d.fresh ? [copy, copy] : [copy]));
+      return out;
+    };
+    const out = d.inError ? inError(root, dup) : dup(root);
+    return out && join(out);
+  }
+  if ("respell" in mutation) {
+    const { target, style } = mutation.respell;
+    const respellMember = (ms: Member[], key: string): Member[] | undefined => {
+      const at = ms.findIndex((m) => m.key === key);
+      const v = at < 0 ? undefined : valueOf(ms[at]!);
+      if (v === undefined || !/^(0|[1-9][0-9]*)$/.test(v)) return undefined;
+      return ms.map((m, i) => (i === at ? { key, text: `${JSON.stringify(key)}:${respelled(v, style)}` } : m));
+    };
+    const out = target === "id" ? respellMember(root, "id") : inError(root, (e) => respellMember(e, "code"));
+    return out && join(out);
+  }
+  if ("escape" in mutation) {
+    const at = root.findIndex((m) => m.key === "method");
+    if (at < 0) return undefined;
+    let value: unknown;
+    try {
+      value = JSON.parse(valueOf(root[at]!));
+    } catch {
+      return undefined;
+    }
+    if (typeof value !== "string") return undefined;
+    return join(root.map((m, i) => (i === at ? { key: "method", text: `"method":${escapedString(value, mutation.escape)}` } : m)));
+  }
+  const { keys, inError: nested } = mutation.reorder;
+  const order = (ms: Member[]): Member[] =>
+    ms.map((m, i) => ({ m, k: nth(keys, i) })).sort((a, b) => a.k - b.k).map(({ m }) => m);
+  const out = nested ? inError(root, order) : order(root);
+  return out && join(out);
+}
+
+/**
  * Bytes to decode, made from a value's valid encoding: as they are,
  * mutated, random, or with one targeted fault at one place in the value
  * (see {@link sabotage}).

@@ -23,7 +23,7 @@ import { jsonEqual, parseJson } from "../../src/json.js";
 import { canon, decode, encode, encodeValue, hex, unhex, type Case } from "../ops.js";
 import { stringify, type Request } from "../reference.js";
 import type { Json, Type } from "../values.js";
-import { mutate, mutationArb, stringArb, typedArb } from "./gen.js";
+import { jsonMutationArb, mutate, mutateJson, mutationArb, stringArb, typedArb } from "./gen.js";
 import { known, params, withReference, type Divergence } from "./harness.js";
 
 type Input = { [key: string]: Json };
@@ -108,9 +108,20 @@ const responseArb = fc.constantFrom(...FRAMINGS).chain((framing) =>
     })),
 );
 
-/** Valid bytes changed, or random bytes. */
+/**
+ * Valid bytes changed, or random bytes. A JSON-RPC frame is also changed as
+ * JSON (a member twice, a number respelled, a method name escaped,
+ * whitespace, members reordered); any other frame, or one the change doesn't
+ * apply to, is changed as bytes.
+ */
 const damage = fc.oneof(
   { arbitrary: mutationArb.map((m) => (valid: Uint8Array) => mutate(valid, m)), weight: 3 },
+  {
+    arbitrary: fc
+      .tuple(fc.array(jsonMutationArb, { minLength: 1, maxLength: 2 }), mutationArb)
+      .map(([j, m]) => (valid: Uint8Array) => mutateJson(valid, j) ?? mutate(valid, m)),
+    weight: 4,
+  },
   {
     arbitrary: fc
       .array(fc.integer({ min: 0, max: 255 }), { maxLength: 48 })
@@ -147,11 +158,38 @@ function sameFrame(c: Case, ours: Uint8Array, theirs: Uint8Array): boolean {
 }
 
 /**
+ * A JSON-RPC response with its result or error data (`payload`, `body`)
+ * stripped of the whitespace between tokens. The reference hands those back
+ * as the text it read, spaces and all, and this runtime as compact JSON: the
+ * same JSON, so not a divergence.
+ */
+function withoutSpace(decoded: unknown): unknown {
+  if (typeof decoded !== "object" || decoded === null) return decoded;
+  const out: { [key: string]: unknown } = { ...(decoded as object) };
+  for (const key of ["payload", "body"]) {
+    const value = out[key];
+    if (typeof value !== "string") continue;
+    try {
+      out[key] = hex(utf8.encode(compact(strict.decode(unhex(value)))));
+    } catch {
+      // not UTF-8: left as it is
+    }
+  }
+  return out;
+}
+
+/** `source` without the whitespace between its tokens. */
+function compact(source: string): string {
+  return source.replace(/"(?:[^"\\]|\\.)*"|[ \t\n\r]+/gs, (m) => (m.startsWith('"') ? m : ""));
+}
+
+/**
  * A decoded request with its params as the stated value when they are it as
  * JSON. Each side states them only when they're its own exact encoding, and
  * the two write `0.0` differently.
  */
 function normalized(c: Case, decoded: unknown): unknown {
+  if (c.op === "response" && c.input?.framing === "jsonrpc@1") return withoutSpace(decoded);
   const params = (decoded as { params?: { undecoded?: unknown } } | undefined)?.params;
   const stated = c.input?.params;
   if (c.op !== "request" || typeof params?.undecoded !== "string" || stated === undefined) return decoded;
