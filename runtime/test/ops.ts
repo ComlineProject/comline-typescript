@@ -37,7 +37,16 @@ import { fromJs, layoutOf, layoutOfType, toJs, type Json, type Type } from "./va
 
 export interface Case {
   id: string;
-  op: "name_hash" | "handshake" | "envelope" | "request" | "response" | "encode" | "decode";
+  op:
+    | "name_hash"
+    | "handshake"
+    | "envelope"
+    | "request"
+    | "response"
+    | "encode"
+    | "decode"
+    | "stream_prefix"
+    | "stream_split";
   input?: { [key: string]: Json };
   bytes: string;
   expect?: "reject";
@@ -193,6 +202,9 @@ export function encode(c: Case): Uint8Array {
       return encodeValue(i.format as string, i.value as Json);
     case "decode":
       throw new Error("`decode` cases are decode only");
+    case "stream_prefix":
+    case "stream_split":
+      throw new NotImplemented("stream framing");
   }
 }
 
@@ -308,8 +320,13 @@ export function decode(c: Case, bytes: Uint8Array): unknown {
       }
       return { format: i.format, type: i.type, value: fromJs(i.type as Type, parsed) };
     }
+    case "stream_prefix":
+    case "stream_split":
+      throw new NotImplemented("stream framing");
     default:
-      return undefined;
+      // An op this harness doesn't know isn't a refusal: returning
+      // `undefined` would pass every `reject` case of it unchecked.
+      throw new NotImplemented(`op \`${(c as { op: string }).op}\``);
   }
 }
 

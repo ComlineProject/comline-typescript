@@ -219,6 +219,12 @@
         "name-hash/jsonrpc@1",
         "name-hash/com.acme.custom-format"
       ]
+    },
+    "stream": {
+      "state": "unsupported",
+      "note": "no length-prefixed framing or frame limit yet: the transports are message-oriented",
+      "tracking": "comline-typescript#80",
+      "proven_by": []
     }
   }
 }

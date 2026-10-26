@@ -29,6 +29,8 @@ export type Op =
   | "response"
   | "encode"
   | "decode"
+  | "stream_prefix"
+  | "stream_split"
   | "check"
   | "version"
   | "session";
