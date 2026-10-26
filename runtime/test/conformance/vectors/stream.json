@@ -1,0 +1,258 @@
+{
+  "feature": "stream",
+  "cases": [
+    {
+      "id": "stream/prefix-zero",
+      "op": "stream_prefix",
+      "input": {
+        "len": 0,
+        "max": 16777216
+      },
+      "bytes": "00000000"
+    },
+    {
+      "id": "stream/prefix-small",
+      "op": "stream_prefix",
+      "input": {
+        "len": 3,
+        "max": 16777216
+      },
+      "bytes": "03000000"
+    },
+    {
+      "id": "stream/prefix-le",
+      "op": "stream_prefix",
+      "input": {
+        "len": 66051,
+        "max": 16777216
+      },
+      "bytes": "03020100"
+    },
+    {
+      "id": "stream/prefix-default-max",
+      "op": "stream_prefix",
+      "input": {
+        "len": 16777216,
+        "max": 16777216
+      },
+      "bytes": "00000001"
+    },
+    {
+      "id": "stream/prefix-small-max",
+      "op": "stream_prefix",
+      "input": {
+        "len": 2,
+        "max": 2
+      },
+      "bytes": "02000000"
+    },
+    {
+      "id": "stream/prefix-u32-max",
+      "op": "stream_prefix",
+      "input": {
+        "len": 4294967295,
+        "max": 4294967295
+      },
+      "bytes": "ffffffff"
+    },
+    {
+      "id": "stream/split-empty",
+      "op": "stream_split",
+      "input": {
+        "frames": [],
+        "max": 16777216,
+        "needed": 0,
+        "rest": ""
+      },
+      "bytes": ""
+    },
+    {
+      "id": "stream/split-partial-prefix-1",
+      "op": "stream_split",
+      "input": {
+        "frames": [],
+        "max": 16777216,
+        "needed": 0,
+        "rest": "03"
+      },
+      "bytes": "03"
+    },
+    {
+      "id": "stream/split-partial-prefix-3",
+      "op": "stream_split",
+      "input": {
+        "frames": [],
+        "max": 16777216,
+        "needed": 0,
+        "rest": "030000"
+      },
+      "bytes": "030000"
+    },
+    {
+      "id": "stream/split-prefix-only",
+      "op": "stream_split",
+      "input": {
+        "frames": [],
+        "max": 16777216,
+        "needed": 7,
+        "rest": "03000000"
+      },
+      "bytes": "03000000"
+    },
+    {
+      "id": "stream/split-partial-body",
+      "op": "stream_split",
+      "input": {
+        "frames": [],
+        "max": 16777216,
+        "needed": 7,
+        "rest": "0300000061"
+      },
+      "bytes": "0300000061"
+    },
+    {
+      "id": "stream/split-one-frame",
+      "op": "stream_split",
+      "input": {
+        "frames": [
+          "616263"
+        ],
+        "max": 16777216,
+        "needed": 0,
+        "rest": ""
+      },
+      "bytes": "03000000616263"
+    },
+    {
+      "id": "stream/split-zero-length",
+      "op": "stream_split",
+      "input": {
+        "frames": [
+          ""
+        ],
+        "max": 16777216,
+        "needed": 0,
+        "rest": ""
+      },
+      "bytes": "00000000"
+    },
+    {
+      "id": "stream/split-two-frames",
+      "op": "stream_split",
+      "input": {
+        "frames": [
+          "6162",
+          "63"
+        ],
+        "max": 16777216,
+        "needed": 0,
+        "rest": ""
+      },
+      "bytes": "0200000061620100000063"
+    },
+    {
+      "id": "stream/split-frame-then-partial",
+      "op": "stream_split",
+      "input": {
+        "frames": [
+          "6162"
+        ],
+        "max": 16777216,
+        "needed": 0,
+        "rest": "0100"
+      },
+      "bytes": "0200000061620100"
+    },
+    {
+      "id": "stream/split-small-max",
+      "op": "stream_split",
+      "input": {
+        "frames": [
+          "6162",
+          ""
+        ],
+        "max": 2,
+        "needed": 6,
+        "rest": "0200000063"
+      },
+      "bytes": "020000006162000000000200000063"
+    },
+    {
+      "id": "stream/split-default-max-prefix",
+      "op": "stream_split",
+      "input": {
+        "frames": [],
+        "max": 16777216,
+        "needed": 16777220,
+        "rest": "00000001"
+      },
+      "bytes": "00000001"
+    },
+    {
+      "id": "stream/reject-prefix-over-default-max",
+      "op": "stream_prefix",
+      "input": {
+        "len": 16777217,
+        "max": 16777216
+      },
+      "bytes": "01000001",
+      "expect": "reject"
+    },
+    {
+      "id": "stream/reject-prefix-over-small-max",
+      "op": "stream_prefix",
+      "input": {
+        "len": 3,
+        "max": 2
+      },
+      "bytes": "03000000",
+      "expect": "reject"
+    },
+    {
+      "id": "stream/reject-prefix-u32-max-over-default-max",
+      "op": "stream_prefix",
+      "input": {
+        "len": 4294967295,
+        "max": 16777216
+      },
+      "bytes": "ffffffff",
+      "expect": "reject"
+    },
+    {
+      "id": "stream/reject-split-over-default-max",
+      "op": "stream_split",
+      "input": {
+        "max": 16777216
+      },
+      "bytes": "01000001",
+      "expect": "reject"
+    },
+    {
+      "id": "stream/reject-split-u32-max",
+      "op": "stream_split",
+      "input": {
+        "max": 16777216
+      },
+      "bytes": "ffffffff",
+      "expect": "reject"
+    },
+    {
+      "id": "stream/reject-split-over-small-max",
+      "op": "stream_split",
+      "input": {
+        "max": 2
+      },
+      "bytes": "03000000616263",
+      "expect": "reject"
+    },
+    {
+      "id": "stream/reject-split-frame-then-over-max",
+      "op": "stream_split",
+      "input": {
+        "max": 2
+      },
+      "bytes": "010000006103000000",
+      "expect": "reject"
+    }
+  ]
+}

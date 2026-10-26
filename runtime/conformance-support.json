@@ -7,6 +7,11 @@
     "framing-datagram": { "state": "supported" },
     "framing-datagram2": { "state": "supported" },
     "framing-jsonrpc": { "state": "supported" },
+    "stream": {
+      "state": "unsupported",
+      "note": "no length-prefixed framing or frame limit yet: the transports are message-oriented",
+      "tracking": "comline-typescript#80"
+    },
     "format-json": {
       "state": "partial",
       "note": "decoding doesn't check enum variants or integer ranges",
