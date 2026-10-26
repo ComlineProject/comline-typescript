@@ -324,7 +324,9 @@ export function decode(c: Case, bytes: Uint8Array): unknown {
     case "stream_split":
       throw new NotImplemented("stream framing");
     default:
-      return undefined;
+      // An op this harness doesn't know isn't a refusal: returning
+      // `undefined` would pass every `reject` case of it unchecked.
+      throw new NotImplemented(`op \`${(c as { op: string }).op}\``);
   }
 }
 
