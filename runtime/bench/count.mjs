@@ -11,12 +11,17 @@
 //
 // Workloads: noop, {ts,wasm}-request-<bytes>, wasm-request-<bytes>-into,
 // {ts,wasm}-name-hash, {ts,wasm}-handshake, binding-handshake,
-// ts-duplex-send-<bytes>[-nocopy].
+// ts-duplex-send-<bytes>[-nocopy], {ts,wasm}-roundtrip-<bytes>,
+// {ts,wasm}-jsonrpc-roundtrip-<bytes>.
 // `ts-duplex-send-<bytes>` is one frame through `duplex()`: `send`, then the
 // peer's `recv`, its promises run to completion each iteration (a forced
 // microtask checkpoint). `-nocopy` is the same with `send` queueing the
 // caller's array itself, as `duplex()` would without its copy: the difference
 // is what the `Transport` contract's copy costs.
+// `{ts,wasm}-roundtrip-<bytes>` is one call and its reply, end to end through
+// two `Connection`s over `duplex()` (`datagram@2`, the params and the result
+// both <bytes> long, no codec work): `ts-` with the framing and state in
+// TypeScript (the core never loaded), `wasm-` on the core.
 // `wasm-request-<bytes>-into` is `wasm-request-<bytes>` encoding into one
 // reused array (`encodeRequestInto`, comline-runtime PR #64) instead of a
 // new one per frame; its TS counterpart is `ts-request-<bytes>`. The TS ones use the built runtime
@@ -176,7 +181,45 @@ async function binding() {
   };
 }
 
-const workloads = name.startsWith("wasm-")
+async function roundtrip(n, onCore, json = false) {
+  const rt = await import("../dist/src/index.js");
+  if (onCore) await (await import("../dist/src/core/core.js")).loadedCore();
+  const raw = { name: "raw", encode: (v) => v, decode: (b) => b };
+  const [a, b] = rt.duplex();
+  const framing = () => (json ? new rt.JsonRpcConnectionFraming() : new rt.Datagram2Framing());
+  const client = rt.Connection.unverified(a, raw, framing());
+  const server = rt.Connection.unverified(b, raw, framing());
+  if ((client.wire !== undefined) !== onCore) throw new Error("the connection isn't where the workload says");
+  // JSON-RPC carries params and result as JSON: a string `n` bytes long, quotes included.
+  const jsonBody = () => new TextEncoder().encode(`"${"a".repeat(n - 2)}"`);
+  const result = json ? jsonBody() : body(n);
+  server.provide(5, {
+    calls: () => ["echo"],
+    dispatch: () => Promise.reject(new Error("unused")),
+    dispatchWith: (_kind, _params, reply) => {
+      reply.ok(result);
+      return Promise.resolve();
+    },
+  });
+  const params = json ? jsonBody() : body(n);
+  const call = rt.call(0, "echo");
+  let done = 0;
+  const got = (envelope) => {
+    sink ^= envelope.ok.length;
+    done++;
+  };
+  return () => {
+    const before = done;
+    client.call(5, call, params).then(got);
+    runMicrotasks();
+    if (done !== before + 1) throw new Error("the round trip didn't finish in the iteration");
+  };
+}
+
+const trip = /^(ts|wasm)-(jsonrpc-)?roundtrip-(\d+)$/.exec(name);
+const workloads = trip
+  ? { [name]: await roundtrip(Number(trip[3]), trip[1] === "wasm", trip[2] !== undefined) }
+  : name.startsWith("wasm-")
   ? await wasm()
   : name.startsWith("binding-")
     ? await binding()
@@ -238,5 +281,5 @@ function run() {
 // An async workload drains its promises with a microtask checkpoint, which
 // V8 skips inside another one: and this module's top level, after an
 // `await`, runs in one. So those run from a task of their own.
-if (duplexSend) setImmediate(run);
+if (trip || duplexSend) setImmediate(run);
 else run();

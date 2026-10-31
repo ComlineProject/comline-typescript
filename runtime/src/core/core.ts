@@ -8,10 +8,11 @@
 // load makes a fresh one. Internal: nothing here is exported from the
 // package.
 
-import { Status, type Comline } from "#core/comline.mjs";
+import { Status, type Comline, type Config, type Connection as AbiConnection } from "#core/comline.mjs";
 
 import { RuntimeError, type RuntimeErrorKind } from "../contract.js";
 import { discardCore, loadCore } from "./load.js";
+import type { Wire } from "./wire.js";
 
 /** The `comline@1` frame's length (`HANDSHAKE_LEN`). */
 const HANDSHAKE_LEN = 31;
@@ -42,20 +43,56 @@ export function statusError(status: number, kind: RuntimeErrorKind): RuntimeErro
 
 export class Core {
   readonly #lib: Comline;
+  /** The open connections on this instance, failed together if it traps. */
+  readonly #wires = new Set<Wire>();
 
   /** Wraps `lib`; {@link loadedCore} / {@link currentCore} are the usual way in. */
   constructor(lib: Comline) {
     this.#lib = lib;
   }
 
-  /** Throws unless `status` is `OK`; a poisoned instance is discarded first. */
+  /**
+   * Throws unless `status` is `OK`. A poisoned instance is discarded first,
+   * and every connection on it is told (`Wire.onPoison`), so all of them fail.
+   */
   #ok(status: number, kind: RuntimeErrorKind): void {
     if (status === Status.OK) return;
     if (status === Status.ERR_POISONED || this.#lib.poisoned) {
       discardCore(this.#lib);
       if (current?.lib === this.#lib) current = undefined;
+      const wires = [...this.#wires];
+      this.#wires.clear();
+      for (const wire of wires) wire.onPoison();
     }
     throw statusError(status, kind);
+  }
+
+  /** {@link #ok}, for a {@link Wire}'s calls. */
+  check(status: number, kind: RuntimeErrorKind): void {
+    this.#ok(status, kind);
+  }
+
+  track(wire: Wire): void {
+    this.#wires.add(wire);
+  }
+
+  untrack(wire: Wire): void {
+    this.#wires.delete(wire);
+  }
+
+  /** `comline_connection_new`. */
+  connectionNew(config: Config): AbiConnection {
+    const { status, connection } = this.#lib.connectionNew(config);
+    this.#ok(status, "framing");
+    return connection!;
+  }
+
+  /** `comline_method_name_unescape`: a `NAME_ESCAPED` method name as UTF-8. */
+  methodNameUnescape(spelled: Uint8Array): Uint8Array {
+    // Unescaping never lengthens a name.
+    const { status, bytes } = this.#lib.methodNameUnescape(spelled, spelled.length);
+    this.#ok(status, "framing");
+    return bytes!;
   }
 
   /** `comline_name_hash`: 64-bit FNV-1a over the name's UTF-8. */
