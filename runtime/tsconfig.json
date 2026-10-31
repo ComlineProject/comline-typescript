@@ -17,7 +17,8 @@
     "types": ["node"],
     "baseUrl": ".",
     "paths": {
-      "@comline/runtime": ["./src/index.ts"]
+      "@comline/runtime": ["./src/index.ts"],
+      "acme-encodings": ["./test/generated/acme-encodings.ts"]
     }
   },
   "include": ["src/**/*.ts", "test/**/*.ts"]

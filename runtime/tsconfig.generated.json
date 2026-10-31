@@ -6,7 +6,8 @@
     "lib": ["ES2020"],
     "exactOptionalPropertyTypes": true,
     "paths": {
-      "@comline/runtime": ["./dist/src/index.d.ts"]
+      "@comline/runtime": ["./dist/src/index.d.ts"],
+      "acme-encodings": ["./test/generated/acme-encodings.ts"]
     }
   },
   "include": ["test/generated/**/*.ts"]

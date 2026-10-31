@@ -35,7 +35,7 @@ fn request(fx: &Fixture, version: &str) -> GenerateRequest {
         external_std: fx.external_std,
         validate_on_decode: fx.validate_on_decode,
         async_api: fx.async_api,
-        encodings: Default::default(),
+        encodings: comline_codegen::encodings::official_for("typescript"),
     }
 }
 

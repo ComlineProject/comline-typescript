@@ -41,7 +41,7 @@ use std::path::PathBuf;
 
 use comline_core::schema::ir::frozen::types::{Literal, PrimitiveType, TypeRef};
 use comline_core::schema::ir::frozen::schema_ir_hash;
-use comline_core::schema::idl::annotations::{MethodNames, FRAMING_JSONRPC, HANDSHAKE_NONE};
+use comline_core::schema::idl::annotations::{MethodNames, FORMAT_JSON, FRAMING_JSONRPC, HANDSHAKE_NONE};
 use comline_core::schema::ir::frozen::unit::FrozenUnit;
 use comline_core::schema::ir::unverified;
 
@@ -53,7 +53,13 @@ use comline_codegen::modules::{NamespaceTree, TreeLayout};
 use comline_codegen::naming::{camel, pascal, screaming_snake};
 use comline_codegen::stdlib::{self, is_std_namespace};
 use comline_codegen::symbols::{error_names, SymbolTable, UseTracker};
+use comline_codegen::encodings::type_of;
+use comline_codegen::protocol::EncodingMapping;
 use comline_codegen::{GenerateRequest, GeneratedFile, Mode, PackageMeta};
+
+/// The request's encodings: the class each encoding maps to in
+/// TypeScript, by canonical name.
+type Encodings = BTreeMap<String, EncodingMapping>;
 
 /// The npm package generated RPC code imports from. Not published yet — a
 /// generated `lib` package declares this range and expects it resolvable
@@ -77,14 +83,13 @@ pub fn generate_typescript(req: &GenerateRequest) -> Result<Vec<GeneratedFile>> 
     // named, before a single file is produced.
     comline_codegen::features::refuse_unsupported("typescript", req, crate::SUPPORT)?;
 
-    // The package's codec. MessagePack has none yet, which the support table
-    // has already refused, so only a name nobody knows gets here.
-    let codec = codec_class(&req.wire_format).ok_or_else(|| {
-        eyre::eyre!(
-            "unknown wire format `{}` - expected `packed@1`, `json@1` or `msgpack@1`",
-            req.wire_format
-        )
-    })?;
+    // Every encoding the package uses (its format, each protocol's framing
+    // and handshake) has to be mapped to a class: an unmapped one is refused
+    // here, before a file is produced, never rendered as something else.
+    // MessagePack has no TypeScript mapping, but the support table has
+    // already refused it.
+    comline_codegen::encodings::check(req)?;
+    let codec = type_of(&req.encodings, &req.wire_format);
     // JSON-RPC protocols sharing a connection whose bare method names one
     // side couldn't tell apart.
     connections::check(&req.schemas)?;
@@ -131,7 +136,7 @@ pub fn generate_typescript(req: &GenerateRequest) -> Result<Vec<GeneratedFile>> 
         Mode::Code => Ok(emitted
             .iter()
             .map(|(namespace, units)| {
-                let source = schema_source(&header, namespace, units, &req.schemas, codec, external_std);
+                let source = schema_source(&header, namespace, units, req, codec, external_std);
                 // `code` mode has no manifest to add the dependency to, so
                 // the file says what it needs - the same courtesy the Rust
                 // generator extends for `Cargo.toml`.
@@ -162,7 +167,7 @@ pub fn generate_typescript(req: &GenerateRequest) -> Result<Vec<GeneratedFile>> 
             // them, including an external `std` this package emits no file
             // for.
             let mut sources = tree.emit("src", &TsLayout, &|namespace, units| {
-                schema_source(&header, namespace, units, &req.schemas, codec, external_std)
+                schema_source(&header, namespace, units, req, codec, external_std)
             });
             // The package module beside the schemas, its names at the root.
             if let Some(contents) = package {
@@ -190,10 +195,21 @@ pub fn generate_typescript(req: &GenerateRequest) -> Result<Vec<GeneratedFile>> 
                 RuntimeDep::None
             };
 
+            // Each mapped encoding's package a file imports a class from,
+            // beside the runtime and std, which are dependencies already.
+            let mut mapped: Vec<(&str, Option<&str>)> = Vec::new();
+            for mapping in req.encodings.values() {
+                let Some(package) = mapping.package.as_deref() else { continue };
+                let imported = sources.iter().any(|f| f.contents.contains(&format!("from \"{package}\"")));
+                if imported && package != RUNTIME_PACKAGE && package != STD_PACKAGE && !mapped.iter().any(|(p, _)| *p == package) {
+                    mapped.push((package, mapping.version.as_deref()));
+                }
+            }
+
             let mut files = vec![
                 GeneratedFile {
                     path: PathBuf::from("package.json"),
-                    contents: package_json(&req.package, &req.target.version, runtime, std.needs_std_dependency),
+                    contents: package_json(&req.package, &req.target.version, runtime, std.needs_std_dependency, &mapped),
                 },
                 GeneratedFile {
                     path: PathBuf::from("tsconfig.json"),
@@ -283,7 +299,13 @@ enum RuntimeDep {
 /// The package's manifest. `typescript` is an optional peer dependency at the
 /// declared version and up: npm then warns a consumer whose compiler is older,
 /// and never refuses a newer one, which a ceiling would.
-fn package_json(pkg: &PackageMeta, lang_version: &str, runtime: RuntimeDep, needs_std_dep: bool) -> String {
+fn package_json(
+    pkg: &PackageMeta,
+    lang_version: &str,
+    runtime: RuntimeDep,
+    needs_std_dep: bool,
+    mapped: &[(&str, Option<&str>)],
+) -> String {
     let name = pkg.name.to_lowercase();
     let mut entries: Vec<String> = Vec::new();
     if runtime == RuntimeDep::Required {
@@ -291,6 +313,11 @@ fn package_json(pkg: &PackageMeta, lang_version: &str, runtime: RuntimeDep, need
     }
     if needs_std_dep {
         entries.push(format!("    \"{STD_PACKAGE}\": \"{STD_VERSION}\""));
+    }
+    // An encoding's implementation: the package a mapping names, at the
+    // version it asks for (any, if it asks for none).
+    for (package, version) in mapped {
+        entries.push(format!("    \"{package}\": \"{}\"", version.unwrap_or("*")));
     }
     let dep = if entries.is_empty() {
         String::new()
@@ -440,10 +467,12 @@ fn schema_source(
     header: &str,
     namespace: &str,
     units: &[FrozenUnit],
-    schemas: &[(String, Vec<FrozenUnit>)],
+    req: &GenerateRequest,
     codec: &str,
     external_std: bool,
 ) -> String {
+    let schemas = &req.schemas;
+    let encodings = &req.encodings;
     let types = TypeMapper::new(units, schemas, external_std);
     let errors = error_names(units);
 
@@ -512,7 +541,7 @@ fn schema_source(
                     namespace,
                     functions,
                     parameters,
-                    &framing_choice(parameters),
+                    &framing_choice(parameters, encodings),
                     method_names,
                     number,
                     &errors,
@@ -534,7 +563,7 @@ fn schema_source(
         .iter()
         .filter_map(|u| match u {
             FrozenUnit::Protocol { parameters, .. } if !on_connection(parameters) => {
-                Some(framing_choice(parameters))
+                Some(framing_choice(parameters, encodings))
             }
             _ => None,
         })
@@ -552,6 +581,7 @@ fn schema_source(
     // The runtime import and the `IR_HASH` const, which only depend on the
     // schema's own shape.
     let mut runtime_import = String::new();
+    let mut external: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     let mut ir_hash = String::new();
     if has_protocol {
         let mut values = Vec::new();
@@ -559,18 +589,17 @@ fn schema_source(
             values.extend(["Client", "Server"]);
         }
         values.extend(["RuntimeError", "resolveKind"]);
-        if picks.iter().any(|p| !p.jsonrpc) {
-            values.push("DatagramFraming");
+        // Each lockstep framing's class, then the package's codec, and JSON
+        // for a lockstep JSON-RPC protocol: the runtime's from the runtime
+        // import, any other package's from an import of its own.
+        for pick in picks.iter().filter(|p| !p.jsonrpc).chain(picks.iter().filter(|p| p.jsonrpc)) {
+            import_class(encodings, &pick.name, &mut values, &mut external);
+        }
+        if formatted {
+            import_class(encodings, &req.wire_format, &mut values, &mut external);
         }
         if picks.iter().any(|p| p.jsonrpc) {
-            values.push("JsonRpcFraming");
-        }
-        // The package's codec, and JSON for a lockstep JSON-RPC protocol.
-        if formatted {
-            values.push(codec);
-        }
-        if codec != "JsonCodec" && picks.iter().any(|p| p.jsonrpc) {
-            values.push("JsonCodec");
+            import_class(encodings, FORMAT_JSON, &mut values, &mut external);
         }
         let any_none = units.iter().any(|u| {
             matches!(u, FrozenUnit::Protocol { parameters, .. } if no_handshake(parameters) && !on_connection(parameters))
@@ -605,6 +634,7 @@ fn schema_source(
             runtime_import.push_str(&format!("    type {t},\n"));
         }
         runtime_import.push_str("} from \"@comline/runtime\";\n\n");
+        runtime_import.push_str(&external_imports(&external));
 
         ir_hash.push_str(&format!(
             "/** Canonical digest of the frozen IR this file was generated from — the\n\
@@ -773,49 +803,66 @@ fn string_enum(name: &str, variants: &[FrozenUnit]) -> String {
 // ── framing selection ──────────────────────────────────────────────────────
 
 struct FramingChoice {
-    /// The runtime class name — `DatagramFraming` or `JsonRpcFraming`.
-    ctor: &'static str,
+    /// The encoding's canonical name: `datagram`, `jsonrpc`, or a
+    /// namespaced one.
+    name: String,
+    /// The class it maps to: `DatagramFraming`, `JsonRpcFraming`.
+    ctor: String,
     jsonrpc: bool,
-}
-
-/// The accepted spellings and their aliases come from core, not from a
-/// copy kept here - this generator, the Rust one and the playground each
-/// used to maintain their own, and they had drifted.
-fn framing_for(name: &str) -> Option<FramingChoice> {
-    match comline_core::schema::idl::annotations::canonical_value("framing", name)? {
-        "jsonrpc" => Some(FramingChoice {
-            ctor: "JsonRpcFraming",
-            jsonrpc: true,
-        }),
-        "datagram" => Some(FramingChoice {
-            ctor: "DatagramFraming",
-            jsonrpc: false,
-        }),
-        // A protocol on it runs on a `Connection`, which names its framing
-        // itself; this only says the name is known.
-        comline_core::schema::idl::annotations::FRAMING_DATAGRAM2 => Some(FramingChoice {
-            ctor: "Datagram2Framing",
-            jsonrpc: false,
-        }),
-        _ => None,
-    }
+    /// What its helpers encode with when not told: JSON's codec for a
+    /// JSON-RPC protocol, which carries JSON whatever the package's format
+    /// is, the package's `Format` otherwise.
+    codec: String,
 }
 
 /// A protocol's framing: its `@framing`, which core has filled in from the
-/// package's `wire.framing`, else `datagram@2`.
-fn framing_choice(parameters: &[FrozenUnit]) -> FramingChoice {
-    framing_for(connections::framing(parameters).name).expect("core only lets known framings through")
+/// package's `wire.framing`, else `datagram@2`, mapped to the class the
+/// request's encodings name (`encodings::check` has vouched for it).
+fn framing_choice(parameters: &[FrozenUnit], encodings: &Encodings) -> FramingChoice {
+    let name = connections::framing_name(parameters);
+    let jsonrpc = name == FRAMING_JSONRPC;
+    FramingChoice {
+        ctor: type_of(encodings, &name).to_string(),
+        codec: if jsonrpc { format!("new {}()", type_of(encodings, FORMAT_JSON)) } else { "Format".to_string() },
+        jsonrpc,
+        name,
+    }
 }
 
-/// The runtime's codec class for a wire format name. `None` for one it has
-/// no codec for.
-fn codec_class(name: &str) -> Option<&'static str> {
-    use comline_core::schema::idl::annotations::{FORMAT_JSON, FORMAT_PACKED};
-    match name {
-        FORMAT_PACKED => Some("PackedCodec"),
-        FORMAT_JSON => Some("JsonCodec"),
-        _ => None,
+/// Import the class encoding `name` maps to: into `runtime` (the runtime
+/// import's names) when the runtime provides it, under its package in
+/// `external` when another package does. A mapping naming no package
+/// imports nothing: the class is in scope already. Each class once.
+fn import_class<'a>(
+    encodings: &'a Encodings,
+    name: &str,
+    runtime: &mut Vec<&'a str>,
+    external: &mut BTreeMap<&'a str, Vec<&'a str>>,
+) {
+    let Some(mapping) = encodings.get(name) else { return };
+    let class = mapping.type_path.as_str();
+    let into = match mapping.package.as_deref() {
+        Some(RUNTIME_PACKAGE) => runtime,
+        Some(package) => external.entry(package).or_default(),
+        None => return,
+    };
+    if !into.contains(&class) {
+        into.push(class);
     }
+}
+
+/// One import per package other than the runtime that a mapped encoding's
+/// class comes from, in package order. Empty when there's none, as there is
+/// for the official encodings.
+fn external_imports(external: &BTreeMap<&str, Vec<&str>>) -> String {
+    let mut s = String::new();
+    for (package, classes) in external {
+        s.push_str(&format!("import {{ {} }} from \"{package}\";\n", classes.join(", ")));
+    }
+    if !s.is_empty() {
+        s.push('\n');
+    }
+    s
 }
 
 /// The text of a scalar `@key = value` annotation (a
@@ -829,16 +876,6 @@ fn annotation<'a>(parameters: &'a [FrozenUnit], key: &str) -> Option<Cow<'a, str
         FrozenUnit::Property { name, value } if name == key => value.as_text(),
         _ => None,
     })
-}
-
-/// What a lockstep protocol's helpers encode with when not told: JSON for a
-/// JSON-RPC protocol, the package's `Format` otherwise.
-fn default_codec(parameters: &[FrozenUnit]) -> &'static str {
-    if connections::framing(parameters).name == FRAMING_JSONRPC {
-        "new JsonCodec()"
-    } else {
-        "Format"
-    }
 }
 
 // ── the package's connection ───────────────────────────────────────────────
@@ -866,16 +903,17 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
     // Each schema the module reaches, under a name of its own.
     let module = |namespace: &str| format!("ns_{}", namespace.replace(['/', ':', '-', '.'], "_"));
 
+    let encodings = &req.encodings;
     let mut values = vec!["Connection"];
+    let mut external: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     // JSON-RPC carries JSON whatever the package's format is.
-    let connection_codec = if jsonrpc { "new JsonCodec()" } else { "Format" };
+    let connection_codec =
+        if jsonrpc { format!("new {}()", type_of(encodings, FORMAT_JSON)) } else { "Format".to_string() };
     if jsonrpc {
-        values.push("JsonCodec");
+        import_class(encodings, FORMAT_JSON, &mut values, &mut external);
         values.push("JsonRpcConnectionFraming");
     }
-    if !values.contains(&codec) {
-        values.push(codec);
-    }
+    import_class(encodings, &req.wire_format, &mut values, &mut external);
     if unverified {
         values.push("NoHandshake");
     }
@@ -884,6 +922,10 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
         s.push_str(&format!("    {v},\n"));
     }
     s.push_str("    type Codec,\n    type Transport,\n} from \"@comline/runtime\";\n");
+    s.push_str(external_imports(&external).trim_end_matches('\n'));
+    if !external.is_empty() {
+        s.push('\n');
+    }
     let namespaces: BTreeSet<&str> = server.iter().chain(&client).map(|p| p.namespace.as_str()).collect();
     for namespace in &namespaces {
         s.push_str(&format!(
@@ -1306,7 +1348,7 @@ fn protocol(
             ("peer", format!("{proto}Sender.PROTOCOL, "))
         }
         None => {
-            let codec = default_codec(parameters);
+            let codec = &framing.codec;
             s.push_str(&format!(
                 "export class {proto}Client {{\n\
                 \x20   private readonly client: Client;\n\n\
@@ -1386,7 +1428,7 @@ fn protocol(
             \x20   return new Server(new {proto}Dispatcher(impl), codec, framing).serve(transport, IR_HASH{handshake_arg});\n\
             }}\n\n",
             ctor = framing.ctor,
-            codec = default_codec(parameters),
+            codec = framing.codec,
         ));
     }
 
