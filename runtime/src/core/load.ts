@@ -20,17 +20,33 @@ export type { Comline } from "#core/comline.mjs";
 const wasmUrl = new URL("../../../core/comline_runtime_ffi.wasm", import.meta.url);
 
 let core: Promise<Comline> | undefined;
+let loaded: Comline | undefined;
 
 /**
  * The core's instance for this realm: instantiated on the first call, then
  * shared. A failed load isn't kept, so the next call tries again.
  */
 export function loadCore(): Promise<Comline> {
-  core ??= instantiateCore().catch((e: unknown) => {
-    core = undefined;
-    throw e;
-  });
+  core ??= instantiateCore().then(
+    (instance) => (loaded = instance),
+    (e: unknown) => {
+      core = undefined;
+      throw e;
+    },
+  );
   return core;
+}
+
+/**
+ * Drop `instance` if it's the cached one (a trap poisoned it), so the next
+ * {@link loadCore} instantiates afresh. An instance already replaced is left
+ * alone.
+ */
+export function discardCore(instance: Comline): void {
+  if (loaded === instance) {
+    core = undefined;
+    loaded = undefined;
+  }
 }
 
 async function instantiateCore(): Promise<Comline> {

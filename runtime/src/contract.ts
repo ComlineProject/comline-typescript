@@ -20,7 +20,10 @@ export type RuntimeErrorKind =
   | "unknownCall" // the peer addressed a call this side does not have
   | "remote" // the peer raised a schema error this side's code does not know
   | "provider" // the peer's provider failed outside what its schema describes
-  | "handshake"; // the connection handshake disagreed
+  | "handshake" // the connection handshake disagreed
+  | "frameTooLarge" // a frame is over the connection's size limit
+  | "busy" // the connection is in use by another call
+  | "poisoned"; // the core trapped; it's discarded and the next connection loads a fresh one
 
 export class RuntimeError extends Error {
   override readonly name = "RuntimeError";
@@ -57,6 +60,15 @@ export class RuntimeError extends Error {
   }
   static handshake(): RuntimeError {
     return new RuntimeError("handshake");
+  }
+  static frameTooLarge(): RuntimeError {
+    return new RuntimeError("frameTooLarge");
+  }
+  static busy(): RuntimeError {
+    return new RuntimeError("busy");
+  }
+  static poisoned(): RuntimeError {
+    return new RuntimeError("poisoned");
   }
 
   is(kind: RuntimeErrorKind): boolean {

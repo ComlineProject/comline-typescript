@@ -11,6 +11,7 @@
  */
 
 import { RuntimeError } from "./contract.js";
+import { currentCore } from "./core/core.js";
 import type { Transport } from "./transport.js";
 
 const MAGIC = Uint8Array.of(0x43, 0x4f); // "CO"
@@ -162,7 +163,21 @@ export class ComlineHandshake implements Handshake {
     return ComlineHandshake.exchange(transport, local);
   }
 
+  // The exchange runs on the Comline core when the realm has already loaded
+  // it (byte for byte what the TypeScript below does, and fewer instructions
+  // per handshake: see runtime/bench). It never loads the core itself: the
+  // first load compiles the module, which would cost the first connection more
+  // than the handshake saves. Until something else needs the core, the
+  // TypeScript runs. `nameHash` and `HandshakeFrame` stay TypeScript: they're
+  // synchronous, and the core loads asynchronously.
   private static async exchange(transport: Transport, local: Facts): Promise<void> {
+    const core = currentCore();
+    if (core) {
+      const ours = core.handshakeEncode(local.irHash, local.wireFormat, local.framing, local.capabilities);
+      await transport.send(ours);
+      core.handshakeCheck(ours, await transport.recv());
+      return;
+    }
     const ours = new HandshakeFrame(local);
     await transport.send(ours.encode());
     const peer = HandshakeFrame.decode(await transport.recv());
