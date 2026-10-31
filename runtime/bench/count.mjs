@@ -83,13 +83,17 @@ async function ts() {
           return Promise.resolve();
         };
       }
+      let done = 0;
       const got = (f) => {
         sink ^= f.length;
+        done++;
       };
       return () => {
+        const before = done;
         void a.send(frame);
         b.recv().then(got);
         runMicrotasks();
+        if (done !== before + 1) throw new Error("the frame didn't arrive in the iteration");
       };
     },
     "ts-name-hash": () => {
@@ -209,22 +213,30 @@ try {
   process.exit(2);
 }
 
-// Warm up through the same loop, over several calls.
-const ROUNDS = 4;
-for (let r = 0; r < ROUNDS; r++) measured(Math.ceil(W / ROUNDS));
+function run() {
+  // Warm up through the same loop, over several calls.
+  const ROUNDS = 4;
+  for (let r = 0; r < ROUNDS; r++) measured(Math.ceil(W / ROUNDS));
 
-// Start the measured loop on an empty young generation, so where the first
-// scavenge falls doesn't depend on what start-up allocated. Two full
-// collections: the second finishes the first's lazy sweeping, which would
-// otherwise land in the loop in varying amounts.
-setFlagsFromString("--expose-gc");
-const gc = runInNewContext("gc");
-gc();
-gc();
+  // Start the measured loop on an empty young generation, so where the first
+  // scavenge falls doesn't depend on what start-up allocated. Two full
+  // collections: the second finishes the first's lazy sweeping, which would
+  // otherwise land in the loop in varying amounts.
+  setFlagsFromString("--expose-gc");
+  const gc = runInNewContext("gc");
+  gc();
+  gc();
 
-if (process.env.COMLINE_REGION) {
-  createRequire(import.meta.url)(process.env.COMLINE_REGION).region(() => measured(K));
-} else {
-  measured(K);
+  if (process.env.COMLINE_REGION) {
+    createRequire(import.meta.url)(process.env.COMLINE_REGION).region(() => measured(K));
+  } else {
+    measured(K);
+  }
+  if (sink === 0x7fffffff) console.log("");
 }
-if (sink === 0x7fffffff) console.log("");
+
+// An async workload drains its promises with a microtask checkpoint, which
+// V8 skips inside another one: and this module's top level, after an
+// `await`, runs in one. So those run from a task of their own.
+if (duplexSend) setImmediate(run);
+else run();
