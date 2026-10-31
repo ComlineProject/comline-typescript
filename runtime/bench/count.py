@@ -6,7 +6,7 @@
 """Instructions per iteration, TypeScript against the wasm core.
 
 Runs each workload REPEAT times (default 5) under `valgrind --tool=callgrind`
-with `node --predictable --no-opt`, counting only the measured loop of
+with `node --predictable --no-opt` (or, with --opt, the optimizing tier on), counting only the measured loop of
 count.mjs, and prints the median per-iteration count and the min-max spread.
 With --compare, prints a markdown table of each ts-X against wasm-X.
 
@@ -33,14 +33,15 @@ DEFAULTS = ["ts-request-16", "wasm-request-16", "ts-request-4096", "wasm-request
 TOTAL = re.compile(rb"^summary:\s+(\d+)", re.M)
 
 
-def run_once(node, workload, k, w, region):
+def run_once(node, workload, k, w, region, opt):
     env = dict(os.environ, COMLINE_REGION=region)
     with tempfile.TemporaryDirectory(prefix="count-") as tmp:
         out = os.path.join(tmp, "cg.out")
         cmd = [
             "valgrind", "--tool=callgrind", f"--callgrind-out-file={out}",
             "--collect-atstart=no", "--toggle-collect=comline_bench_region",
-            node, "--allow-natives-syntax", "--predictable", "--no-opt",
+            node, "--allow-natives-syntax", "--predictable",
+            *([] if opt else ["--no-opt"]),
             os.path.join(HERE, "count.mjs"), workload, str(k), str(w),
         ]
         p = subprocess.run(cmd, cwd=os.path.dirname(HERE), capture_output=True, env=env)
@@ -69,6 +70,8 @@ def main():
     ap.add_argument("-W", type=int, default=5000, help="warm-up iterations")
     ap.add_argument("-j", type=int, default=4, help="parallel valgrind runs")
     ap.add_argument("--node", default="node", help="node binary (shims are resolved)")
+    ap.add_argument("--opt", action="store_true",
+                    help="leave V8's optimizing tier on (drop --no-opt); give -W enough warm-up to reach it")
     ap.add_argument("--region", default=os.path.join(HERE, ".core", "region.node"))
     a = ap.parse_args()
     workloads = a.workload or DEFAULTS
@@ -77,7 +80,7 @@ def main():
         sys.exit(f"{a.region} not found: build the region addon (bench/README.md)")
 
     with cf.ThreadPoolExecutor(a.j) as pool:
-        futs = {w: [pool.submit(run_once, a.node, w, a.K, a.W, a.region) for _ in range(a.repeat)]
+        futs = {w: [pool.submit(run_once, a.node, w, a.K, a.W, a.region, a.opt) for _ in range(a.repeat)]
                 for w in workloads}
         runs = {w: [f.result() for f in fs] for w, fs in futs.items()}
     med = {w: statistics.median(r) for w, r in runs.items()}

@@ -58,7 +58,10 @@ runs.
 - Node runs with `--predictable --no-opt`, so the counts are repeatable but
   there is no optimizing tier: they compare interpreter- and baseline-tier JS
   (and the wasm module's own baseline compile) against wasm. A warmed-up
-  TurboFan build of the TypeScript would be faster than these show.
+  TurboFan build of the TypeScript would be faster than these show. `--opt`
+  drops `--no-opt` so the optimizing tier runs; give it the warm-up to get
+  there (`-W 20000` is enough for these workloads: check with
+  `node --trace-opt`).
 - The spread across the 5 runs is small but not zero: up to about 0.6% in the
   spike, and 1.3% on one workload in the last check. The median is the number
   to quote; differences below a couple of percent are noise.
