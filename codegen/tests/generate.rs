@@ -1,42 +1,44 @@
-use comline_codegen::{GenRequest, Mode, PackageMeta};
+use comline_codegen::{GenerateRequest, Mode, PackageMeta, TargetLanguage};
 use comline_codegen_typescript::generate_typescript;
 use comline_core::schema::ir::frozen::types::{Literal, PrimitiveType, TypeRef};
 use comline_core::schema::ir::frozen::unit::{ConfigValue, FrozenArgument, FrozenUnit};
 
-fn code_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenRequest<'_> {
-    GenRequest {
+fn code_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenerateRequest {
+    GenerateRequest {
         mode: Mode::Code,
-        schemas,
+        schemas: schemas.to_vec(),
         package: PackageMeta {
             name: "test".into(),
             version: "0.1.0".into(),
         },
-        lang_version: comline_codegen_typescript::LANG_VERSION.into(),
+        target: TargetLanguage { language: "typescript".into(), version: comline_codegen_typescript::LANG_VERSION.into() },
         wire_format: "packed@1".into(),
         external_std: false,
         validate_on_decode: Default::default(),
         async_api: false,
+        encodings: Default::default(),
     }
 }
 
-fn lib_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenRequest<'_> {
-    GenRequest {
+fn lib_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenerateRequest {
+    GenerateRequest {
         mode: Mode::Lib,
-        schemas,
+        schemas: schemas.to_vec(),
         package: PackageMeta {
             name: "chat".into(),
             version: "0.3.0".into(),
         },
-        lang_version: comline_codegen_typescript::LANG_VERSION.into(),
+        target: TargetLanguage { language: "typescript".into(), version: comline_codegen_typescript::LANG_VERSION.into() },
         wire_format: "packed@1".into(),
         external_std: false,
         validate_on_decode: Default::default(),
         async_api: false,
+        encodings: Default::default(),
     }
 }
 
-fn external_std_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenRequest<'_> {
-    GenRequest {
+fn external_std_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenerateRequest {
+    GenerateRequest {
         external_std: true,
         ..lib_req(schemas)
     }
@@ -393,7 +395,7 @@ fn framing_annotation_and_package_default_pick_jsonrpc() {
 #[test]
 fn an_unknown_wire_format_is_an_error() {
     let schemas = vec![("account".to_string(), chat_units())];
-    let req = GenRequest { wire_format: "packed".into(), ..code_req(&schemas) };
+    let req = GenerateRequest { wire_format: "packed".into(), ..code_req(&schemas) };
     let error = generate_typescript(&req).unwrap_err();
     assert_eq!(error.to_string(), "unknown wire format `packed` - expected `packed@1`, `json@1` or `msgpack@1`");
 }
@@ -401,7 +403,7 @@ fn an_unknown_wire_format_is_an_error() {
 #[test]
 fn msgpack_is_refused_until_the_runtime_has_a_codec() {
     let schemas = vec![("account".to_string(), chat_units())];
-    let req = GenRequest { wire_format: "msgpack@1".into(), ..code_req(&schemas) };
+    let req = GenerateRequest { wire_format: "msgpack@1".into(), ..code_req(&schemas) };
     let error = generate_typescript(&req).unwrap_err().to_string();
     assert!(error.contains("no MessagePack codec"), "{error}");
 }
@@ -938,7 +940,7 @@ fn external_std_in_code_mode_says_what_to_install() {
     // `code` mode has no manifest to put the dependency in, so the file does
     // the telling.
     let schemas = package_using_std();
-    let req = GenRequest {
+    let req = GenerateRequest {
         external_std: true,
         ..code_req(&schemas)
     };
@@ -973,7 +975,7 @@ fn a_file_not_touching_std_gets_no_install_note() {
         "plain".to_string(),
         vec![struct_with("Plain", vec![field("message", "string")])],
     ));
-    let req = GenRequest {
+    let req = GenerateRequest {
         external_std: true,
         ..code_req(&schemas)
     };
@@ -1356,7 +1358,7 @@ fn a_connection_protocol_gets_a_sender_and_peer_taking_handlers() {
 fn async_changes_nothing_in_typescript() {
     let schemas = vec![("link".to_string(), link_units())];
     let plain = generate_typescript(&code_req(&schemas)).unwrap();
-    let asynchronous = generate_typescript(&GenRequest { async_api: true, ..code_req(&schemas) }).unwrap();
+    let asynchronous = generate_typescript(&GenerateRequest { async_api: true, ..code_req(&schemas) }).unwrap();
     assert_eq!(plain[0].contents, asynchronous[0].contents);
     assert!(plain[0].contents.contains("Promise<"));
 }

@@ -15,7 +15,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use comline_codegen::{GenRequest, Mode, PackageMeta};
+use comline_codegen::{GenerateRequest, Mode, PackageMeta, TargetLanguage};
 use comline_codegen_typescript::generate_typescript;
 use comline_core::package::build::PackageSources;
 use comline_core::package::stdlib;
@@ -55,16 +55,16 @@ fn main() -> eyre::Result<()> {
         })
         .collect();
 
-    let req = GenRequest {
+    let req = GenerateRequest {
         mode: Mode::Lib,
-        schemas: &schemas,
+        schemas: schemas.to_vec(),
         package: PackageMeta {
             name: "@comline/std".to_string(),
             version: STD_PACKAGE_VERSION.to_string(),
         },
         // The one generator this repo registers, so the version it registers
         // under is the one `@comline/std`'s own manifest states.
-        lang_version: comline_codegen_typescript::LANG_VERSION.to_string(),
+        target: TargetLanguage { language: "typescript".into(), version: comline_codegen_typescript::LANG_VERSION.to_string() },
         wire_format: "packed@1".into(),
         // `@comline/std` *is* std, generated as an ordinary standalone
         // package - `external_std` only matters to a consumer referencing
@@ -72,6 +72,7 @@ fn main() -> eyre::Result<()> {
         external_std: false,
         validate_on_decode: Default::default(),
         async_api: false,
+        encodings: Default::default(),
     };
 
     let files = generate_typescript(&req)?;
