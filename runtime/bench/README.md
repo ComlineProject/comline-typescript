@@ -14,6 +14,9 @@ instructions per iteration and the min-max spread.
 
 Workloads: `ts-` and `wasm-` `request-16`, `request-4096` (encode a request,
 decode it), `name-hash`, `handshake`, and `noop` (the loop's own cost).
+`wasm-request-<bytes>-into` is the wasm request encoding into one reused
+array (`encodeRequestInto`) rather than a new one per frame; `--compare`
+pairs it with `ts-request-<bytes>`, whose encode is unchanged.
 `binding-handshake` is the handshake as `ComlineHandshake` runs it, through
 the runtime's binding (`src/core/core.ts`) over the vendored `core/`.
 

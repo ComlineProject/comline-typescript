@@ -92,7 +92,9 @@ def main():
         print(f"| {w} | {med[w]:,.0f} | {min(r):,.0f} | {max(r):,.0f} | {pct(spread)} |")
 
     if a.compare:
-        pairs = [(w, "wasm-" + w[3:]) for w in workloads if w.startswith("ts-") and "wasm-" + w[3:] in med]
+        # ts-X against wasm-X, and against wasm-X-into when it ran.
+        pairs = [(w, c) for w in workloads if w.startswith("ts-")
+                 for c in ("wasm-" + w[3:], "wasm-" + w[3:] + "-into") if c in med]
         if not pairs:
             sys.exit("--compare needs a ts-X and a wasm-X workload")
         print()
@@ -100,7 +102,7 @@ def main():
         print("|---|---:|---:|---:|---:|")
         for t, c in pairs:
             d = med[c] - med[t]
-            print(f"| {t[3:]} | {med[t]:,.0f} | {med[c]:,.0f} | {d:+,.0f} | {100 * d / med[t]:+.1f}% |")
+            print(f"| {c[5:]} | {med[t]:,.0f} | {med[c]:,.0f} | {d:+,.0f} | {100 * d / med[t]:+.1f}% |")
 
 
 if __name__ == "__main__":
