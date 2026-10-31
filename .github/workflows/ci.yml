@@ -21,6 +21,19 @@ jobs:
       # regenerated.
       - run: cargo run -p xtask -- --check
 
+  wasip1:
+    # The generator as a WASI module, which the CLI runs under wasmtime.
+    # `comline-codegen` takes comline-core with `default-features = false`
+    # (the IR only), so the parser and its tree-sitter dependency stay out of
+    # this build (core#144).
+    name: Generator builds for wasm32-wasip1
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup update stable && rustup default stable
+      - run: rustup target add wasm32-wasip1
+      - run: cargo build --verbose -p comline-codegen-typescript --bin comline-gen-typescript --target wasm32-wasip1
+
   runtime:
     name: runtime - Node
     runs-on: ubuntu-latest
