@@ -1,7 +1,5 @@
 /target
 Cargo.lock
-# The lock the vendored core is built with (runtime/scripts/vendor-core.sh).
-!runtime/core/Cargo.lock
 .idea/
 __TEMP__/
 
