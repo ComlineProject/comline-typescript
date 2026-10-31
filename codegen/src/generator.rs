@@ -41,7 +41,7 @@ use std::path::PathBuf;
 
 use comline_core::schema::ir::frozen::types::{Literal, PrimitiveType, TypeRef};
 use comline_core::schema::ir::frozen::schema_ir_hash;
-use comline_core::schema::idl::annotations::{MethodNames, FORMAT_JSON, FRAMING_JSONRPC, HANDSHAKE_NONE};
+use comline_core::schema::idl::annotations::{MethodNames, DEFAULT_HANDSHAKE, FORMAT_JSON, FRAMING_JSONRPC, HANDSHAKE_NONE};
 use comline_core::schema::ir::frozen::unit::FrozenUnit;
 use comline_core::schema::ir::unverified;
 
@@ -601,6 +601,10 @@ fn schema_source(
         if picks.iter().any(|p| p.jsonrpc) {
             import_class(encodings, FORMAT_JSON, &mut values, &mut external);
         }
+        // A lockstep protocol's own handshake, which its helpers construct.
+        for (name, _) in picks.iter().filter_map(|p| p.handshake.as_ref()) {
+            import_class(encodings, name, &mut values, &mut external);
+        }
         let any_none = units.iter().any(|u| {
             matches!(u, FrozenUnit::Protocol { parameters, .. } if no_handshake(parameters) && !on_connection(parameters))
         });
@@ -813,6 +817,11 @@ struct FramingChoice {
     /// JSON-RPC protocol, which carries JSON whatever the package's format
     /// is, the package's `Format` otherwise.
     codec: String,
+    /// The protocol's handshake when it's neither `comline@1` nor `none`:
+    /// its canonical name and the class it maps to. Those two keep their own
+    /// paths (the runtime's default, and `NoHandshake`), so what's generated
+    /// for them doesn't change.
+    handshake: Option<(String, String)>,
 }
 
 /// A protocol's framing: its `@framing`, which core has filled in from the
@@ -826,7 +835,18 @@ fn framing_choice(parameters: &[FrozenUnit], encodings: &Encodings) -> FramingCh
         codec: if jsonrpc { format!("new {}()", type_of(encodings, FORMAT_JSON)) } else { "Format".to_string() },
         jsonrpc,
         name,
+        handshake: custom_handshake(parameters, encodings),
     }
+}
+
+/// A protocol's handshake, canonical, and the class it maps to, when it's
+/// neither `comline@1` nor `none`.
+fn custom_handshake(parameters: &[FrozenUnit], encodings: &Encodings) -> Option<(String, String)> {
+    let name = connections::handshake_name(parameters);
+    (name != DEFAULT_HANDSHAKE && name != HANDSHAKE_NONE).then(|| {
+        let class = type_of(encodings, &name).to_string();
+        (name, class)
+    })
 }
 
 /// Import the class encoding `name` maps to: into `runtime` (the runtime
@@ -917,6 +937,12 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
     if unverified {
         values.push("NoHandshake");
     }
+    // A handshake that's neither `comline@1` nor `none` is passed in; those
+    // two keep the arguments they always had.
+    let custom = (package.handshake != DEFAULT_HANDSHAKE && !unverified).then(|| type_of(encodings, &package.handshake));
+    if custom.is_some() {
+        import_class(encodings, &package.handshake, &mut values, &mut external);
+    }
     let mut s = format!("{header}\nimport {{\n");
     for v in &values {
         s.push_str(&format!("    {v},\n"));
@@ -973,8 +999,13 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
     let has_server = side("Services", "provideServices", &server, "the accepting side");
     let has_client = side("ClientServices", "provideClientServices", &client, "the dialling side");
 
-    let framing_arg = if jsonrpc { ", new JsonRpcConnectionFraming()" } else if unverified { ", undefined" } else { "" };
-    let handshake_arg = if unverified { ", new NoHandshake()" } else { "" };
+    let framing_arg =
+        if jsonrpc { ", new JsonRpcConnectionFraming()" } else if unverified || custom.is_some() { ", undefined" } else { "" };
+    let handshake_arg = match custom {
+        Some(class) => format!(", new {class}()"),
+        None if unverified => ", new NoHandshake()".to_string(),
+        None => String::new(),
+    };
     let open = |side: &str| {
         format!("await Connection.{side}(transport, {connection_codec}, CONNECTION_IR_HASH{framing_arg}{handshake_arg})")
     };
@@ -1193,9 +1224,11 @@ fn protocol(
 
     let doc = unverified_doc(parameters);
     let (handshake_arg, handshake_note) = if no_handshake(parameters) {
-        (", new NoHandshake()", "        // No handshake: `@handshake = \"none\"`.\n")
+        (", new NoHandshake()".to_string(), "        // No handshake: `@handshake = \"none\"`.\n")
+    } else if let Some((_, class)) = &framing.handshake {
+        (format!(", new {class}()"), "")
     } else {
-        ("", "")
+        (String::new(), "")
     };
 
     // 4. the dispatcher
@@ -1308,19 +1341,29 @@ fn protocol(
         \x20   }\n",
     );
     if number.is_some() {
-        let open = match (framing.jsonrpc, no_handshake(parameters)) {
-            (false, true) => "`Connection.accept(transport, Format, CONNECTION_IR_HASH, framing, new NoHandshake())`",
-            (false, false) => "`Connection.accept(transport, Format, CONNECTION_IR_HASH)`",
-            (true, true) => {
-                "`Connection.accept(transport, new JsonCodec(), CONNECTION_IR_HASH, new JsonRpcConnectionFraming(), new NoHandshake())`"
+        let open = match (framing.jsonrpc, no_handshake(parameters), &framing.handshake) {
+            (false, false, Some((_, class))) => {
+                format!("`Connection.accept(transport, Format, CONNECTION_IR_HASH, undefined, new {class}())`")
             }
-            (true, false) => "`Connection.accept(transport, new JsonCodec(), CONNECTION_IR_HASH, new JsonRpcConnectionFraming())`",
+            (true, false, Some((_, class))) => format!(
+                "`Connection.accept(transport, new JsonCodec(), CONNECTION_IR_HASH, new JsonRpcConnectionFraming(), new {class}())`"
+            ),
+            (false, true, _) => {
+                "`Connection.accept(transport, Format, CONNECTION_IR_HASH, framing, new NoHandshake())`".to_string()
+            }
+            (false, false, None) => "`Connection.accept(transport, Format, CONNECTION_IR_HASH)`".to_string(),
+            (true, true, _) => {
+                "`Connection.accept(transport, new JsonCodec(), CONNECTION_IR_HASH, new JsonRpcConnectionFraming(), new NoHandshake())`".to_string()
+            }
+            (true, false, None) => {
+                "`Connection.accept(transport, new JsonCodec(), CONNECTION_IR_HASH, new JsonRpcConnectionFraming())`".to_string()
+            }
         };
         // The side that provides it opens: a client-provided protocol dials.
         let open = if connections::Provider::of(parameters) == connections::Provider::Client {
             open.replace("Connection.accept", "Connection.connect")
         } else {
-            open.to_string()
+            open
         };
         s.push_str(&format!(
             "\n    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with {open}, or let the package's `serve` / `connect` do it. */\n\
