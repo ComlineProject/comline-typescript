@@ -11,3 +11,6 @@ runtime/dist/
 # (`cargo run -p xtask`); only what npm builds is ignored.
 std-extra/node_modules/
 std-extra/dist/
+
+# runtime/bench (dev tool): the built region addon and a copied wasm build
+runtime/bench/.core*/
