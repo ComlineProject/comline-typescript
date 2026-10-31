@@ -47,6 +47,7 @@
  * 2^64 can't be reached in a sequence).
  */
 
+import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import fc from "fast-check";
@@ -68,6 +69,8 @@ import {
 } from "../../src/index.js";
 import { FRAMING_DATAGRAM2, FRAMING_JSONRPC } from "../../src/index.js";
 import { jsonEqual, parseJson } from "../../src/json.js";
+import { currentCore, loadedCore } from "../../src/core/core.js";
+import { Wire } from "../../src/core/wire.js";
 import { hex, unhex } from "../ops.js";
 import { stringify } from "../reference.js";
 import type { Json } from "../values.js";
@@ -445,12 +448,34 @@ interface PeerRequest {
 }
 
 /**
- * Run `session` through a `Connection`, one step per event. Steps after
- * the connection closes aren't there.
+ * What the core's wires decode, for {@link runTs} on the core: `Wire.feed`,
+ * recorded, as the `Recording` framing records the TypeScript's decode.
  */
-async function runTs(session: Session): Promise<Json[]> {
+let onWireFeed: ((decoded: Frame | undefined) => void) | undefined;
+const feed = Wire.prototype.feed;
+Wire.prototype.feed = function (this: Wire, frame: Uint8Array) {
+  const decoded = feed.call(this, frame);
+  // A stale reply reads as a reply nobody waits on, as the TypeScript's does.
+  onWireFeed?.(decoded === "stale" ? { kind: "reply", protocol: undefined, requestId: -1n, envelope: { fault: true } } : decoded);
+  return decoded;
+};
+
+/**
+ * Run `session` through a `Connection`, one step per event, on the core
+ * (`onCore`: a built-in framing, the core loaded) or the TypeScript (a
+ * custom framing, which never runs on it). Steps after the connection
+ * closes aren't there.
+ */
+async function runTs(session: Session, onCore: boolean): Promise<Json[]> {
   const inner = framingOf(session.framing);
   const framing = new Recording(inner);
+  if (onCore) {
+    await loadedCore();
+    onWireFeed = (d) => {
+      framing.decoded.push(d);
+      framing.onDecode(d);
+    };
+  } else onWireFeed = undefined;
   const json = session.framing === FRAMING_JSONRPC;
   const pipe = new Pipe();
   const calls: LocalCall[] = [];
@@ -473,7 +498,9 @@ async function runTs(session: Session): Promise<Json[]> {
     if (d?.kind === "request") requests.push({ frame: d, answer: undefined, release: undefined, sent: [] });
   };
 
-  const connection = Connection.unverified(pipe, PREENCODED, framing);
+  const connection = Connection.unverified(pipe, PREENCODED, onCore ? inner : framing);
+  // On the core exactly when asked: `unverified` uses it once it's loaded.
+  assert.equal((connection as unknown as { wire: unknown }).wire !== undefined, onCore && currentCore() !== undefined);
   let closed = false;
   void connection.closed.then(() => (closed = true));
 
@@ -711,9 +738,10 @@ function firstDifference(session: Session, ts: Json[], reference: Json[]): numbe
 }
 
 withReference("sequences: TypeScript's Connection steps as the reference's State does", (reference) => {
+  for (const [onCore, on] of [[false, "TypeScript"], [true, "the core"]] as const)
   for (const framing of [FRAMING_DATAGRAM2, FRAMING_JSONRPC] as const) {
     for (const ordered of [true, false]) {
-      test(`${framing}, ${ordered ? "ordered" : "unordered"}: every step agrees with the reference`, async () => {
+      test(`${framing}, ${ordered ? "ordered" : "unordered"}, on ${on}: every step agrees with the reference`, async () => {
         await fc.assert(
           fc.asyncProperty(sequenceArb, async (seq) => {
             const session = concretize(framing, ordered, seq);
@@ -722,7 +750,7 @@ withReference("sequences: TypeScript's Connection steps as the reference's State
               input: { framing, ordered, events: session.events },
             });
             if (answer.kind !== "steps") throw new Error(`no steps from the reference: ${JSON.stringify(answer)}`);
-            const ts = await runTs(session);
+            const ts = await runTs(session, onCore);
             const at = firstDifference(session, ts, answer.steps);
             if (at === undefined) return;
 
