@@ -1089,7 +1089,9 @@ fn unverified_doc(parameters: &[FrozenUnit]) -> String {
     let mut doc = format!(
         "/**\n * **Unverified:** gives up {} ({}).\n",
         unverified::describe(set),
-        unverified::cause(parameters)
+        // The request carries no encoding declarations, so this sees the
+        // official ones only: the handshake's cause, as the IR records it.
+        unverified::cause(parameters, &unverified::Encodings::default())
     );
     if let Some(reason) = unverified::reason(parameters) {
         doc.push_str(&format!(" * Reason given: {reason}\n"));
