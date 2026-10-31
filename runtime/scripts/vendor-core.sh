@@ -6,7 +6,8 @@
 #   scripts/vendor-core.sh --check # rebuild CORE_REV, fail unless every byte matches
 #
 # The build is reproducible: the runtime's own pinned toolchain
-# (rust-toolchain.toml), `--locked`, `--profile wasm`, every local path
+# (rust-toolchain.toml) and its committed Cargo.lock (`--locked`),
+# `--profile wasm`, every local path
 # remapped and a fixed SOURCE_DATE_EPOCH, so `--check` can rebuild from source
 # and compare bytes rather than trust a committed binary.
 #
@@ -19,7 +20,7 @@ here="$(cd "$(dirname "$0")/.." && pwd)"
 dest="$here/core"
 repo="https://github.com/ComlineProject/runtime"
 vectors_rev="$(cat "$here/test/conformance/VECTORS_REV")"
-files=(comline_runtime_ffi.wasm comline.mjs comline.d.mts Cargo.lock)
+files=(comline_runtime_ffi.wasm comline.mjs comline.d.mts)
 
 if [[ "${1:-}" == "--check" ]]; then
   rev="$(cat "$dest/CORE_REV")"
@@ -42,15 +43,13 @@ fi
 # Everything runs inside the clone, so rustup picks its rust-toolchain.toml.
 cd "$tmp/runtime"
 
-# The runtime doesn't commit a Cargo.lock, so the dependency versions are
-# pinned here: vendoring resolves them once (or takes the runtime's own lock,
-# should it ever commit one) and keeps the result in core/Cargo.lock;
-# `--check` builds against that, `--locked`. Without it a new crates.io
-# release would change the bytes under an unchanged CORE_REV.
-if [[ "${1:-}" == "--check" ]]; then
-  cp "$dest/Cargo.lock" Cargo.lock
-elif [[ ! -f Cargo.lock ]]; then
-  cargo generate-lockfile --quiet
+# The dependency versions are the runtime's own: its committed Cargo.lock,
+# built `--locked`. A revision without one can't be vendored, since a new
+# crates.io release would then change the bytes under an unchanged CORE_REV.
+if [[ ! -f Cargo.lock ]]; then
+  echo "$repo@$rev has no committed Cargo.lock: the core can only be vendored" >&2
+  echo "at a runtime revision that commits its lock (cc31f21 or later)" >&2
+  exit 1
 fi
 rustup toolchain install --profile minimal >/dev/null 2>&1 || rustup toolchain install
 toolchain="$(rustup show active-toolchain | cut -d' ' -f1)"
@@ -72,7 +71,7 @@ cargo build --quiet --locked -p comline-runtime-ffi --profile wasm --target wasm
 out="$tmp/out"
 mkdir "$out"
 cp "$CARGO_TARGET_DIR/wasm32-unknown-unknown/wasm/comline_runtime_ffi.wasm" "$out/"
-cp runtime/ffi/js/comline.mjs runtime/ffi/js/comline.d.mts Cargo.lock "$out/"
+cp runtime/ffi/js/comline.mjs runtime/ffi/js/comline.d.mts "$out/"
 echo "$rev" > "$out/CORE_REV"
 chmod 644 "$out"/*
 (cd "$out" && sha256sum "${files[@]}" > SHA256SUMS)

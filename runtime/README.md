@@ -48,7 +48,7 @@ CONFORMANCE_BLESS=1 npm test          # rewrite conformance-report.json
 `core/` holds the Comline core: the wasm32 build of
 [`comline-runtime-ffi`](https://github.com/ComlineProject/runtime/tree/main/runtime/ffi)
 and its JS glue (`comline.mjs`, `comline.d.mts`), vendored at the commit in
-`core/CORE_REV`, with the `Cargo.lock` it was built with and `SHA256SUMS`.
+`core/CORE_REV` (built with that commit's own `Cargo.lock`), and `SHA256SUMS`.
 `src/core/load.ts` loads it, once per realm. Nothing uses it yet.
 
 The build is reproducible (the runtime's pinned toolchain, `--locked`, paths
