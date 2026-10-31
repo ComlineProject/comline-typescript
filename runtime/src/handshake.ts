@@ -11,7 +11,7 @@
  */
 
 import { RuntimeError } from "./contract.js";
-import { currentCore, loadedCore, type Core } from "./core/core.js";
+import { currentCore } from "./core/core.js";
 import type { Transport } from "./transport.js";
 
 const MAGIC = Uint8Array.of(0x43, 0x4f); // "CO"
@@ -163,14 +163,15 @@ export class ComlineHandshake implements Handshake {
     return ComlineHandshake.exchange(transport, local);
   }
 
-  // The exchange runs on the Comline core (byte for byte what the TypeScript
-  // above does, and fewer instructions per handshake: see runtime/bench).
-  // `nameHash` and `HandshakeFrame` stay TypeScript: they're synchronous, and
-  // the core loads asynchronously. Where the core can't load (a page whose
-  // CSP refuses wasm, say), the exchange runs on the TypeScript and keeps
-  // doing so in this realm, rather than retrying the load per connection.
+  // The exchange runs on the Comline core when the realm has already loaded
+  // it (byte for byte what the TypeScript below does, and fewer instructions
+  // per handshake: see runtime/bench). It never loads the core itself: the
+  // first load compiles the module, which would cost the first connection more
+  // than the handshake saves. Until something else needs the core, the
+  // TypeScript runs. `nameHash` and `HandshakeFrame` stay TypeScript: they're
+  // synchronous, and the core loads asynchronously.
   private static async exchange(transport: Transport, local: Facts): Promise<void> {
-    const core = currentCore() ?? (await coreOrUndefined());
+    const core = currentCore();
     if (core) {
       const ours = core.handshakeEncode(local.irHash, local.wireFormat, local.framing, local.capabilities);
       await transport.send(ours);
@@ -182,18 +183,6 @@ export class ComlineHandshake implements Handshake {
     const peer = HandshakeFrame.decode(await transport.recv());
     if (!peer) throw RuntimeError.handshake();
     ours.check(peer);
-  }
-}
-
-let coreUnavailable = false;
-
-async function coreOrUndefined(): Promise<Core | undefined> {
-  if (coreUnavailable) return undefined;
-  try {
-    return await loadedCore();
-  } catch {
-    coreUnavailable = true;
-    return undefined;
   }
 }
 
