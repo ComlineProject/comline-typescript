@@ -19,6 +19,12 @@ array (`encodeRequestInto`) rather than a new one per frame; `--compare`
 pairs it with `ts-request-<bytes>`, whose encode is unchanged.
 `binding-handshake` is the handshake as `ComlineHandshake` runs it, through
 the runtime's binding (`src/core/core.ts`) over the vendored `core/`.
+`ts-duplex-send-<bytes>` is one frame through `duplex()`: `send`, then the
+peer's `recv`, with its promises run to completion inside the iteration (a
+forced microtask checkpoint, `%PerformMicrotaskCheckpoint`).
+`ts-duplex-send-<bytes>-nocopy` queues the caller's array instead of a copy:
+the difference is what the `Transport` contract's copy costs (`send` gives the
+frame back when it resolves, so an in-memory transport has to copy it).
 
 ## Build
 

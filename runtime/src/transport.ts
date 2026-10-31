@@ -8,8 +8,20 @@ import { RuntimeError } from "./contract.js";
  * A message-oriented byte pipe: each {@link Transport.send} delivers exactly
  * one frame to the peer's next {@link Transport.recv}. The counterpart of the
  * Rust `Transport` trait; a stream transport (length-prefixed) is a later add.
+ *
+ * **Who owns the frame.** The caller lends `frame` to `send` until the
+ * promise `send` returns settles, and owns it again after. An implementation
+ * must be done with `frame` by then: written out, or copied if it queues the
+ * frame or hands it on. The caller may reuse or overwrite it the moment
+ * `send` settles, so the runtime can encode the next frame into the same
+ * buffer. Until then the caller doesn't touch it. A frame `recv` resolves
+ * with belongs to its receiver; the transport doesn't touch it again.
  */
 export interface Transport {
+  /**
+   * Send one frame. Resolves (or rejects) only once the transport no longer
+   * needs `frame`; after that the caller may reuse or overwrite it.
+   */
   send(frame: Uint8Array): Promise<void>;
   /** Resolves with the next frame; rejects `RuntimeError("transport")` once the peer is gone and the queue is drained. */
   recv(): Promise<Uint8Array>;
@@ -52,8 +64,13 @@ class InMemoryTransport implements Transport {
     private readonly outbox: Channel,
   ) {}
 
+  /**
+   * Copies `frame` onto the peer's queue, so the caller has it back when this
+   * resolves (the {@link Transport} contract): one allocation and copy per
+   * frame.
+   */
   send(frame: Uint8Array): Promise<void> {
-    this.outbox.push(frame.slice()); // copy: the caller may reuse its buffer
+    this.outbox.push(frame.slice());
     return Promise.resolve();
   }
 
