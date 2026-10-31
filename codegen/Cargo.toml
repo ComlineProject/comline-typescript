@@ -12,3 +12,13 @@ comline-codegen = { git = "https://github.com/ComlineProject/generation", rev = 
 comline-core = { git = "https://github.com/ComlineProject/core", rev = "f6e289aaa137258e9e96c378c32d057c249a5b5d" }
 
 eyre = "0.6.8"
+
+[[bin]]
+name = "comline-gen-typescript"
+path = "src/bin/comline-gen-typescript.rs"
+
+[dev-dependencies]
+# The conformance corpus: every fixture is a whole package. Same generation
+# rev as `comline-codegen` above, so the corpus and the generator share one
+# `comline-codegen`.
+comline-conformance = { git = "https://github.com/ComlineProject/generation", rev = "043286d544b9db4570a3c9ef13ff9f715cbfc577" }

@@ -21,6 +21,23 @@ jobs:
       # regenerated.
       - run: cargo run -p xtask -- --check
 
+  wasip1:
+    # The generator as a WASI module, which the CLI runs under wasmtime.
+    # Currently fails: comline-core -> rust-sitter -> tree-sitter-c2rust 0.25.2
+    # calls `Parser::stop_printing_dot_graphs` in `Drop`, but gates the method
+    # out on `target_os = "wasi"`, so it doesn't compile. `rust-sitter` 0.4.5
+    # requires tree-sitter-c2rust ^0.25.2, so there is no older release to
+    # take. Reported rather than worked around; drop `continue-on-error` once
+    # the dependency builds.
+    name: Generator builds for wasm32-wasip1
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup update stable && rustup default stable
+      - run: rustup target add wasm32-wasip1
+      - run: cargo build --verbose -p comline-codegen-typescript --bin comline-gen-typescript --target wasm32-wasip1
+
   runtime:
     name: runtime - Node
     runs-on: ubuntu-latest
