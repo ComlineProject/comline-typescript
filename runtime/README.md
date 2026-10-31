@@ -43,6 +43,25 @@ scripts/vendor-conformance.sh <rev>   # take a newer corpus
 CONFORMANCE_BLESS=1 npm test          # rewrite conformance-report.json
 ```
 
+## The core
+
+`core/` holds the Comline core: the wasm32 build of
+[`comline-runtime-ffi`](https://github.com/ComlineProject/runtime/tree/main/runtime/ffi)
+and its JS glue (`comline.mjs`, `comline.d.mts`), vendored at the commit in
+`core/CORE_REV`, with the `Cargo.lock` it was built with and `SHA256SUMS`.
+`src/core/load.ts` loads it, once per realm. Nothing uses it yet.
+
+The build is reproducible (the runtime's pinned toolchain, `--locked`, paths
+remapped, a fixed `SOURCE_DATE_EPOCH`), so CI rebuilds it from source and
+fails unless every byte matches. `CORE_REV` and `VECTORS_REV` move together:
+the script refuses to vendor a core at another commit than the vectors.
+
+```sh
+scripts/vendor-conformance.sh <rev>   # first, the vectors at the same commit
+scripts/vendor-core.sh <rev>          # then the core
+scripts/vendor-core.sh --check        # rebuild CORE_REV, compare the bytes
+```
+
 ## Differential properties
 
 Beyond the fixed vectors, `test/prop/` checks this runtime against the Rust
