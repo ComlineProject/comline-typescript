@@ -71,6 +71,11 @@ it, or on the TypeScript where the core can't load. `nameHash` and
 `HandshakeFrame` stay TypeScript: they're synchronous, and the core loads
 asynchronously.
 
+`Connection` takes the same path. The built-in framings (`datagram@2` and
+JSON-RPC, `JsonRpcConnectionFraming`) run their framing and connection state
+on the core once it has loaded. The TypeScript is the fallback, both when the
+core can't load and for custom framings. Behaviour is the same either way.
+
 The build is reproducible (the runtime's pinned toolchain, `--locked`, paths
 remapped, a fixed `SOURCE_DATE_EPOCH`), so CI rebuilds it from source and
 fails unless every byte matches. `CORE_REV` and `VECTORS_REV` move together:

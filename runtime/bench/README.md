@@ -25,6 +25,11 @@ forced microtask checkpoint, `%PerformMicrotaskCheckpoint`).
 `ts-duplex-send-<bytes>-nocopy` queues the caller's array instead of a copy:
 the difference is what the `Transport` contract's copy costs (`send` gives the
 frame back when it resolves, so an in-memory transport has to copy it).
+`ts-roundtrip-<bytes>` and `wasm-roundtrip-<bytes>` are one call and its reply
+through two `Connection`s over `duplex()` (`datagram@2`; params and result both
+<bytes> long), with the framing and state in TypeScript or on the core.
+`-jsonrpc-roundtrip-<bytes>` is the same over `JsonRpcConnectionFraming`, the
+params and result a JSON string <bytes> long.
 
 ## Build
 

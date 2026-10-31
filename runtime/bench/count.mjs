@@ -11,7 +11,8 @@
 //
 // Workloads: noop, {ts,wasm}-request-<bytes>, wasm-request-<bytes>-into,
 // {ts,wasm}-name-hash, {ts,wasm}-handshake, binding-handshake,
-// ts-duplex-send-<bytes>[-nocopy], {ts,wasm}-roundtrip-<bytes>.
+// ts-duplex-send-<bytes>[-nocopy], {ts,wasm}-roundtrip-<bytes>,
+// {ts,wasm}-jsonrpc-roundtrip-<bytes>.
 // `ts-duplex-send-<bytes>` is one frame through `duplex()`: `send`, then the
 // peer's `recv`, its promises run to completion each iteration (a forced
 // microtask checkpoint). `-nocopy` is the same with `send` queueing the
@@ -180,15 +181,18 @@ async function binding() {
   };
 }
 
-async function roundtrip(n, onCore) {
+async function roundtrip(n, onCore, json = false) {
   const rt = await import("../dist/src/index.js");
   if (onCore) await (await import("../dist/src/core/core.js")).loadedCore();
   const raw = { name: "raw", encode: (v) => v, decode: (b) => b };
   const [a, b] = rt.duplex();
-  const client = rt.Connection.unverified(a, raw, new rt.Datagram2Framing());
-  const server = rt.Connection.unverified(b, raw, new rt.Datagram2Framing());
+  const framing = () => (json ? new rt.JsonRpcConnectionFraming() : new rt.Datagram2Framing());
+  const client = rt.Connection.unverified(a, raw, framing());
+  const server = rt.Connection.unverified(b, raw, framing());
   if ((client.wire !== undefined) !== onCore) throw new Error("the connection isn't where the workload says");
-  const result = body(n);
+  // JSON-RPC carries params and result as JSON: a string `n` bytes long, quotes included.
+  const jsonBody = () => new TextEncoder().encode(`"${"a".repeat(n - 2)}"`);
+  const result = json ? jsonBody() : body(n);
   server.provide(5, {
     calls: () => ["echo"],
     dispatch: () => Promise.reject(new Error("unused")),
@@ -197,7 +201,7 @@ async function roundtrip(n, onCore) {
       return Promise.resolve();
     },
   });
-  const params = body(n);
+  const params = json ? jsonBody() : body(n);
   const call = rt.call(0, "echo");
   let done = 0;
   const got = (envelope) => {
@@ -212,9 +216,9 @@ async function roundtrip(n, onCore) {
   };
 }
 
-const trip = /^(ts|wasm)-roundtrip-(\d+)$/.exec(name);
+const trip = /^(ts|wasm)-(jsonrpc-)?roundtrip-(\d+)$/.exec(name);
 const workloads = trip
-  ? { [name]: await roundtrip(Number(trip[2]), trip[1] === "wasm") }
+  ? { [name]: await roundtrip(Number(trip[3]), trip[1] === "wasm", trip[2] !== undefined) }
   : name.startsWith("wasm-")
   ? await wasm()
   : name.startsWith("binding-")
