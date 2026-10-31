@@ -10,9 +10,13 @@
       "import": "./dist/src/index.js"
     }
   },
+  "imports": {
+    "#core/comline.mjs": "./core/comline.mjs"
+  },
   "files": [
     "dist",
-    "src"
+    "src",
+    "core"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",

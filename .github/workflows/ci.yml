@@ -56,6 +56,17 @@ jobs:
       # The wire conformance vectors are vendored from ComlineProject/runtime
       # at the commit in VECTORS_REV; this fails if the copy was edited.
       - run: scripts/vendor-conformance.sh --check
+      # The core (core/: the wasm32 build of comline-runtime-ffi and its JS
+      # glue) is rebuilt from source at CORE_REV, with the runtime's pinned
+      # toolchain (the script installs it and its wasm32 target) and the
+      # lock in core/Cargo.lock; this fails unless every byte matches.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+          key: core-registry-${{ hashFiles('runtime/core/Cargo.lock') }}
+      - run: scripts/vendor-core.sh --check
 
   std_extra:
     name: std-extra - Node
