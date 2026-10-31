@@ -72,7 +72,7 @@ fn main() -> eyre::Result<()> {
         external_std: false,
         validate_on_decode: Default::default(),
         async_api: false,
-        encodings: Default::default(),
+        encodings: comline_codegen::encodings::official_for("typescript"),
     };
 
     let files = generate_typescript(&req)?;

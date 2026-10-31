@@ -16,7 +16,7 @@ fn code_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenerateRequest {
         external_std: false,
         validate_on_decode: Default::default(),
         async_api: false,
-        encodings: Default::default(),
+        encodings: comline_codegen::encodings::official_for("typescript"),
     }
 }
 
@@ -33,7 +33,7 @@ fn lib_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenerateRequest {
         external_std: false,
         validate_on_decode: Default::default(),
         async_api: false,
-        encodings: Default::default(),
+        encodings: comline_codegen::encodings::official_for("typescript"),
     }
 }
 
@@ -397,7 +397,77 @@ fn an_unknown_wire_format_is_an_error() {
     let schemas = vec![("account".to_string(), chat_units())];
     let req = GenerateRequest { wire_format: "packed".into(), ..code_req(&schemas) };
     let error = generate_typescript(&req).unwrap_err();
-    assert_eq!(error.to_string(), "unknown wire format `packed` - expected `packed@1`, `json@1` or `msgpack@1`");
+    assert_eq!(
+        error.to_string(),
+        "encoding `packed` has no typescript mapping in the request: map it in comline.toml, as \
+         `encodings = { \"packed\" = \"<type>\" }`"
+    );
+}
+
+/// `chat_units` over `framing`, which nothing in this generator knows.
+fn acme_units(framing: &str) -> Vec<FrozenUnit> {
+    let mut units = chat_units();
+    for unit in &mut units {
+        if let FrozenUnit::Protocol { parameters, .. } = unit {
+            parameters.retain(|p| !matches!(p, FrozenUnit::Property { name, .. } if name == "framing"));
+            parameters.push(FrozenUnit::Property { name: "framing".into(), value: ConfigValue::Str(framing.into()) });
+        }
+    }
+    units
+}
+
+fn acme_req(mode: Mode) -> GenerateRequest {
+    let acme = |class: &str| comline_codegen::protocol::EncodingMapping {
+        type_path: class.into(),
+        package: Some("acme-encodings".into()),
+        version: Some("^0.2.0".into()),
+    };
+    let schemas = vec![("account".to_string(), acme_units("com.acme.lines@1"))];
+    let mut req = GenerateRequest { mode, wire_format: "com.acme.cbor@1".into(), ..lib_req(&schemas) };
+    req.encodings.insert("com.acme.lines@1".into(), acme("LinesFraming"));
+    req.encodings.insert("com.acme.cbor@1".into(), acme("CborCodec"));
+    req
+}
+
+#[test]
+fn an_unmapped_framing_is_an_error_not_a_fallback() {
+    let schemas = vec![("account".to_string(), acme_units("com.acme.lines@1"))];
+    let error = generate_typescript(&code_req(&schemas)).unwrap_err().to_string();
+    assert!(error.starts_with("encoding `com.acme.lines@1` has no typescript mapping in the request"), "{error}");
+}
+
+/// A third-party framing and codec, imported from the package their mapping
+/// names, kept in `runtime/test/generated/acme.ts` so the Node job
+/// type-checks it against a stub of that package
+/// (`runtime/test/generated/acme-encodings.ts`). Regenerate with
+/// `TS_BLESS=1 cargo test -p comline-codegen-typescript`.
+#[test]
+fn a_third_party_framing_and_codec_are_imported_from_their_package() {
+    let mut files = generate_typescript(&acme_req(Mode::Code)).unwrap();
+    let generated = files.remove(0).contents;
+    assert!(generated.contains("import { LinesFraming, CborCodec } from \"acme-encodings\";\n"), "{generated}");
+    assert!(generated.contains("framing: Framing = new LinesFraming()"), "{generated}");
+    assert!(generated.contains("export const Format: Codec = new CborCodec();"), "{generated}");
+    assert!(!generated.contains("DatagramFraming"), "{generated}");
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../runtime/test/generated/acme.ts");
+    if std::env::var_os("TS_BLESS").is_some() {
+        std::fs::write(path, &generated).unwrap();
+        return;
+    }
+    let committed = std::fs::read_to_string(path).unwrap_or_default();
+    assert_eq!(
+        generated, committed,
+        "generated acme drifted from runtime/test/generated/acme.ts — \
+         re-bless with TS_BLESS=1 cargo test -p comline-codegen-typescript"
+    );
+}
+
+#[test]
+fn lib_output_depends_on_a_mapped_package() {
+    let files = generate_typescript(&acme_req(Mode::Lib)).unwrap();
+    let manifest = &files.iter().find(|f| f.path.to_str() == Some("package.json")).unwrap().contents;
+    assert!(manifest.contains("    \"acme-encodings\": \"^0.2.0\""), "{manifest}");
+    assert_eq!(manifest.matches("@comline/runtime").count(), 1, "{manifest}");
 }
 
 #[test]
