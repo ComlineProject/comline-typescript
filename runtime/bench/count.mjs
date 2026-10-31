@@ -10,9 +10,12 @@
 //     node --allow-natives-syntax --predictable --no-opt bench/count.mjs <workload> <K> [W]
 //
 // Workloads: noop, {ts,wasm}-request-<bytes>, {ts,wasm}-name-hash,
-// {ts,wasm}-handshake. The TS ones use the built runtime (`npm run build`);
-// the wasm ones load the wasm32 build of `comline-runtime-ffi` and its JS
-// glue from COMLINE_WASM and COMLINE_GLUE (default: `bench/.core/`).
+// {ts,wasm}-handshake, binding-handshake. The TS ones use the built runtime
+// (`npm run build`); the wasm ones load the wasm32 build of
+// `comline-runtime-ffi` and its JS glue from COMLINE_WASM and COMLINE_GLUE
+// (default: `bench/.core/`). `binding-handshake` is the handshake as
+// `ComlineHandshake` runs it: the runtime's binding (`src/core/core.ts`) over
+// the vendored `core/`.
 //
 // COMLINE_REGION is the path of the built `region.node`; without it the loop
 // runs uncounted (handy for checking that a workload runs at all).
@@ -27,7 +30,7 @@ const [name, kArg, wArg = "1000"] = process.argv.slice(2);
 const K = Number(kArg);
 const W = Number(wArg);
 if (!name || !Number.isInteger(K) || K < 0 || !Number.isInteger(W) || W < 0) {
-  console.error("usage: count.mjs <workload> <K> [W]; workloads: noop, {ts,wasm}-request-<bytes>, {ts,wasm}-name-hash, {ts,wasm}-handshake");
+  console.error("usage: count.mjs <workload> <K> [W]; workloads: noop, {ts,wasm}-request-<bytes>, {ts,wasm}-name-hash, {ts,wasm}-handshake, binding-handshake");
   process.exit(2);
 }
 
@@ -105,7 +108,26 @@ async function wasm() {
   };
 }
 
-const workloads = name.startsWith("wasm-") ? await wasm() : name === "noop" ? { noop: () => {} } : await ts();
+async function binding() {
+  const { loadedCore } = await import("../dist/src/core/core.js");
+  const core = await loadedCore();
+  const ours = core.handshakeEncode(0x0123456789abcdefn, "packed@1", "datagram@2", 0);
+  return {
+    "binding-handshake": () => {
+      const bytes = core.handshakeEncode(0x0123456789abcdefn, "packed@1", "datagram@2", undefined);
+      core.handshakeCheck(ours, bytes);
+      sink ^= bytes.length;
+    },
+  };
+}
+
+const workloads = name.startsWith("wasm-")
+  ? await wasm()
+  : name.startsWith("binding-")
+    ? await binding()
+    : name === "noop"
+      ? { noop: () => {} }
+      : await ts();
 const sized = /^(?:ts|wasm)-request-(\d+)$/.exec(name);
 const work = sized ? workloads.request(Number(sized[1])) : workloads[name];
 if (!work) {

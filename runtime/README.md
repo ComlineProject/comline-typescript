@@ -49,7 +49,12 @@ CONFORMANCE_BLESS=1 npm test          # rewrite conformance-report.json
 [`comline-runtime-ffi`](https://github.com/ComlineProject/runtime/tree/main/runtime/ffi)
 and its JS glue (`comline.mjs`, `comline.d.mts`), vendored at the commit in
 `core/CORE_REV` (built with that commit's own `Cargo.lock`), and `SHA256SUMS`.
-`src/core/load.ts` loads it, once per realm. Nothing uses it yet.
+`src/core/load.ts` loads it, once per realm, and `src/core/core.ts` binds it
+(statuses to `RuntimeError`s; a poisoned instance is dropped, so the next
+load makes a fresh one). `ComlineHandshake` runs the `comline@1` exchange on
+it, or on the TypeScript where the core can't load. `nameHash` and
+`HandshakeFrame` stay TypeScript: they're synchronous, and the core loads
+asynchronously.
 
 The build is reproducible (the runtime's pinned toolchain, `--locked`, paths
 remapped, a fixed `SOURCE_DATE_EPOCH`), so CI rebuilds it from source and
