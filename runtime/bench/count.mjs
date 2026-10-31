@@ -10,7 +10,13 @@
 //     node --allow-natives-syntax --predictable --no-opt bench/count.mjs <workload> <K> [W]
 //
 // Workloads: noop, {ts,wasm}-request-<bytes>, wasm-request-<bytes>-into,
-// {ts,wasm}-name-hash, {ts,wasm}-handshake, binding-handshake.
+// {ts,wasm}-name-hash, {ts,wasm}-handshake, binding-handshake,
+// ts-duplex-send-<bytes>[-nocopy].
+// `ts-duplex-send-<bytes>` is one frame through `duplex()`: `send`, then the
+// peer's `recv`, its promises run to completion each iteration (a forced
+// microtask checkpoint). `-nocopy` is the same with `send` queueing the
+// caller's array itself, as `duplex()` would without its copy: the difference
+// is what the `Transport` contract's copy costs.
 // `wasm-request-<bytes>-into` is `wasm-request-<bytes>` encoding into one
 // reused array (`encodeRequestInto`, comline-runtime PR #64) instead of a
 // new one per frame; its TS counterpart is `ts-request-<bytes>`. The TS ones use the built runtime
@@ -33,12 +39,22 @@ const [name, kArg, wArg = "1000"] = process.argv.slice(2);
 const K = Number(kArg);
 const W = Number(wArg);
 if (!name || !Number.isInteger(K) || K < 0 || !Number.isInteger(W) || W < 0) {
-  console.error("usage: count.mjs <workload> <K> [W]; workloads: noop, {ts,wasm}-request-<bytes>, wasm-request-<bytes>-into, {ts,wasm}-name-hash, {ts,wasm}-handshake, binding-handshake");
+  console.error("usage: count.mjs <workload> <K> [W]; workloads: noop, {ts,wasm}-request-<bytes>, wasm-request-<bytes>-into, {ts,wasm}-name-hash, {ts,wasm}-handshake, binding-handshake, ts-duplex-send-<bytes>[-nocopy]");
   process.exit(2);
 }
 
 const body = (n) => Uint8Array.from({ length: n }, (_, i) => (i * 31 + 7) & 0xff);
 let sink = 0; // every workload folds its result in, so none is dead code
+
+// Runs every queued promise reaction now, so an async workload finishes
+// inside the iteration (and the region) that started it.
+let runMicrotasks;
+try {
+  runMicrotasks = new Function("%PerformMicrotaskCheckpoint()");
+} catch {
+  console.error("count.mjs: run with --allow-natives-syntax");
+  process.exit(2);
+}
 
 async function ts() {
   const rt = await import("../dist/src/index.js");
@@ -55,6 +71,25 @@ async function ts() {
         const frame = framing.encodeRequest(5, call, id++, params);
         const decoded = framing.decode(frame);
         sink ^= decoded.request.params.length ^ frame.length;
+      };
+    },
+    duplexSend: (n, copy) => {
+      const frame = body(n);
+      const [a, b] = rt.duplex();
+      if (!copy) {
+        // `send` without the copy (`outbox` is private to TypeScript only).
+        a.send = (f) => {
+          a.outbox.push(f);
+          return Promise.resolve();
+        };
+      }
+      const got = (f) => {
+        sink ^= f.length;
+      };
+      return () => {
+        void a.send(frame);
+        b.recv().then(got);
+        runMicrotasks();
       };
     },
     "ts-name-hash": () => {
@@ -146,11 +181,14 @@ const workloads = name.startsWith("wasm-")
       : await ts();
 const sized = /^(?:ts|wasm)-request-(\d+)$/.exec(name);
 const into = /^wasm-request-(\d+)-into$/.exec(name);
+const duplexSend = /^ts-duplex-send-(\d+)(-nocopy)?$/.exec(name);
 const work = sized
   ? workloads.request(Number(sized[1]))
   : into
     ? workloads.requestInto(Number(into[1]))
-    : workloads[name];
+    : duplexSend
+      ? workloads.duplexSend(Number(duplexSend[1]), !duplexSend[2])
+      : workloads[name];
 if (!work) {
   console.error(`unknown workload ${name}`);
   process.exit(2);

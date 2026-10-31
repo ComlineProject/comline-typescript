@@ -22,6 +22,21 @@ package, and a stream transport.
 | `Connection` (`connect` / `accept` / `unverified`, `provide`, `call` / `notify`, `closed`): calls in both directions, several protocols, a `Peer` handle for handlers (`Dispatch.dispatchWith`), `Extensions`; `ConnectionFraming` + `Datagram2Framing` (`datagram@2`) and `JsonRpcConnectionFraming` (JSON-RPC, a one-way call as a notification), wire-compatible with `comline-runtime` | ✅ |
 | A stream `Transport`; a MessagePack `Codec` | — |
 
+## Writing a transport
+
+A `Transport` is two methods: `send(frame)` delivers one frame to the peer's
+next `recv()`. The runtime lends `frame` to `send` until the promise it
+returns settles, then may reuse or overwrite it at once (to encode the next
+frame into the same buffer). So `send` resolves only once the transport is
+done with the bytes: written out, or copied if it queues them. `duplex()`
+copies each frame onto the peer's queue. A frame `recv()` resolves with
+belongs to the receiver.
+
+This is a tightening made in early days: before it, nothing said when a
+caller could reuse a frame, and the runtime never did. A transport that
+keeps a reference to `frame` past `send`'s promise (queues it uncopied, or
+resolves before writing) must now copy it.
+
 ## Wire conformance
 
 The wire contract is checked against the byte-exact vectors that
