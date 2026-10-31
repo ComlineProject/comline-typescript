@@ -25,8 +25,9 @@
 // the config) into `in`, gives the ABI pointers into `out` for everything it
 // writes (bytes, `*written`, the event, the handle), and copies the outputs
 // back. The ABI refuses an input that overlaps an output, and the two
-// regions never do. Byte outputs are fresh copies; nothing returned points
-// into wasm memory.
+// regions never do. Byte outputs are fresh copies, or, from the `*Into`
+// encodes, copies into an array the caller owns (one that is a view of wasm
+// memory is refused); nothing returned points into wasm memory.
 //
 // A region is reserved only when a call needs more than it holds, so a call
 // is normally one crossing. That rests on what the module promises
@@ -37,7 +38,9 @@
 // Memory itself may grow during any call (a reserve, or an allocation such
 // as `connectionNew`'s), which detaches the `ArrayBuffer` views on it
 // without moving anything, so every access goes through views taken again
-// whenever `memory.buffer` has changed.
+// whenever `memory.buffer` has changed. (A view on a detached buffer is 0
+// bytes long, which is how the glue notices; on shared memory, which isn't
+// detached, it asks `memory.buffer` on every call.)
 //
 // Traps poison the instance. On wasm32 a panic in the module is a trap, not
 // an unwind: the ABI's `catch_unwind` can't catch it, so the module itself
@@ -133,6 +136,7 @@ const HANDSHAKE_SIZE = 32;
 const REGION_MIN = 1024;
 
 const POISONED = Status.ERR_POISONED;
+const OK = Status.OK;
 
 const utf8 = new TextEncoder();
 
@@ -144,10 +148,34 @@ function bytesOf(value) {
   throw new TypeError("expected a string or a Uint8Array");
 }
 
+/** Names as UTF-8, by string: a binding sends the same few names (a
+ * method, a framing) on every call. The bytes only ever cross into `in`, so
+ * sharing them is safe. Bounded: emptied when it fills. */
+const NAMES_MAX = 256;
+const names = new Map();
+
+/** `bytesOf` for a name: a string's UTF-8 from the cache. */
+function nameOf(value) {
+  if (typeof value === "string") {
+    let bytes = names.get(value);
+    if (bytes === undefined) {
+      if (names.size >= NAMES_MAX) names.clear();
+      bytes = utf8.encode(value);
+      names.set(value, bytes);
+    }
+    return bytes;
+  }
+  return bytesOf(value);
+}
+
+/** What `feed` clears before the call: `*consumed`'s 8 and the event. */
+const FEED_CLEAR = new Uint8Array(8 + EVENT_SIZE);
+
 const align8 = (n) => (n + 7) & ~7;
 
 /** A `u64` argument as the ABI takes it: a BigInt, wrapped to 64 bits. */
 const u64 = (value) => BigInt.asUintN(64, BigInt(value));
+const U64_MAX = 0xffff_ffff_ffff_ffffn;
 
 // ── loading ────────────────────────────────────────────────────────────────
 
@@ -389,6 +417,12 @@ const isTrap = (e) =>
 /** The library: its free functions, and `connectionNew`. */
 export class Comline {
   #x;
+  // The exports a hot call makes, read once: the exports object is frozen,
+  // and every property read on it costs more than a field.
+  #memory;
+  #encodeRequestFn;
+  #encodeReplyFn;
+  #feedFn;
   #dead = false;
   #version;
   // The regions: 8-aligned addresses, and how many bytes from there are
@@ -399,12 +433,20 @@ export class Comline {
   #outCap = 0;
   // Views of memory as it was when last seen.
   #buffer = null;
-  #u8 = null;
+  #u8 = new Uint8Array(0); // 0 bytes long: the first call takes the views
   #dv = null;
+  // Whether memory is shared, so growing it doesn't detach the old buffer.
+  #shared = false;
 
   /** Prefer `instantiate`. Checks the version and the layout, as it says. */
   constructor(exports) {
     this.#x = exports;
+    this.#memory = exports.memory;
+    this.#encodeRequestFn = exports.comline_connection_encode_request;
+    this.#encodeReplyFn = exports.comline_connection_encode_reply;
+    this.#feedFn = exports.comline_connection_feed;
+    this.#shared =
+      typeof SharedArrayBuffer === "function" && exports.memory.buffer instanceof SharedArrayBuffer;
     const version = exports.comline_abi_version() >>> 0;
     if (version !== ((ABI_MAJOR << 16) | ABI_MINOR)) {
       throw new Error(
@@ -485,9 +527,20 @@ export class Comline {
     return [aligned, want + 8 - (aligned - ptr)];
   }
 
-  /** Take the views again if memory grew since they were taken. */
+  /** `#room` for a hot call: only the comparisons when nothing changed. */
+  #fit(inLen, outLen) {
+    if (inLen > this.#inCap || outLen > this.#outCap || this.#u8.byteLength === 0 || this.#shared) {
+      this.#room(inLen, outLen);
+    }
+  }
+
+  /** Take the views again if memory grew since they were taken. Growing
+   * memory detaches the buffer the views are on, and a view on a detached
+   * buffer is 0 bytes long, which is cheaper to ask than `memory.buffer`;
+   * shared memory isn't detached, so there it asks the buffer. */
   #sync() {
-    const buffer = this.#x.memory.buffer;
+    if (this.#u8.byteLength !== 0 && !this.#shared) return;
+    const buffer = this.#memory.buffer;
     if (buffer !== this.#buffer) {
       this.#buffer = buffer;
       this.#u8 = new Uint8Array(buffer);
@@ -543,7 +596,7 @@ export class Comline {
   /** `comline_name_hash`: `{ status, hash }`, `hash` a BigInt. */
   nameHash(name) {
     if (this.#dead) return { status: POISONED };
-    const n = bytesOf(name);
+    const n = nameOf(name);
     try {
       this.#room(n.length, 8);
       const outPtr = this.#outPtr;
@@ -563,8 +616,8 @@ export class Comline {
    */
   handshakeEncode(irHash, wireFormat, framing, capabilities, cap) {
     if (this.#dead) return { status: POISONED, written: 0 };
-    const w = bytesOf(wireFormat);
-    const f = bytesOf(framing);
+    const w = nameOf(wireFormat);
+    const f = nameOf(framing);
     const ir = u64(irHash);
     try {
       this.#room(Comline.#size([w, f]), 8 + cap);
@@ -690,11 +743,10 @@ export class Comline {
   #written(status, writtenPtr, bytesPtr) {
     this.#sync();
     const written = this.#dv.getUint32(writtenPtr, true);
-    const result = { status, written };
-    if (status === Status.OK) {
-      result.bytes = this.#u8.slice(bytesPtr, bytesPtr + written);
+    if (status === OK) {
+      return { status, written, bytes: this.#u8.slice(bytesPtr, bytesPtr + written) };
     }
-    return result;
+    return { status, written };
   }
 
   /** @internal */
@@ -715,19 +767,25 @@ export class Comline {
    * (`tailIntact`), for the layout check. */
   _feed(handle, input, watch = 0) {
     if (this.#dead) return { status: POISONED, consumed: 0, event: zeroEvent() };
-    const i = bytesOf(input);
+    const i = input instanceof Uint8Array ? input : bytesOf(input);
     try {
-      this.#room(i.length, 8 + EVENT_SIZE + watch);
+      const inLen = i.length;
+      const outLen = 8 + EVENT_SIZE + watch;
+      // `#room`'s checks inline: this is the hottest call.
+      if (inLen > this.#inCap || outLen > this.#outCap || this.#u8.byteLength === 0 || this.#shared) {
+        this.#room(inLen, outLen);
+      }
       const outPtr = this.#outPtr;
       const evPtr = outPtr + 8;
+      const inPtr = this.#inPtr;
       const u8 = this.#u8;
-      u8.set(i, this.#inPtr);
-      u8.fill(0, outPtr, evPtr + EVENT_SIZE);
-      u8.fill(0xa5, evPtr + EVENT_SIZE, evPtr + EVENT_SIZE + watch);
-      const status = this.#x.comline_connection_feed(handle, this.#inPtr, i.length, outPtr, evPtr);
+      u8.set(i, inPtr);
+      u8.set(FEED_CLEAR, outPtr);
+      if (watch) u8.fill(0xa5, evPtr + EVENT_SIZE, evPtr + EVENT_SIZE + watch);
+      const status = this.#feedFn(handle, inPtr, inLen, outPtr, evPtr);
       // `jsonrpc@1`'s decode can allocate (runtime#58), which may grow
       // memory.
-      this.#sync();
+      if (this.#u8.byteLength === 0 || this.#shared) this.#sync();
       const dv = this.#dv;
       const result = {
         status,
@@ -744,27 +802,64 @@ export class Comline {
     }
   }
 
+  /** Whether `dest` may take an encode's frame: a JS-owned `Uint8Array`,
+   * never a view of this instance's memory. Memory that isn't shared is
+   * one buffer at a time (growing it detaches the old one, whose views are
+   * then 0 bytes long, so nothing is ever copied into them), and after
+   * `#sync` that buffer is `#buffer`. It is asked before the regions are
+   * reserved for the call: a reserve for a `dest` the size of memory grows
+   * it, which would leave `dest` a view of the old buffer, detached, that
+   * no longer compares equal. Shared memory gives a new
+   * `SharedArrayBuffer` object for the same bytes on each grow, so there
+   * no `SharedArrayBuffer` is taken: the glue can't tell whose it is. */
+  #owned(dest) {
+    this.#sync();
+    const buffer = dest.buffer;
+    if (buffer === this.#buffer) return false;
+    return !(this.#shared && buffer instanceof SharedArrayBuffer);
+  }
+
   /** @internal */
   _encodeRequest(handle, protocol, callId, name, expectsReply, body, cap) {
     if (this.#dead) return { status: POISONED, written: 0 };
-    const n = bytesOf(name);
-    const b = bytesOf(body);
+    const n = nameOf(name);
+    const b = body instanceof Uint8Array ? body : bytesOf(body);
     const reply = typeof expectsReply === "boolean" ? (expectsReply ? 1 : 0) : expectsReply;
     try {
-      this.#room(Comline.#size([n, b]), 16 + cap);
+      const nLen = n.length;
+      const bLen = b.length;
+      const inLen = align8(nLen) + align8(bLen);
+      if (inLen > this.#inCap || 16 + cap > this.#outCap || this.#u8.byteLength === 0 || this.#shared) {
+        this.#room(inLen, 16 + cap);
+      }
       const outPtr = this.#outPtr;
-      const [nPtr, bPtr] = Comline.#place(this.#u8, this.#inPtr, [n, b]);
-      this.#dv.setUint32(outPtr, 0, true);
-      this.#dv.setBigUint64(outPtr + 8, 0n, true);
-      const status = this.#x.comline_connection_encode_request(
-        handle, protocol, callId, nPtr, n.length, reply, bPtr, b.length,
+      const nPtr = this.#inPtr;
+      const bPtr = nPtr + align8(nLen);
+      const u8 = this.#u8;
+      if (nLen !== 0) u8.set(n, nPtr);
+      u8.set(b, bPtr);
+      // `*written` and `*request_id`, as 4 words: no BigInt to clear.
+      const dv = this.#dv;
+      dv.setUint32(outPtr, 0, true);
+      dv.setUint32(outPtr + 8, 0, true);
+      dv.setUint32(outPtr + 12, 0, true);
+      const status = this.#encodeRequestFn(
+        handle, protocol, callId, nPtr, nLen, reply, bPtr, bLen,
         outPtr + 16, cap, outPtr, outPtr + 8,
       );
-      const result = this.#written(status, outPtr, outPtr + 16);
-      if (status === Status.OK) {
-        result.requestId = this.#dv.getBigUint64(outPtr + 8, true);
+      if (this.#u8.byteLength === 0 || this.#shared) this.#sync();
+      const view = this.#dv;
+      const written = view.getUint32(outPtr, true);
+      if (status === OK) {
+        const start = outPtr + 16;
+        return {
+          status,
+          written,
+          bytes: this.#u8.slice(start, start + written),
+          requestId: view.getBigUint64(outPtr + 8, true),
+        };
       }
-      return result;
+      return { status, written };
     } catch (e) {
       return this.#fail(e, { status: POISONED, written: 0 });
     }
@@ -773,17 +868,92 @@ export class Comline {
   /** @internal */
   _encodeReply(handle, protocol, requestId, envelope, errorId, body, cap) {
     if (this.#dead) return { status: POISONED, written: 0 };
-    const b = bytesOf(body);
-    const id = u64(requestId);
+    const b = body instanceof Uint8Array ? body : bytesOf(body);
+    const id = typeof requestId === "bigint" && requestId >= 0n && requestId <= U64_MAX
+      ? requestId
+      : u64(requestId);
     try {
-      this.#room(b.length, 8 + cap);
+      this.#fit(b.length, 8 + cap);
       const outPtr = this.#outPtr;
       this.#u8.set(b, this.#inPtr);
       this.#dv.setUint32(outPtr, 0, true);
-      const status = this.#x.comline_connection_encode_reply(
+      const status = this.#encodeReplyFn(
         handle, protocol, id, envelope, errorId, this.#inPtr, b.length, outPtr + 8, cap, outPtr,
       );
       return this.#written(status, outPtr, outPtr + 8);
+    } catch (e) {
+      return this.#fail(e, { status: POISONED, written: 0 });
+    }
+  }
+
+  /** @internal `_encodeRequest`, the frame copied into `dest` (`cap` is its
+   * length) rather than a new array. Its own function, so the default
+   * encode's hot path is as it was. */
+  _encodeRequestInto(handle, dest, protocol, callId, name, expectsReply, body) {
+    if (this.#dead) return { status: POISONED, written: 0 };
+    const n = nameOf(name);
+    const b = body instanceof Uint8Array ? body : bytesOf(body);
+    const reply = typeof expectsReply === "boolean" ? (expectsReply ? 1 : 0) : expectsReply;
+    try {
+      // Before anything is reserved or the module entered, so a refused
+      // `dest` takes no id.
+      if (!this.#owned(dest)) return { status: Status.ERR_INVALID_ARGUMENT, written: 0 };
+      const cap = dest.length;
+      const nLen = n.length;
+      const bLen = b.length;
+      const inLen = align8(nLen) + align8(bLen);
+      if (inLen > this.#inCap || 16 + cap > this.#outCap || this.#shared) {
+        this.#room(inLen, 16 + cap);
+      }
+      const outPtr = this.#outPtr;
+      const nPtr = this.#inPtr;
+      const bPtr = nPtr + align8(nLen);
+      const u8 = this.#u8;
+      if (nLen !== 0) u8.set(n, nPtr);
+      u8.set(b, bPtr);
+      const dv = this.#dv;
+      dv.setUint32(outPtr, 0, true);
+      dv.setUint32(outPtr + 8, 0, true);
+      dv.setUint32(outPtr + 12, 0, true);
+      const status = this.#encodeRequestFn(
+        handle, protocol, callId, nPtr, nLen, reply, bPtr, bLen,
+        outPtr + 16, cap, outPtr, outPtr + 8,
+      );
+      if (this.#u8.byteLength === 0 || this.#shared) this.#sync();
+      const view = this.#dv;
+      const written = view.getUint32(outPtr, true);
+      if (status === OK) {
+        const start = outPtr + 16;
+        dest.set(this.#u8.subarray(start, start + written));
+        return { status, written, requestId: view.getBigUint64(outPtr + 8, true) };
+      }
+      return { status, written };
+    } catch (e) {
+      return this.#fail(e, { status: POISONED, written: 0 });
+    }
+  }
+
+  /** @internal `_encodeReply` into `dest`, as `_encodeRequestInto`. */
+  _encodeReplyInto(handle, dest, protocol, requestId, envelope, errorId, body) {
+    if (this.#dead) return { status: POISONED, written: 0 };
+    const b = body instanceof Uint8Array ? body : bytesOf(body);
+    const id = typeof requestId === "bigint" && requestId >= 0n && requestId <= U64_MAX
+      ? requestId
+      : u64(requestId);
+    try {
+      if (!this.#owned(dest)) return { status: Status.ERR_INVALID_ARGUMENT, written: 0 };
+      const cap = dest.length;
+      this.#fit(b.length, 8 + cap);
+      const outPtr = this.#outPtr;
+      this.#u8.set(b, this.#inPtr);
+      this.#dv.setUint32(outPtr, 0, true);
+      const status = this.#encodeReplyFn(
+        handle, protocol, id, envelope, errorId, this.#inPtr, b.length, outPtr + 8, cap, outPtr,
+      );
+      this.#sync();
+      const written = this.#dv.getUint32(outPtr, true);
+      if (status === OK) dest.set(this.#u8.subarray(outPtr + 8, outPtr + 8 + written));
+      return { status, written };
     } catch (e) {
       return this.#fail(e, { status: POISONED, written: 0 });
     }
@@ -853,10 +1023,15 @@ export class Connection {
 
   /**
    * `comline_connection_feed`: `{ status, consumed, event }`. Spans in
-   * `event` are offsets into `input`.
+   * `event` are offsets into `input`. A `Uint8Array` is copied once, into
+   * the module, and nothing else: no copy of it is made first, so a frame
+   * from `encodeRequestInto` (or a subarray of a read buffer) can be fed as
+   * it is.
    */
   feed(input) {
-    return this.#lib._feed(this.#live(), input);
+    const handle = this.#handle;
+    if (handle === 0) this.#live();
+    return this.#lib._feed(handle, input);
   }
 
   /**
@@ -864,12 +1039,44 @@ export class Connection {
    * requestId }`; `requestId` (a BigInt) and `bytes` on `OK`.
    */
   encodeRequest(protocol, callId, name, expectsReply, body, cap) {
-    return this.#lib._encodeRequest(this.#live(), protocol, callId, name, expectsReply, body, cap);
+    const handle = this.#handle;
+    if (handle === 0) this.#live();
+    return this.#lib._encodeRequest(handle, protocol, callId, name, expectsReply, body, cap);
+  }
+
+  /**
+   * `encodeRequest`, the frame written into `dest` (a `Uint8Array` the
+   * caller owns, `cap` its length) instead of a new array: `{ status,
+   * written, requestId }`, the frame `dest[0, written)` on `OK`. For a
+   * large frame this saves a fresh (zero-filled) array per call; reusing
+   * `dest` is the point. `BUFFER_TOO_SMALL` gives the size needed in
+   * `written`, as `encodeRequest` does, and `dest` is left as it was.
+   *
+   * `dest` holds a copy: it never aliases wasm memory. A view of this
+   * instance's memory (or, when memory is shared, any `SharedArrayBuffer`)
+   * is refused with `ERR_INVALID_ARGUMENT`, without entering the module.
+   */
+  encodeRequestInto(dest, protocol, callId, name, expectsReply, body) {
+    const handle = this.#handle;
+    if (handle === 0) this.#live();
+    if (!(dest instanceof Uint8Array)) throw new TypeError("comline: dest must be a Uint8Array");
+    return this.#lib._encodeRequestInto(handle, dest, protocol, callId, name, expectsReply, body);
+  }
+
+  /** `encodeReply` into `dest`, as `encodeRequestInto`: `{ status,
+   * written }`. */
+  encodeReplyInto(dest, protocol, requestId, envelope, errorId, body) {
+    const handle = this.#handle;
+    if (handle === 0) this.#live();
+    if (!(dest instanceof Uint8Array)) throw new TypeError("comline: dest must be a Uint8Array");
+    return this.#lib._encodeReplyInto(handle, dest, protocol, requestId, envelope, errorId, body);
   }
 
   /** `comline_connection_encode_reply`: `{ status, written, bytes }`. */
   encodeReply(protocol, requestId, envelope, errorId, body, cap) {
-    return this.#lib._encodeReply(this.#live(), protocol, requestId, envelope, errorId, body, cap);
+    const handle = this.#handle;
+    if (handle === 0) this.#live();
+    return this.#lib._encodeReply(handle, protocol, requestId, envelope, errorId, body, cap);
   }
 
   /** `comline_connection_abandon`: the status. */
@@ -898,24 +1105,25 @@ export class Connection {
   }
 }
 
-/** A `comline_event` at `ptr`. */
+/** A `comline_event` at `ptr`, at `EVENT`'s offsets written out (the
+ * layout check at load reads one back through this). */
 function readEvent(dv, ptr) {
-  const span = (at) => ({
-    offset: dv.getUint32(ptr + at, true),
-    len: dv.getUint32(ptr + at + 4, true),
-  });
+  // The spans first, so the event's literal is a shallow one.
+  const callName = { offset: dv.getUint32(ptr + 12, true), len: dv.getUint32(ptr + 16, true) };
+  const body = { offset: dv.getUint32(ptr + 20, true), len: dv.getUint32(ptr + 24, true) };
+  const frame = { offset: dv.getUint32(ptr + 28, true), len: dv.getUint32(ptr + 32, true) };
   return {
-    kind: dv.getUint8(ptr + EVENT.kind),
-    flags: dv.getUint8(ptr + EVENT.flags),
-    protocol: dv.getUint16(ptr + EVENT.protocol, true),
-    callId: dv.getUint16(ptr + EVENT.callId, true),
-    envelope: dv.getUint8(ptr + EVENT.envelope),
-    errorId: dv.getUint16(ptr + EVENT.errorId, true),
-    callName: span(EVENT.callName),
-    body: span(EVENT.body),
-    frame: span(EVENT.frame),
-    capabilities: dv.getUint32(ptr + EVENT.capabilities, true),
-    requestId: dv.getBigUint64(ptr + EVENT.requestId, true),
+    kind: dv.getUint8(ptr),
+    flags: dv.getUint8(ptr + 1),
+    protocol: dv.getUint16(ptr + 2, true),
+    callId: dv.getUint16(ptr + 4, true),
+    envelope: dv.getUint8(ptr + 6),
+    errorId: dv.getUint16(ptr + 8, true),
+    callName,
+    body,
+    frame,
+    capabilities: dv.getUint32(ptr + 36, true),
+    requestId: dv.getBigUint64(ptr + 40, true),
   };
 }
 

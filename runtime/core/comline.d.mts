@@ -203,6 +203,31 @@ export declare class Connection {
     body: Bytes,
     cap: number,
   ): Written & { requestId?: bigint };
+  /** `encodeRequest`, the frame copied into `dest` (which the caller owns;
+   * `cap` is its length) rather than a new array; the frame is
+   * `dest.subarray(0, written)` on `OK`. `BUFFER_TOO_SMALL` gives the size
+   * needed and leaves `dest` as it was. A view of the instance's wasm memory
+   * (or any `SharedArrayBuffer` when that memory is shared) is refused with
+   * `ERR_INVALID_ARGUMENT`, without entering the module. The `out` region
+   * grows to `dest.length`, so pass a subarray when `dest` is much bigger
+   * than the frames. */
+  encodeRequestInto(
+    dest: Uint8Array,
+    protocol: number,
+    callId: number,
+    name: Bytes,
+    expectsReply: boolean | number,
+    body: Bytes,
+  ): { status: Status; written: number; requestId?: bigint };
+  /** `encodeReply` into `dest`, as `encodeRequestInto`. */
+  encodeReplyInto(
+    dest: Uint8Array,
+    protocol: number,
+    requestId: bigint | number,
+    envelope: number,
+    errorId: number,
+    body: Bytes,
+  ): { status: Status; written: number };
   encodeReply(
     protocol: number,
     requestId: bigint | number,
