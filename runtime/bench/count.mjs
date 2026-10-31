@@ -9,8 +9,11 @@
 //
 //     node --allow-natives-syntax --predictable --no-opt bench/count.mjs <workload> <K> [W]
 //
-// Workloads: noop, {ts,wasm}-request-<bytes>, {ts,wasm}-name-hash,
-// {ts,wasm}-handshake, binding-handshake. The TS ones use the built runtime
+// Workloads: noop, {ts,wasm}-request-<bytes>, wasm-request-<bytes>-into,
+// {ts,wasm}-name-hash, {ts,wasm}-handshake, binding-handshake.
+// `wasm-request-<bytes>-into` is `wasm-request-<bytes>` encoding into one
+// reused array (`encodeRequestInto`, comline-runtime PR #64) instead of a
+// new one per frame; its TS counterpart is `ts-request-<bytes>`. The TS ones use the built runtime
 // (`npm run build`); the wasm ones load the wasm32 build of
 // `comline-runtime-ffi` and its JS glue from COMLINE_WASM and COMLINE_GLUE
 // (default: `bench/.core/`). `binding-handshake` is the handshake as
@@ -30,7 +33,7 @@ const [name, kArg, wArg = "1000"] = process.argv.slice(2);
 const K = Number(kArg);
 const W = Number(wArg);
 if (!name || !Number.isInteger(K) || K < 0 || !Number.isInteger(W) || W < 0) {
-  console.error("usage: count.mjs <workload> <K> [W]; workloads: noop, {ts,wasm}-request-<bytes>, {ts,wasm}-name-hash, {ts,wasm}-handshake, binding-handshake");
+  console.error("usage: count.mjs <workload> <K> [W]; workloads: noop, {ts,wasm}-request-<bytes>, wasm-request-<bytes>-into, {ts,wasm}-name-hash, {ts,wasm}-handshake, binding-handshake");
   process.exit(2);
 }
 
@@ -96,6 +99,19 @@ async function wasm() {
         sink ^= fed.event.body.len ^ out.bytes.length;
       };
     },
+    requestInto: (n) => {
+      const params = body(n);
+      const client = open();
+      const server = open();
+      const dest = new Uint8Array(n + 64);
+      return () => {
+        const out = client.encodeRequestInto(dest, 5, 0x0203, "", 0, params);
+        if (out.status !== glue.Status.OK) throw new Error(`encode: ${out.status}`);
+        const fed = server.feed(dest.subarray(0, out.written));
+        if (fed.status !== glue.Status.OK) throw new Error(`feed: ${fed.status}`);
+        sink ^= fed.event.body.len ^ out.written;
+      };
+    },
     "wasm-name-hash": () => {
       sink ^= Number(lib.nameHash("datagram@2").hash & 0xffn);
     },
@@ -129,7 +145,12 @@ const workloads = name.startsWith("wasm-")
       ? { noop: () => {} }
       : await ts();
 const sized = /^(?:ts|wasm)-request-(\d+)$/.exec(name);
-const work = sized ? workloads.request(Number(sized[1])) : workloads[name];
+const into = /^wasm-request-(\d+)-into$/.exec(name);
+const work = sized
+  ? workloads.request(Number(sized[1]))
+  : into
+    ? workloads.requestInto(Number(into[1]))
+    : workloads[name];
 if (!work) {
   console.error(`unknown workload ${name}`);
   process.exit(2);
