@@ -462,6 +462,79 @@ fn a_third_party_framing_and_codec_are_imported_from_their_package() {
     );
 }
 
+/// `Clock`, lockstep (`datagram`), and `Link`, on a connection (the
+/// default), both running `handshake`.
+fn hello_units(handshake: &str) -> Vec<FrozenUnit> {
+    let protocol = |name: &str, framing: Option<&str>| {
+        let mut parameters =
+            vec![FrozenUnit::Property { name: "handshake".into(), value: ConfigValue::Str(handshake.into()) }];
+        if let Some(framing) = framing {
+            parameters.push(FrozenUnit::Property { name: "framing".into(), value: ConfigValue::Str(framing.into()) });
+        }
+        FrozenUnit::Protocol {
+            docstring: name.into(),
+            name: name.into(),
+            parameters,
+            functions: vec![function("now", vec![], Some(TypeRef::Primitive(PrimitiveType::U32)), vec![])],
+            span: (0, 0),
+        }
+    };
+    vec![protocol("Clock", Some("datagram")), protocol("Link", None)]
+}
+
+#[test]
+fn an_unmapped_handshake_is_an_error_not_a_fallback() {
+    let schemas = vec![("hello".to_string(), hello_units("com.acme.hello@1"))];
+    let error = generate_typescript(&code_req(&schemas)).unwrap_err().to_string();
+    assert!(error.starts_with("encoding `com.acme.hello@1` has no typescript mapping in the request"), "{error}");
+}
+
+/// A third-party handshake, imported from the package its mapping names and
+/// passed wherever generated code opens: the lockstep `Client` / `Server`,
+/// and the package's `accept` / `connect`. Kept in
+/// `runtime/test/generated/hello/` so the Node job type-checks it against
+/// the stub package (`runtime/test/generated/acme-encodings.ts`), whose
+/// `HelloHandshake` implements the runtime's `Handshake`. Regenerate with
+/// `TS_BLESS=1 cargo test -p comline-codegen-typescript`.
+#[test]
+fn a_third_party_handshake_is_imported_and_run() {
+    let schemas = vec![("hello".to_string(), hello_units("com.acme.hello@1"))];
+    let mut req = code_req(&schemas);
+    req.encodings.insert(
+        "com.acme.hello@1".into(),
+        comline_codegen::protocol::EncodingMapping {
+            type_path: "HelloHandshake".into(),
+            package: Some("acme-encodings".into()),
+            version: Some("^0.2.0".into()),
+        },
+    );
+    let files = generate_typescript(&req).unwrap();
+    let file = |name: &str| files.iter().find(|f| f.path.to_str() == Some(name)).unwrap().contents.clone();
+    let (hello, connection) = (file("hello.ts"), file("connection.ts"));
+    assert!(hello.contains("import { HelloHandshake } from \"acme-encodings\";\n"), "{hello}");
+    assert!(hello.contains("await Client.connect(transport, codec, IR_HASH, framing, new HelloHandshake())"), "{hello}");
+    assert!(hello.contains(".serve(transport, IR_HASH, new HelloHandshake());"), "{hello}");
+    assert!(connection.contains("import { HelloHandshake } from \"acme-encodings\";\n"), "{connection}");
+    assert!(
+        connection.contains("await Connection.accept(transport, Format, CONNECTION_IR_HASH, undefined, new HelloHandshake())"),
+        "{connection}"
+    );
+    for (name, generated) in [("hello.ts", &hello), ("connection.ts", &connection)] {
+        let path = format!("{}/../runtime/test/generated/hello/{name}", env!("CARGO_MANIFEST_DIR"));
+        if std::env::var_os("TS_BLESS").is_some() {
+            std::fs::create_dir_all(std::path::Path::new(&path).parent().unwrap()).unwrap();
+            std::fs::write(&path, generated).unwrap();
+            continue;
+        }
+        let committed = std::fs::read_to_string(&path).unwrap_or_default();
+        assert_eq!(
+            *generated, committed,
+            "generated {name} drifted from runtime/test/generated/hello/ — \
+             re-bless with TS_BLESS=1 cargo test -p comline-codegen-typescript"
+        );
+    }
+}
+
 #[test]
 fn lib_output_depends_on_a_mapped_package() {
     let files = generate_typescript(&acme_req(Mode::Lib)).unwrap();
