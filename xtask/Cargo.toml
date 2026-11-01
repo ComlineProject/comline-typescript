@@ -7,8 +7,8 @@ publish = false
 [dependencies]
 # Same revs `codegen` pins, so this tool and the generator it drives agree on
 # one `comline-core` - see codegen/Cargo.toml's own comment.
-comline-core = { git = "https://github.com/ComlineProject/core", rev = "4e882b468bc0e29172fb5e558f4e5db5c5b0fc65" }
-comline-codegen = { git = "https://github.com/ComlineProject/generation", rev = "b11de98bf16e1fad0105301220920d33d1f2de98" }
+comline-core = { git = "https://github.com/ComlineProject/core", rev = "da1157c9264b5743f7b4fa0993524c3cb6ea00f7" }
+comline-codegen = { git = "https://github.com/ComlineProject/generation", rev = "abba324743b32f0b4a5d824d312defb7cfad7df5" }
 comline-codegen-typescript = { path = "../codegen" }
 
 eyre = "0.6.8"
