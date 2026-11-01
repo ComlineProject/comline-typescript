@@ -204,7 +204,11 @@
         "handshake/reject-empty",
         "handshake/reject-truncated",
         "handshake/reject-bad-magic",
-        "handshake/reject-bad-version"
+        "handshake/reject-bad-version",
+        "handshake/check-agree",
+        "handshake/check-reject-ir-hash",
+        "handshake/check-reject-format",
+        "handshake/check-reject-framing"
       ]
     },
     "name-hash": {

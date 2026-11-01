@@ -23,6 +23,7 @@ test("version lists what the runtime ships", () => {
       ops: [
         "name_hash",
         "handshake",
+        "handshake_check",
         "envelope",
         "request",
         "response",
@@ -51,6 +52,29 @@ test("encodes without bytes, decodes with them, and refuses what it must", () =>
   assert.deepEqual(reply('{"id": 3, "op": "request", "input": {"framing": "datagram@1"}, "bytes": ""}'), {
     id: 3,
     accept: false,
+  });
+});
+
+test("handshake_check accepts an agreeing peer, refuses a differing one, and is decode-only", () => {
+  const input = { capabilities: 0, framing: "datagram@1", ir_hash: "1", wire_format: "json@1" };
+  const agree = "434f0101000000000000003885b0bd1f9f6c85d153a199ba45a44405000000";
+  const otherHash = "434f0102000000000000003885b0bd1f9f6c85d153a199ba45a44400000000";
+  assert.deepEqual(reply(JSON.stringify({ id: 1, op: "handshake_check", input, bytes: agree })), {
+    id: 1,
+    accept: true,
+    input,
+  });
+  assert.deepEqual(reply(JSON.stringify({ id: 2, op: "handshake_check", input, bytes: otherHash })), {
+    id: 2,
+    accept: false,
+  });
+  assert.deepEqual(reply(JSON.stringify({ id: 3, op: "handshake_check", input, bytes: "00" })), {
+    id: 3,
+    accept: false,
+  });
+  assert.deepEqual(reply(JSON.stringify({ id: 4, op: "handshake_check", input })), {
+    id: 4,
+    error: "handshake_check is decode-only: send its bytes",
   });
 });
 

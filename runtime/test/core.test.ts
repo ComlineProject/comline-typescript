@@ -6,7 +6,7 @@ import { ABI_MAJOR, ABI_MINOR, Status } from "#core/comline.mjs";
 import { loadCore } from "../src/core/load.js";
 import { Core, loadedCore, statusError } from "../src/core/core.js";
 import { HandshakeFrame, nameHash, RuntimeError, type RuntimeErrorKind } from "../src/index.js";
-import { unhex, type Case } from "./ops.js";
+import { decode, unhex, type Case } from "./ops.js";
 
 test("loadCore loads the vendored core, once", async () => {
   const core = await loadCore();
@@ -81,7 +81,7 @@ test("every name-hash vector: the core and the TypeScript both give the vector's
 
 test("every handshake vector: the core and the TypeScript encode, accept and refuse alike", async () => {
   const core = await loadedCore();
-  const all = cases("handshake");
+  const all = cases("handshake").filter((c) => c.op === "handshake");
   assert.ok(all.some((c) => c.expect === "reject") && all.some((c) => c.expect !== "reject"));
   const valid = core.handshakeEncode(1n, "json@1", "datagram@1", 0);
   for (const c of all) {
@@ -112,6 +112,24 @@ test("every handshake vector: the core and the TypeScript encode, accept and ref
       capabilities: ts.capabilities,
     });
     core.handshakeCheck(bytes, bytes);
+  }
+});
+
+test("every handshake_check vector: the core and the TypeScript accept and refuse alike", async () => {
+  const core = await loadedCore();
+  const all = cases("handshake").filter((c) => c.op === "handshake_check");
+  assert.ok(all.some((c) => c.expect === "reject") && all.some((c) => c.expect !== "reject"));
+  for (const c of all) {
+    const ours = core.handshakeEncode(
+      BigInt(c.input!.ir_hash as string),
+      c.input!.wire_format as string,
+      c.input!.framing as string,
+      c.input!.capabilities as number,
+    );
+    const bytes = unhex(c.bytes);
+    const want = c.expect === "reject" ? Status.ERR_HANDSHAKE : Status.OK;
+    assert.equal((await loadCore()).handshakeCheck(ours, bytes).status, want, c.id);
+    assert.equal(decode(c, bytes) === undefined, c.expect === "reject", c.id);
   }
 });
 
