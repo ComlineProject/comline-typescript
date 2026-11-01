@@ -81,6 +81,57 @@ jobs:
           key: core-registry-${{ hashFiles('runtime/core/CORE_REV') }}
       - run: scripts/vendor-core.sh --check
 
+  conformance_ops:
+    # `comline conformance` drives this runtime over the conformance stdio
+    # ops protocol (runtime/test/conformance-server.ts), against the vendored
+    # corpus: the same proof the Rust runtime gives through `comline-reference`.
+    name: runtime - comline conformance
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: runtime
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # The CLI at the tip of its default branch, built once per commit (the
+      # docs repo's cli-drift workflow does the same).
+      - name: Resolve the CLI's current commit
+        id: cli
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch=$(gh api repos/ComlineProject/cli --jq .default_branch)
+          echo "sha=$(gh api "repos/ComlineProject/cli/commits/$branch" --jq .sha)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: cli-cache
+        with:
+          path: ~/.cargo/bin/comline
+          key: comline-${{ runner.os }}-${{ steps.cli.outputs.sha }}
+      - if: steps.cli-cache.outputs.cache-hit != 'true'
+        run: |
+          rustup update stable && rustup default stable
+          cargo install --locked --git https://github.com/ComlineProject/cli --rev "${{ steps.cli.outputs.sha }}" comline
+      - run: npm ci && npm run build
+      # Every official encoding that is fully implemented here.
+      - name: Conformance - datagram@1, datagram@2, jsonrpc@1, packed@1
+        run: |
+          comline conformance --plain --impl "node dist/test/conformance-server.js" --corpus test/conformance \
+            --encoding datagram@1 --encoding datagram@2 --encoding jsonrpc@1 --encoding packed@1
+      # json@1 is partial (conformance-support.json): decoding doesn't reject
+      # unknown variants or out-of-range integers (comline-typescript#57), and
+      # the CLI's pinned runner reads `1` and `1.0` as different JSON, so the
+      # `format-json/f64-integral` case fails there although TypeScript
+      # encodes it correctly (runtime#71). It is run for the log, not gated, until those
+      # are fixed; msgpack@1 isn't implemented.
+      - name: Conformance - json@1 (known failures, not gating)
+        continue-on-error: true
+        run: |
+          comline conformance --plain --impl "node dist/test/conformance-server.js" --corpus test/conformance \
+            --encoding json@1
+
   std_extra:
     name: std-extra - Node
     runs-on: ubuntu-latest

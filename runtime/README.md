@@ -50,13 +50,26 @@ and speak the same request and response bytes.
 - `test/conformance.test.ts` proves each claim against the vectors, and writes
   [`conformance-report.json`](conformance-report.json) with the cases proving
   it. The docs' language reference is rendered from the report.
-- The vectors are vendored in `test/conformance/` at the commit in
-  `VECTORS_REV`. CI checks that the copy is unedited.
+- The vectors and encoding profiles are vendored in `test/conformance/` at the
+  commit in `VECTORS_REV`. CI checks that the copy is unedited.
+- `test/conformance-server.ts` serves the conformance stdio ops protocol (the
+  one `comline-reference` speaks), over the same ops, so `comline conformance`
+  can drive this runtime. Its `version` reply lists `json@1` and `packed@1`,
+  and the three official framings. CI runs it on every encoding that is fully
+  implemented.
 
 ```sh
 scripts/vendor-conformance.sh <rev>   # take a newer corpus
 CONFORMANCE_BLESS=1 npm test          # rewrite conformance-report.json
+
+npm run build
+comline conformance --impl "node dist/test/conformance-server.js" \
+  --corpus test/conformance --encoding packed@1   # repeat --encoding per encoding
 ```
+
+Without `--encoding` it runs every encoding in the corpus, and fails on
+`msgpack@1` (not implemented) and on `json@1`'s known failures (see
+`conformance-support.json`).
 
 ## The core
 
