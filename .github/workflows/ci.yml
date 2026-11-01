@@ -124,7 +124,7 @@ jobs:
       # unknown variants or out-of-range integers (comline-typescript#57), and
       # the CLI's pinned runner reads `1` and `1.0` as different JSON, so the
       # `format-json/f64-integral` case fails there although TypeScript
-      # encodes it correctly. It is run for the log, not gated, until those
+      # encodes it correctly (runtime#71). It is run for the log, not gated, until those
       # are fixed; msgpack@1 isn't implemented.
       - name: Conformance - json@1 (known failures, not gating)
         continue-on-error: true
