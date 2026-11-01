@@ -27,6 +27,7 @@ export const PROTOCOL = 1;
 const CORPUS_OPS = [
   "name_hash",
   "handshake",
+  "handshake_check",
   "envelope",
   "request",
   "response",
@@ -37,7 +38,7 @@ const CORPUS_OPS = [
 ] as const;
 
 const ENCODE_ONLY = new Set(["name_hash", "encode"]);
-const DECODE_ONLY = new Set(["decode"]);
+const DECODE_ONLY = new Set(["decode", "handshake_check"]);
 
 export const FORMATS = [FORMAT_JSON, FORMAT_PACKED];
 export const FRAMINGS = [FRAMING_DATAGRAM, FRAMING_DATAGRAM2, FRAMING_JSONRPC];

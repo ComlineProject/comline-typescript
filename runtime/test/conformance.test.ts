@@ -49,7 +49,7 @@ function run(c: Case): Outcome {
         ? { pass: true }
         : { fail: `accepted bytes it must reject, as ${canon(got)}` };
     }
-    if (c.op !== "decode") {
+    if (c.op !== "decode" && c.op !== "handshake_check") {
       const encoded = encode(c);
       if (!matches(c, encoded, c.bytes)) {
         return { fail: `encodes to ${show(encoded)}, expected ${show(bytes)}` };

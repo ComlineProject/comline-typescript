@@ -24,6 +24,7 @@ import type { Json } from "./values.js";
 export type Op =
   | "name_hash"
   | "handshake"
+  | "handshake_check"
   | "envelope"
   | "request"
   | "response"

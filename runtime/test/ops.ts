@@ -21,6 +21,7 @@ import {
   JsonCodec,
   JsonRpcConnectionFraming,
   JsonRpcFraming,
+  RuntimeError,
   PackedCodec,
   call,
   decodeEnvelope,
@@ -40,6 +41,7 @@ export interface Case {
   op:
     | "name_hash"
     | "handshake"
+    | "handshake_check"
     | "envelope"
     | "request"
     | "response"
@@ -151,6 +153,8 @@ export function encode(c: Case): Uint8Array {
         framing: i.framing as string,
         capabilities: i.capabilities as number,
       }).encode();
+    case "handshake_check":
+      throw new Error("`handshake_check` cases are decode only");
     case "envelope":
       return encodeReply(i as unknown as Reply);
     case "request":
@@ -225,6 +229,25 @@ export function decode(c: Case, bytes: Uint8Array): unknown {
         framing: named(h.framing, i.framing),
         capabilities: h.capabilities,
       };
+    }
+    case "handshake_check": {
+      // Our end is the input; `bytes` are the peer's frame. Accepted when the
+      // fingerprint, format and framing agree (capabilities may differ).
+      const peer = HandshakeFrame.decode(bytes);
+      if (!peer) return undefined;
+      const ours = new HandshakeFrame({
+        irHash: BigInt(i.ir_hash as string),
+        wireFormat: i.wire_format as string,
+        framing: i.framing as string,
+        capabilities: i.capabilities as number,
+      });
+      try {
+        ours.check(peer);
+      } catch (e) {
+        if (e instanceof RuntimeError) return undefined;
+        throw e;
+      }
+      return i;
     }
     case "envelope": {
       const e = decodeEnvelope(bytes);

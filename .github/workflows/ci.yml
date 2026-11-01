@@ -116,16 +116,14 @@ jobs:
           cargo install --locked --git https://github.com/ComlineProject/cli --rev "${{ steps.cli.outputs.sha }}" comline
       - run: npm ci && npm run build
       # Every official encoding that is fully implemented here.
-      - name: Conformance - datagram@1, datagram@2, jsonrpc@1, packed@1
+      - name: Conformance - datagram@1, datagram@2, jsonrpc@1, packed@1, comline@1
         run: |
           comline conformance --plain --impl "node dist/test/conformance-server.js" --corpus test/conformance \
-            --encoding datagram@1 --encoding datagram@2 --encoding jsonrpc@1 --encoding packed@1
+            --encoding datagram@1 --encoding datagram@2 --encoding jsonrpc@1 --encoding packed@1 --encoding comline@1
       # json@1 is partial (conformance-support.json): decoding doesn't reject
-      # unknown variants or out-of-range integers (comline-typescript#57), and
-      # the CLI's pinned runner reads `1` and `1.0` as different JSON, so the
-      # `format-json/f64-integral` case fails there although TypeScript
-      # encodes it correctly (runtime#71). It is run for the log, not gated, until those
-      # are fixed; msgpack@1 isn't implemented.
+      # unknown variants or out-of-range integers (comline-typescript#57),
+      # which are the only two cases that fail. It is run for the log, not
+      # gated, until that is fixed; msgpack@1 isn't implemented.
       - name: Conformance - json@1 (known failures, not gating)
         continue-on-error: true
         run: |
