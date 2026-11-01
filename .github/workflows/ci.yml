@@ -113,7 +113,7 @@ jobs:
       - if: steps.cli-cache.outputs.cache-hit != 'true'
         run: |
           rustup update stable && rustup default stable
-          cargo install --locked --git https://github.com/ComlineProject/cli --rev "${{ steps.cli.outputs.sha }}"
+          cargo install --locked --git https://github.com/ComlineProject/cli --rev "${{ steps.cli.outputs.sha }}" comline
       - run: npm ci && npm run build
       # Every official encoding that is fully implemented here.
       - name: Conformance - datagram@1, datagram@2, jsonrpc@1, packed@1
