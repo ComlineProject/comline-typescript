@@ -71,6 +71,12 @@ pub const SUPPORT: SupportTable = &[
     (Feature::FormatPacked, Support::supported()),
     (Feature::FormatJson, Support::supported()),
     (Feature::FormatMsgPack, Support::unsupported("`@comline/runtime` has no MessagePack codec yet")),
+    (
+        Feature::Bounds,
+        Support::ignored("a bounded string is a `string` and a bounded list an array; nothing checks the maximum yet")
+            .tracked("core#98"),
+    ),
+    (Feature::Chars, Support::unsupported("no wire format carries a single `char` yet").tracked("core#98")),
 ];
 
 /// Contribute the TypeScript generator to a CLI's [`Registry`](comline_codegen::Registry),

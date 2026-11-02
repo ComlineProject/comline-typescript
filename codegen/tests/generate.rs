@@ -64,6 +64,7 @@ fn type_of(written: &str) -> TypeRef {
         return TypeRef::Array {
             element: Box::new(type_of(element)),
             length: (!length.is_empty()).then(|| length.parse().expect("an array length")),
+            max: None,
         };
     }
     match PrimitiveType::from_name(written) {
@@ -123,7 +124,7 @@ fn interface_from_struct() {
                 parameters: vec![],
                 optional: true,
                 name: "tags".to_string(),
-                ty: TypeRef::Array { element: Box::new(TypeRef::Primitive(PrimitiveType::String)), length: None }, default: None,
+                ty: TypeRef::Array { element: Box::new(TypeRef::Primitive(PrimitiveType::String)), length: None, max: None }, default: None,
                 span: (0, 0),
             },
         ],
@@ -317,7 +318,7 @@ fn chat_units() -> Vec<FrozenUnit> {
                 function(
                     "history",
                     vec![arg("limit", TypeRef::Primitive(PrimitiveType::U32))],
-                    Some(TypeRef::Array { element: Box::new(TypeRef::Named("Message".to_string())), length: None }),
+                    Some(TypeRef::Array { element: Box::new(TypeRef::Named("Message".to_string())), length: None, max: None }),
                     vec![],
                 ),
                 function("wipe", vec![], Some(TypeRef::Unit), vec![]),
@@ -1368,7 +1369,7 @@ fn floats_fixed_arrays_and_unions_render() {
                 union_field("either", either.clone()),
                 union_field(
                     "many",
-                    TypeRef::Array { element: Box::new(either), length: None },
+                    TypeRef::Array { element: Box::new(either), length: None, max: None },
                 ),
             ],
             span: (0, 0),

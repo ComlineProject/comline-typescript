@@ -92,6 +92,8 @@ with the fixtures that prove each claim, is in
 | the `packed@1` format <br><sub>`format-packed`</sub> | ✅ supported |
 | the `json@1` format <br><sub>`format-json`</sub> | ✅ supported |
 | the `msgpack@1` format <br><sub>`format-msgpack`</sub> | ❌ unsupported: `@comline/runtime` has no MessagePack codec yet |
+| bounds <br><sub>`bounds`</sub> | ⚪ ignored: a bounded string is a `string` and a bounded list an array; nothing checks the maximum yet (core#98) |
+| single characters <br><sub>`chars`</sub> | ❌ unsupported: no wire format carries a single `char` yet (core#98) |
 
 <!-- features:end -->
 
