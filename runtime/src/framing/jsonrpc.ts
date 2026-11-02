@@ -23,12 +23,17 @@ const I64_MIN = -(1n << 63n);
 const I64_MAX = (1n << 63n) - 1n;
 const NULL = enc.encode("null");
 
-/** `frame` as a JSON object's members, or `undefined` if it isn't one. */
+/**
+ * `frame` as a JSON-RPC 2.0 message's members: a JSON object carrying
+ * `"jsonrpc": "2.0"`. `undefined` for anything else (runtime#75).
+ */
 function members(frame: Uint8Array): { text: string; members: ReadonlyMap<string, JsonNode> } | undefined {
   try {
     const text = dec.decode(frame);
     const root = parseJson(text);
-    return root.kind === "object" ? { text, members: root.members } : undefined;
+    if (root.kind !== "object") return undefined;
+    const version = root.members.get("jsonrpc");
+    return version?.kind === "string" && version.value === "2.0" ? { text, members: root.members } : undefined;
   } catch {
     return undefined;
   }
@@ -72,9 +77,14 @@ export class JsonRpcFraming implements Framing {
     const r = members(frame);
     const method = r?.members.get("method");
     if (!r || method?.kind !== "string") return undefined;
-    // A notification has no id (or a null one); it's request 0.
+    // Params are an array or an object, or the `null` this framing writes
+    // for none.
+    const params = r.members.get("params");
+    if (params && !["array", "object", "null"].includes(params.kind)) return undefined;
+    // A notification has no id; it's request 0. A null id is refused: it
+    // still wants a reply, which a notification never gets (runtime#75).
     const id = r.members.get("id");
-    const requestId = !id || id.kind === "null" ? 0n : u64(id);
+    const requestId = !id ? 0n : u64(id);
     if (requestId === undefined) return undefined;
     return {
       call: { name: method.value },
@@ -113,6 +123,10 @@ export class JsonRpcFraming implements Framing {
     const error = r.members.get("error");
     if (error && error.kind !== "null") {
       if (error.kind !== "object") return undefined;
+      // An error object has a message; a response, never both outcomes.
+      if (error.members.get("message")?.kind !== "string") return undefined;
+      const result = r.members.get("result");
+      if (result && result.kind !== "null") return undefined;
       const code = jsonInteger(error.members.get("code"));
       if (code === undefined || code < I64_MIN || code > I64_MAX) return undefined;
       // An ordinal is a u16; any other code (-32603 and the rest of
@@ -167,7 +181,7 @@ export class JsonRpcConnectionFraming implements ConnectionFraming {
       const request = this.frames.decodeRequest(frame);
       if (!request) return undefined;
       const id = r.members.get("id");
-      return { kind: "request", protocol: undefined, request, oneWay: !id || id.kind === "null" };
+      return { kind: "request", protocol: undefined, request, oneWay: !id };
     }
     const response = this.frames.decodeResponse(frame);
     return response && { kind: "reply", protocol: undefined, ...response };

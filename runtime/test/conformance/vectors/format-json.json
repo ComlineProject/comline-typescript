@@ -598,6 +598,56 @@
       "compare": "json"
     },
     {
+      "id": "format-json/reject-struct-by-position",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "struct": {
+            "fields": [
+              [
+                "x",
+                "i32"
+              ],
+              [
+                "y",
+                "i32"
+              ]
+            ],
+            "name": "Point"
+          }
+        }
+      },
+      "bytes": "5b312c2d325d",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/reject-nested-struct-by-position",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "array": {
+            "struct": {
+              "fields": [
+                [
+                  "x",
+                  "i32"
+                ],
+                [
+                  "y",
+                  "i32"
+                ]
+              ],
+              "name": "Point"
+            }
+          }
+        }
+      },
+      "bytes": "5b7b2278223a312c2279223a2d327d2c5b332c345d5d",
+      "expect": "reject"
+    },
+    {
       "id": "format-json/decode-fields-reordered",
       "op": "decode",
       "input": {

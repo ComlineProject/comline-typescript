@@ -264,6 +264,11 @@ export function decodeJson(node: JsonNode, shape?: Shape): unknown {
       return n;
     }
     case "array": {
+      // A struct's fields go by name in `json@1`: an array is never one,
+      // or it would be read by position (runtime#74).
+      if (s && typeof s === "object" && "fields" in s) {
+        throw new SyntaxError("expected a struct by name, got an array");
+      }
       const array = s && typeof s === "object" && "array" in s ? s : undefined;
       if (array?.length !== undefined && node.items.length !== array.length) {
         throw new SyntaxError(`expected ${array.length} elements, got ${node.items.length}`);
