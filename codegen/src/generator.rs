@@ -54,6 +54,8 @@ use comline_codegen::naming::{camel, pascal, screaming_snake};
 use comline_codegen::stdlib::{self, is_std_namespace};
 use comline_codegen::symbols::{error_names, SymbolTable, UseTracker};
 use comline_codegen::encodings::type_of;
+
+use crate::ident::{ident, is_reserved};
 use comline_codegen::protocol::EncodingMapping;
 use comline_codegen::{GenerateRequest, GeneratedFile, Mode, PackageMeta};
 
@@ -386,6 +388,20 @@ fn derived_names(units: &[FrozenUnit], schemas: &[(String, Vec<FrozenUnit>)]) ->
     let mut any_formatted = false;
 
     for unit in units {
+        // `struct class` is `class_` in TypeScript, which a declared `class_`
+        // would collide with.
+        let name = match unit {
+            FrozenUnit::Struct { name, .. }
+            | FrozenUnit::Enum { name, .. }
+            | FrozenUnit::TypeAlias { name, .. }
+            | FrozenUnit::Error { name, imported_from: None, .. }
+            | FrozenUnit::Constant { name, .. }
+            | FrozenUnit::Protocol { name, .. } => Some(name),
+            _ => None,
+        };
+        if let Some(name) = name.filter(|name| is_reserved(name)) {
+            derived.push(Derived::new(ident(name), format!("`{name}`, a word TypeScript reserves")));
+        }
         match unit {
             // `error Rude` -> `export class RudeError extends Error`, which a
             // declared `RudeError` of any kind would collide with.
@@ -683,7 +699,7 @@ fn schema_source(
 /// already goes through, just at the top level of the file instead of
 /// inside an interface.
 fn type_alias(name: &str, target: &TypeRef, types: &TypeMapper) -> String {
-    format!("export type {name} = {};\n\n", types.ts_type(target))
+    format!("export type {} = {};\n\n", ident(name), types.ts_type(target))
 }
 
 /// `const MAX_RETRIES: u8 = 5` -> `export const MAX_RETRIES = 5;`.
@@ -727,12 +743,12 @@ fn constant(
         }
         s.push_str(" */\n");
     }
-    s.push_str(&format!("export const {name} = {value};\n\n"));
+    s.push_str(&format!("export const {} = {value};\n\n", ident(name)));
     s
 }
 
 fn interface(name: &str, fields: &[FrozenUnit], types: &TypeMapper) -> String {
-    let mut s = format!("export interface {name} {{\n");
+    let mut s = format!("export interface {} {{\n", ident(name));
     for field in fields {
         if let FrozenUnit::Field {
             name,
@@ -778,11 +794,12 @@ fn args_layout(name: &str, fields: &[(&str, &TypeRef, bool)], types: &TypeMapper
 /// the dispatcher catches it and the client re-raises it, both keyed by
 /// `<Name>Error.ordinal`.
 fn error_class(name: &str, ordinal: u16) -> String {
+    let ty = ident(name);
     format!(
         "export class {name}Error extends Error {{\n\
         \x20   static readonly ordinal = {ordinal};\n\
-        \x20   readonly data: {name};\n\
-        \x20   constructor(data: {name}) {{\n\
+        \x20   readonly data: {ty};\n\
+        \x20   constructor(data: {ty}) {{\n\
         \x20       super(\"{name}\");\n\
         \x20       this.data = data;\n\
         \x20       this.name = \"{name}Error\";\n\
@@ -794,6 +811,7 @@ fn error_class(name: &str, ordinal: u16) -> String {
 /// An `enum` as a `const` object of its variants' wire names, and the union
 /// of those names as a type of the same name.
 fn string_enum(name: &str, variants: &[FrozenUnit]) -> String {
+    let name = ident(name);
     let mut s = format!("export const {name} = {{\n");
     for variant in variants {
         if let FrozenUnit::EnumVariant(v, _) = variant {
@@ -978,7 +996,7 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
              export interface {ty} {{\n"
         ));
         for p in provided {
-            s.push_str(&format!("    {}: {}.{};\n", camel(&p.field), module(&p.namespace), p.name));
+            s.push_str(&format!("    {}: {}.{};\n", camel(&p.field), module(&p.namespace), ident(&p.name)));
         }
         s.push_str("}\n\n");
         s.push_str(&format!(
@@ -1115,6 +1133,9 @@ fn protocol(
     errors: &HashMap<u16, String>,
     types: &TypeMapper,
 ) -> String {
+    // The provider interface's identifier; the classes and helpers named
+    // after the protocol (`<Proto>Client`) never need escaping.
+    let proto_ty = ident(proto);
     let fns: Vec<FnInfo> = functions
         .iter()
         .filter_map(|f| match f {
@@ -1188,12 +1209,12 @@ fn protocol(
     }
 
     if fns.is_empty() {
-        s.push_str(&format!("export interface {proto} {{}}\n\n"));
+        s.push_str(&format!("export interface {} {{}}\n\n", ident(proto)));
         return s;
     }
 
     // 2. the provider interface — every call is async
-    s.push_str(&format!("export interface {proto} {{\n"));
+    s.push_str(&format!("export interface {} {{\n", ident(proto)));
     for f in &fns {
         if !f.throws.is_empty() {
             let names = f
@@ -1245,8 +1266,8 @@ fn protocol(
         ));
     }
     s.push_str(&format!(
-        "    private readonly impl: {proto};\n\n\
-        \x20   constructor(impl: {proto}) {{\n\
+        "    private readonly impl: {proto_ty};\n\n\
+        \x20   constructor(impl: {proto_ty}) {{\n\
         \x20       this.impl = impl;\n\
         \x20   }}\n\n\
         \x20   calls(): readonly string[] {{\n\
@@ -1452,9 +1473,10 @@ fn protocol(
         } else {
             s.push_str("        switch (env.err.id) {\n");
             for (_, err) in &f.throws {
+                let err_ty = ident(err);
                 s.push_str(&format!(
                     "            case {err}Error.ordinal:\n\
-                     \x20               throw new {err}Error(this.{field}.codec.decode<{err}>(env.err.body, {err}Layout));\n"
+                     \x20               throw new {err}Error(this.{field}.codec.decode<{err_ty}>(env.err.body, {err}Layout));\n"
                 ));
             }
             s.push_str("            default:\n");
@@ -1468,7 +1490,7 @@ fn protocol(
     // 6. the serve helper, for the lockstep `Server`
     if number.is_none() {
         s.push_str(&format!(
-            "export function serve{proto}(impl: {proto}, transport: Transport, codec: Codec = {codec}, framing: Framing = new {ctor}()): Promise<void> {{\n\
+            "export function serve{proto}(impl: {proto_ty}, transport: Transport, codec: Codec = {codec}, framing: Framing = new {ctor}()): Promise<void> {{\n\
             {handshake_note}\
             \x20   return new Server(new {proto}Dispatcher(impl), codec, framing).serve(transport, IR_HASH{handshake_arg});\n\
             }}\n\n",
@@ -1582,11 +1604,17 @@ impl TypeMapper {
         let mut s = String::new();
         for (module, names) in by_module {
             let specifier = self.specifier_for(namespace, &module);
+            // A type is imported by its identifier; its `Layout`'s name is
+            // never a reserved word.
             let named = |(declared, bound): &(String, String), suffix: &str| {
+                let (declared, bound) = match suffix {
+                    "" => (ident(declared), ident(bound)),
+                    _ => (format!("{declared}{suffix}"), format!("{bound}{suffix}")),
+                };
                 if declared == bound {
-                    format!("{declared}{suffix}")
+                    declared
                 } else {
-                    format!("{declared}{suffix} as {bound}{suffix}")
+                    format!("{declared} as {bound}")
                 }
             };
             // A name whose `Layout` is used imports that as a value; every
@@ -1630,7 +1658,7 @@ impl TypeMapper {
             // because an alias is this schema's own name for it.
             TypeRef::Named(name) => {
                 self.uses.resolve(name);
-                name.clone()
+                ident(name)
             }
             // TypeScript has no fixed-length array short of a tuple, so `T[N]`
             // is `T[]` too. A union element needs its parentheses.

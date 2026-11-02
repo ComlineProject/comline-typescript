@@ -2,6 +2,8 @@ use comline_codegen::{GenerateRequest, Mode, PackageMeta, TargetLanguage};
 use comline_codegen_typescript::generate_typescript;
 use comline_core::schema::ir::frozen::types::{Literal, PrimitiveType, TypeRef};
 use comline_core::schema::ir::frozen::unit::{ConfigValue, FrozenArgument, FrozenUnit};
+use comline_core::schema::ir::compiler::interpreter::incremental::IncrementalInterpreter;
+use comline_core::schema::ir::compiler::Compile;
 
 fn code_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenerateRequest {
     GenerateRequest {
@@ -1664,4 +1666,76 @@ fn generated_services_match_the_runtime_test_fixture() {
             path.display()
         );
     }
+}
+
+/// Names TypeScript reserves (`class`, `interface`, `number`), declared in one
+/// schema and imported by another (comline-typescript#115). Each becomes an
+/// identifier with a trailing underscore wherever it's declared, referred to
+/// or imported; wire names don't change. Kept in
+/// `runtime/test/generated/reserved/` so the Node job type-checks it.
+/// Regenerate with `TS_BLESS=1 cargo test -p comline-codegen-typescript`.
+#[test]
+fn reserved_words_are_escaped_where_they_become_identifiers() {
+    const NAMES: &str = "enum class {\n    delete\n    new\n}\n\n\
+        struct function {\n    default: u8\n    this: class\n    big: u64\n}\n\n\
+        type number = u32\n\n\
+        const let: u32 = 5\n\n\
+        error interface {\n    message = \"e\"\n    code: number\n}\n\n\
+        protocol static {\n    function typeof(default: u8, new: function) -> class ! interface;\n}\n";
+    const API: &str = "use names::class\nuse names::function\n\n\
+        struct uses {\n    c: class\n    f: function\n}\n";
+    let schemas = vec![
+        ("names".to_string(), IncrementalInterpreter::from_source(NAMES)),
+        ("api".to_string(), IncrementalInterpreter::from_source(API)),
+    ];
+    let files = generate_typescript(&code_req(&schemas)).unwrap();
+    let file = |name: &str| files.iter().find(|f| f.path.to_str() == Some(name)).unwrap().contents.clone();
+    let (names, api) = (file("names.ts"), file("api.ts"));
+    for line in [
+        "export const class_ = {\n    delete: \"delete\",\n    new: \"new\",\n} as const;",
+        "export type class_ = (typeof class_)[keyof typeof class_];",
+        "export interface function_ {\n    default: number;\n    this: class_;\n    big: bigint;\n}",
+        "export type number_ = number;",
+        "export const let_ = 5;",
+        "export interface interface_ {\n    code: number_;\n}",
+        "    readonly data: interface_;",
+        // The error's name on the wire is its own.
+        "        super(\"interface\");",
+        "export interface static_ {",
+        "    typeof(peer: Peer, params: staticTypeofParams): Promise<class_>;",
+        "export interface staticTypeofParams {\n    default: number;\n    new: function_;\n}",
+    ] {
+        assert!(names.contains(line), "missing `{line}` in: {names}");
+    }
+    assert!(api.contains("import type { class_, function_ } from \"./names.js\";"), "{api}");
+    assert!(api.contains("export interface uses {\n    c: class_;\n    f: function_;\n}"), "{api}");
+
+    for file in &files {
+        let name = file.path.to_str().unwrap();
+        let path = format!("{}/../runtime/test/generated/reserved/{name}", env!("CARGO_MANIFEST_DIR"));
+        if std::env::var_os("TS_BLESS").is_some() {
+            std::fs::create_dir_all(std::path::Path::new(&path).parent().unwrap()).unwrap();
+            std::fs::write(&path, &file.contents).unwrap();
+            continue;
+        }
+        let committed = std::fs::read_to_string(&path).unwrap_or_default();
+        assert_eq!(
+            file.contents, committed,
+            "generated {name} drifted from runtime/test/generated/reserved/ — \
+             re-bless with TS_BLESS=1 cargo test -p comline-codegen-typescript"
+        );
+    }
+}
+
+/// A declared name that a reserved word's escape would take is refused with
+/// a message, not emitted twice.
+#[test]
+fn a_name_an_escape_would_take_is_refused() {
+    let schemas = vec![(
+        "names".to_string(),
+        IncrementalInterpreter::from_source("struct class {\n    a: u8\n}\nstruct class_ {\n    b: u8\n}\n"),
+    )];
+    let error = generate_typescript(&code_req(&schemas)).unwrap_err().to_string();
+    assert!(error.contains("`class_`"), "{error}");
+    assert!(error.contains("a word TypeScript reserves"), "{error}");
 }
