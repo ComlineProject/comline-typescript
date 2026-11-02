@@ -10,6 +10,7 @@
 //! See `design/generation.md`.
 
 mod generator;
+mod ident;
 
 use comline_codegen::features::{Feature, Support, SupportTable};
 use comline_codegen::versions::Versions;

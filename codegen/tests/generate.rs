@@ -2,6 +2,8 @@ use comline_codegen::{GenerateRequest, Mode, PackageMeta, TargetLanguage};
 use comline_codegen_typescript::generate_typescript;
 use comline_core::schema::ir::frozen::types::{Literal, PrimitiveType, TypeRef};
 use comline_core::schema::ir::frozen::unit::{ConfigValue, FrozenArgument, FrozenUnit};
+use comline_core::schema::ir::compiler::interpreter::incremental::IncrementalInterpreter;
+use comline_core::schema::ir::compiler::Compile;
 
 fn code_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenerateRequest {
     GenerateRequest {
@@ -1700,6 +1702,154 @@ fn generated_services_match_the_runtime_test_fixture() {
             file.contents, committed,
             "generated services drifted from {} — re-bless with TS_BLESS=1 cargo test -p comline-codegen-typescript",
             path.display()
+        );
+    }
+}
+
+/// Names TypeScript reserves (`class`, `interface`, `number`), declared in one
+/// schema and imported by another (comline-typescript#115). Each becomes an
+/// identifier with a trailing underscore wherever it's declared, referred to
+/// or imported; wire names don't change. Kept in
+/// `runtime/test/generated/reserved/` so the Node job type-checks it.
+/// Regenerate with `TS_BLESS=1 cargo test -p comline-codegen-typescript`.
+#[test]
+fn reserved_words_are_escaped_where_they_become_identifiers() {
+    const NAMES: &str = "enum class {\n    delete\n    new\n}\n\n\
+        struct function {\n    default: u8\n    this: class\n    big: u64\n}\n\n\
+        type number = u32\n\n\
+        const let: u32 = 5\n\n\
+        error interface {\n    message = \"e\"\n    code: number\n}\n\n\
+        protocol static {\n    function typeof(default: u8, new: function) -> class ! interface;\n}\n";
+    const API: &str = "use names::class\nuse names::function\n\n\
+        struct uses {\n    c: class\n    f: function\n}\n";
+    let schemas = vec![
+        ("names".to_string(), IncrementalInterpreter::from_source(NAMES)),
+        ("api".to_string(), IncrementalInterpreter::from_source(API)),
+    ];
+    let files = generate_typescript(&code_req(&schemas)).unwrap();
+    let file = |name: &str| files.iter().find(|f| f.path.to_str() == Some(name)).unwrap().contents.clone();
+    let (names, api) = (file("names.ts"), file("api.ts"));
+    for line in [
+        "export const class_ = {\n    delete: \"delete\",\n    new: \"new\",\n} as const;",
+        "export type class_ = (typeof class_)[keyof typeof class_];",
+        "export interface function_ {\n    default: number;\n    this: class_;\n    big: bigint;\n}",
+        "export type number_ = number;",
+        "export const let_ = 5;",
+        "export interface interface_ {\n    code: number_;\n}",
+        "    readonly data: interface_;",
+        // The error's name on the wire is its own.
+        "        super(\"interface\");",
+        "export interface static_ {",
+        "    typeof(peer: Peer, params: staticTypeofParams): Promise<class_>;",
+        "export interface staticTypeofParams {\n    default: number;\n    new: function_;\n}",
+    ] {
+        assert!(names.contains(line), "missing `{line}` in: {names}");
+    }
+    assert!(api.contains("import type { class_, function_ } from \"./names.js\";"), "{api}");
+    assert!(api.contains("export interface uses {\n    c: class_;\n    f: function_;\n}"), "{api}");
+
+    for file in &files {
+        let name = file.path.to_str().unwrap();
+        let path = format!("{}/../runtime/test/generated/reserved/{name}", env!("CARGO_MANIFEST_DIR"));
+        if std::env::var_os("TS_BLESS").is_some() {
+            std::fs::create_dir_all(std::path::Path::new(&path).parent().unwrap()).unwrap();
+            std::fs::write(&path, &file.contents).unwrap();
+            continue;
+        }
+        let committed = std::fs::read_to_string(&path).unwrap_or_default();
+        assert_eq!(
+            file.contents, committed,
+            "generated {name} drifted from runtime/test/generated/reserved/ — \
+             re-bless with TS_BLESS=1 cargo test -p comline-codegen-typescript"
+        );
+    }
+}
+
+/// A declared name that a reserved word's escape would take is refused with
+/// a message, not emitted twice.
+#[test]
+fn a_name_an_escape_would_take_is_refused() {
+    let schemas = vec![(
+        "names".to_string(),
+        IncrementalInterpreter::from_source("struct class {\n    a: u8\n}\nstruct class_ {\n    b: u8\n}\n"),
+    )];
+    let error = generate_typescript(&code_req(&schemas)).unwrap_err().to_string();
+    assert!(error.contains("`class_`"), "{error}");
+    assert!(error.contains("a word TypeScript reserves"), "{error}");
+}
+
+/// Schema names that the generated code also needs: what it imports from
+/// `@comline/runtime` (`Layout`, `Peer`, `Client`, `DatagramFraming`), and
+/// globals (`Promise`, `Uint8Array`). Declared in one schema and imported by
+/// another, beside functions named `then`, `constructor`, `peer` and
+/// `client` (comline-typescript#116). A schema keeps its names; the runtime's
+/// are imported under an alias in a file where one is taken, a global is
+/// read through `globalThis`, and such a function's method takes an
+/// underscore. Kept in `runtime/test/generated/collisions/` so the Node job
+/// type-checks it. Regenerate with
+/// `TS_BLESS=1 cargo test -p comline-codegen-typescript`.
+#[test]
+fn schema_names_the_generated_code_also_needs_are_kept() {
+    let structs = [
+        "Layout", "Peer", "Dispatch", "Codec", "Connection", "Reply", "Kind", "Client", "Server", "Transport",
+        "Framing", "RuntimeError", "DatagramFraming", "PackedCodec", "Promise", "Uint8Array",
+    ];
+    let mut shapes: String = structs.iter().map(|name| format!("struct {name} {{\n    a: u8\n}}\n\n")).collect();
+    shapes.push_str(
+        "protocol Wire {\n    function then(l: Layout) -> Promise;\n    function constructor(p: Peer) -> Reply;\n    \
+         function peer(c: Codec) -> Connection;\n    function client(k: Kind) -> Uint8Array;\n}\n\n\
+         @framing = \"datagram\"\nprotocol Lock {\n    function then(c: Client) -> Server;\n    \
+         function client(t: Transport) -> Framing;\n    function peer(f: DatagramFraming, p: PackedCodec) -> RuntimeError;\n}\n",
+    );
+    const USER: &str = "use shapes::Layout\nuse shapes::Promise\n\n\
+        struct Uses {\n    l: Layout\n    p: Promise\n}\n\n\
+        protocol Again {\n    function get(u: Uses) -> Layout;\n}\n";
+    let schemas = vec![
+        ("shapes".to_string(), IncrementalInterpreter::from_source(&shapes)),
+        ("user".to_string(), IncrementalInterpreter::from_source(USER)),
+    ];
+    let files = generate_typescript(&code_req(&schemas)).unwrap();
+    let file = |name: &str| files.iter().find(|f| f.path.to_str() == Some(name)).unwrap().contents.clone();
+    let (shapes, user) = (file("shapes.ts"), file("user.ts"));
+    for line in [
+        "    Client as $Client,",
+        "    DatagramFraming as $DatagramFraming,",
+        "    type Layout as $Layout,",
+        "export interface Layout {",
+        "export const LayoutLayout: $Layout = ",
+        "    then_(peer: $Peer, params: WireThenParams): globalThis.Promise<Promise>;",
+        "    constructor_(peer: $Peer, params: WireConstructorParams): globalThis.Promise<Reply>;",
+        "export class WireDispatcher implements $Dispatch {",
+        "    async dispatchWith(call: $Kind, params: globalThis.Uint8Array, reply: $Reply, peer: $Peer): globalThis.Promise<void> {",
+        "    async then_(params: WireThenParams): globalThis.Promise<Promise> {",
+        "    async peer_(params: WirePeerParams): globalThis.Promise<Connection> {",
+        "    private readonly client: $Client;",
+        "    async client_(params: LockClientParams): globalThis.Promise<Framing> {",
+        "export function serveLock(impl: Lock, transport: $Transport, codec: $Codec = Format, framing: $Framing = new $DatagramFraming()): globalThis.Promise<void> {",
+        "export const Format: $Codec = new $PackedCodec();",
+        // The wire names are the schema's.
+        "{ id: 0, name: \"then\" }",
+    ] {
+        assert!(shapes.contains(line), "missing `{line}` in: {shapes}");
+    }
+    // A file is aliased for what it imports from another schema too.
+    assert!(user.contains("    type Layout as $Layout,"), "{user}");
+    assert!(user.contains("import type { Layout, Promise } from \"./shapes.js\";"), "{user}");
+    assert!(user.contains("get(peer: Peer, params: AgainGetParams): globalThis.Promise<Layout>;"), "{user}");
+
+    for file in &files {
+        let name = file.path.to_str().unwrap();
+        let path = format!("{}/../runtime/test/generated/collisions/{name}", env!("CARGO_MANIFEST_DIR"));
+        if std::env::var_os("TS_BLESS").is_some() {
+            std::fs::create_dir_all(std::path::Path::new(&path).parent().unwrap()).unwrap();
+            std::fs::write(&path, &file.contents).unwrap();
+            continue;
+        }
+        let committed = std::fs::read_to_string(&path).unwrap_or_default();
+        assert_eq!(
+            file.contents, committed,
+            "generated {name} drifted from runtime/test/generated/collisions/ — \
+             re-bless with TS_BLESS=1 cargo test -p comline-codegen-typescript"
         );
     }
 }
