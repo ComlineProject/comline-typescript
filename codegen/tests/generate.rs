@@ -1184,6 +1184,44 @@ fn constants_are_emitted() {
     assert!(out.contains("export const BIG = 9n;"), "got: {out}");
 }
 
+/// A constant can name another constant or an integer type's bound
+/// (core#168); it's emitted with the value that comes to, not dropped.
+#[test]
+fn a_constant_naming_another_is_emitted_with_its_value() {
+    let constant = |name: &str, ty: PrimitiveType, value: Literal| FrozenUnit::Constant {
+        docstring: None,
+        name: name.to_string(),
+        ty: TypeRef::Primitive(ty),
+        value: Some(value),
+        span: (0, 0),
+    };
+    let reference = |r: &str| Literal::Reference(r.to_string());
+    let schemas = vec![
+        ("base".to_string(), vec![constant("BASE", PrimitiveType::U32, Literal::Integer(9))]),
+        (
+            "limits".to_string(),
+            vec![
+                FrozenUnit::Import("base::BASE".to_string(), None, (0, 0)),
+                constant("A", PrimitiveType::U32, reference("BASE")),
+                constant("WIDE", PrimitiveType::U64, reference("A")),
+                constant("TOP", PrimitiveType::U64, reference("u64::MAX")),
+                constant("NAME", PrimitiveType::String, Literal::String("n".to_string())),
+                constant("LABEL", PrimitiveType::String, reference("NAME")),
+            ],
+        ),
+    ];
+    let out = code_file(&schemas, "limits");
+    for line in [
+        "export const A = 9;",
+        // `bigint`, whatever the constant it names was.
+        "export const WIDE = 9n;",
+        "export const TOP = 18446744073709551615n;",
+        "export const LABEL = \"n\";",
+    ] {
+        assert!(out.contains(line), "missing `{line}` in: {out}");
+    }
+}
+
 /// `! A, B`. The IR has always modelled `throws` as a list, so this needed
 /// nothing — but nothing proved it either, because the grammar could only
 /// produce one.
