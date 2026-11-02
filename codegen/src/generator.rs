@@ -54,6 +54,7 @@ use comline_codegen::naming::{camel, pascal, screaming_snake};
 use comline_codegen::stdlib::{self, is_std_namespace};
 use comline_codegen::symbols::{error_names, SymbolTable, UseTracker};
 use comline_codegen::encodings::type_of;
+use comline_codegen::validation::{Validation, Value};
 
 use crate::ident::{ident, is_reserved, method_ident};
 use comline_codegen::protocol::EncodingMapping;
@@ -537,7 +538,7 @@ fn schema_source(
                 value,
                 ..
             } => {
-                decls.push_str(&constant(docstring.as_deref(), name, ty, value.as_ref()));
+                decls.push_str(&constant(docstring.as_deref(), name, ty, value.as_ref(), namespace, schemas));
             }
             FrozenUnit::Protocol {
                 name,
@@ -723,17 +724,25 @@ fn constant(
     name: &str,
     ty: &TypeRef,
     value: Option<&Literal>,
+    namespace: &str,
+    schemas: &[(String, Vec<FrozenUnit>)],
 ) -> String {
-    // Validation refuses a constant that isn't a primitive with a literal
-    // value, so neither early return is reachable from a real build.
+    // Validation refuses a constant that isn't a primitive with a value of
+    // its type, so neither early return is reachable from a real build.
     let Some(primitive) = ty.as_primitive() else {
         return String::new();
     };
+    // A constant can name another, or an integer type's bound (core#168):
+    // it's emitted with the value that comes to, as a literal is.
+    let Some(Ok(value)) = value.map(|literal| Validation::new(schemas).value(namespace, literal)) else {
+        return String::new();
+    };
     let value = match (primitive, value) {
-        (_, Some(Literal::String(text))) => format!("{text:?}"),
+        (PrimitiveType::String, Value::String(text)) => format!("{text:?}"),
         // `bigint` is a distinct type from `number`, and `7` is not one.
-        (p, Some(Literal::Integer(i))) if is_wide(p) => format!("{i}n"),
-        (_, Some(literal @ (Literal::Integer(_) | Literal::Bool(_)))) => literal.to_string(),
+        (p, Value::Integer(i)) if is_wide(p) => format!("{i}n"),
+        (p, Value::Integer(i)) if p.is_integer() || p.is_float() => i.to_string(),
+        (PrimitiveType::Bool, Value::Bool(b)) => b.to_string(),
         _ => return String::new(),
     };
 
