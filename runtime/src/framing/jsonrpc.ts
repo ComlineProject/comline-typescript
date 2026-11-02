@@ -23,6 +23,18 @@ const I64_MIN = -(1n << 63n);
 const I64_MAX = (1n << 63n) - 1n;
 const NULL = enc.encode("null");
 
+/** The members a message is read by, and an error object's. */
+const MESSAGE_MEMBERS = ["jsonrpc", "method", "params", "id", "result", "error"];
+const ERROR_MEMBERS = ["code", "message", "data"];
+
+/**
+ * Whether any of `keys` is written more than once. serde refuses a
+ * repeated member it reads, so the Rust runtime does, and this matches it.
+ */
+function repeats(repeated: ReadonlySet<string> | undefined, keys: readonly string[]): boolean {
+  return repeated !== undefined && keys.some((key) => repeated.has(key));
+}
+
 /**
  * `frame` as a JSON-RPC 2.0 message's members: a JSON object carrying
  * `"jsonrpc": "2.0"`. `undefined` for anything else (runtime#75).
@@ -31,7 +43,7 @@ function members(frame: Uint8Array): { text: string; members: ReadonlyMap<string
   try {
     const text = dec.decode(frame);
     const root = parseJson(text);
-    if (root.kind !== "object") return undefined;
+    if (root.kind !== "object" || repeats(root.repeated, MESSAGE_MEMBERS)) return undefined;
     const version = root.members.get("jsonrpc");
     return version?.kind === "string" && version.value === "2.0" ? { text, members: root.members } : undefined;
   } catch {
@@ -122,7 +134,7 @@ export class JsonRpcFraming implements Framing {
     if (!r || requestId === undefined) return undefined;
     const error = r.members.get("error");
     if (error && error.kind !== "null") {
-      if (error.kind !== "object") return undefined;
+      if (error.kind !== "object" || repeats(error.repeated, ERROR_MEMBERS)) return undefined;
       // An error object has a message; a response, never both outcomes.
       if (error.members.get("message")?.kind !== "string") return undefined;
       const result = r.members.get("result");

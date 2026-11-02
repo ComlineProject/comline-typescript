@@ -16,7 +16,12 @@ export type JsonNode = { readonly start: number; readonly end: number } & (
   | { readonly kind: "number"; readonly raw: string }
   | { readonly kind: "string"; readonly value: string }
   | { readonly kind: "array"; readonly items: readonly JsonNode[] }
-  | { readonly kind: "object"; readonly members: ReadonlyMap<string, JsonNode> }
+  | {
+      readonly kind: "object";
+      readonly members: ReadonlyMap<string, JsonNode>;
+      /** Keys written more than once; `members` holds the last of each. */
+      readonly repeated?: ReadonlySet<string>;
+    }
 );
 
 const NUMBER = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
@@ -57,6 +62,7 @@ export function parseJson(text: string): JsonNode {
     if (c === "{") {
       at++;
       const members = new Map<string, JsonNode>();
+      let repeated: Set<string> | undefined;
       space();
       if (text[at] === "}") {
         at++;
@@ -67,10 +73,11 @@ export function parseJson(text: string): JsonNode {
         const key = string();
         space();
         if (text[at++] !== ":") fail();
+        if (members.has(key)) (repeated ??= new Set()).add(key);
         members.set(key, value());
         space();
         const next = text[at++];
-        if (next === "}") return { kind: "object", members, start, end: at };
+        if (next === "}") return { kind: "object", members, repeated, start, end: at };
         if (next !== ",") fail();
       }
     }
