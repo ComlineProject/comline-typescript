@@ -86,6 +86,22 @@ pub fn generate_typescript(req: &GenerateRequest) -> Result<Vec<GeneratedFile>> 
     // named, before a single file is produced.
     comline_codegen::features::refuse_unsupported("typescript", req, crate::SUPPORT)?;
 
+    // Bounds aren't checked yet (core#98, rollout step 9): every maximum is
+    // dropped, so a bounded string is a `string` and a bounded list an
+    // array, exactly what the schema generates without them.
+    let unbounded;
+    let req = match comline_codegen::features::strip(
+        comline_codegen::features::Feature::Bounds,
+        &req.schemas,
+        &comline_codegen::features::Options::default(),
+    ) {
+        Some((schemas, _)) => {
+            unbounded = GenerateRequest { schemas, ..req.clone() };
+            &unbounded
+        }
+        None => req,
+    };
+
     // Every encoding the package uses (its format, each protocol's framing
     // and handshake) has to be mapped to a class: an unmapped one is refused
     // here, before a file is produced, never rendered as something else.
@@ -1651,8 +1667,8 @@ impl TypeMapper {
                     format!("{name}Layout")
                 }
             }
-            TypeRef::Array { element, length: None } => format!("{{ array: {} }}", self.layout(element, lazy)),
-            TypeRef::Array { element, length: Some(n) } => {
+            TypeRef::Array { element, length: None, .. } => format!("{{ array: {} }}", self.layout(element, lazy)),
+            TypeRef::Array { element, length: Some(n), .. } => {
                 format!("{{ fixed: {}, length: {n} }}", self.layout(element, lazy))
             }
             TypeRef::Union(members) => format!(
@@ -1813,6 +1829,8 @@ fn primitive_layout(p: PrimitiveType) -> &'static str {
         PrimitiveType::F64 => "f64",
         PrimitiveType::Bool => "bool",
         PrimitiveType::String => "string",
+        // Refused by `refuse_unsupported`: no format carries one yet.
+        PrimitiveType::Char => "char",
     }
 }
 
