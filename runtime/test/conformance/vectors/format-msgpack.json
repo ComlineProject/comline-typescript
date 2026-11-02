@@ -568,6 +568,66 @@
       "bytes": "c0"
     },
     {
+      "id": "format-msgpack/reject-struct-by-name",
+      "op": "decode",
+      "input": {
+        "format": "msgpack@1",
+        "type": {
+          "struct": {
+            "fields": [
+              [
+                "x",
+                "i32"
+              ],
+              [
+                "y",
+                "i32"
+              ]
+            ],
+            "name": "Point"
+          }
+        }
+      },
+      "bytes": "82a17801a179fe",
+      "expect": "reject"
+    },
+    {
+      "id": "format-msgpack/reject-nested-struct-by-name",
+      "op": "decode",
+      "input": {
+        "format": "msgpack@1",
+        "type": {
+          "array": {
+            "struct": {
+              "fields": [
+                [
+                  "x",
+                  "i32"
+                ],
+                [
+                  "y",
+                  "i32"
+                ]
+              ],
+              "name": "Point"
+            }
+          }
+        }
+      },
+      "bytes": "929201fe82a17803a17904",
+      "expect": "reject"
+    },
+    {
+      "id": "format-msgpack/reject-string-as-bin",
+      "op": "decode",
+      "input": {
+        "format": "msgpack@1",
+        "type": "string"
+      },
+      "bytes": "c40161",
+      "expect": "reject"
+    },
+    {
       "id": "format-msgpack/decode-fields-reordered",
       "op": "decode",
       "input": {

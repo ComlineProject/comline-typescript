@@ -237,6 +237,18 @@ function bodyBytes(framing: FramingName, b: Body): Uint8Array {
   return framing === FRAMING_JSONRPC ? utf8.encode(JSON_TEXTS[b.json]!) : Uint8Array.from(b.raw);
 }
 
+/**
+ * A request's params: under `jsonrpc@1` an array or an object, as JSON-RPC
+ * 2.0 has them, or the `null` the framing writes for none (runtime#75).
+ */
+const JSON_PARAMS = ["null", "[1,2]", '{"a":true}', "[]"] as const;
+
+function paramsBytes(framing: FramingName, b: Body): Uint8Array {
+  return framing === FRAMING_JSONRPC
+    ? utf8.encode(JSON_PARAMS[b.json % JSON_PARAMS.length]!)
+    : Uint8Array.from(b.raw);
+}
+
 function envelopeOf(framing: FramingName, e: EnvelopeIn): Envelope {
   if (e.kind === "ok") return { ok: bodyBytes(framing, e.body) };
   if (e.kind === "err") return { err: { id: e.id, body: bodyBytes(framing, e.body) } };
@@ -292,7 +304,7 @@ function concretize(framing: FramingName, ordered: boolean, seq: Sequence): Sess
             call_id: s.callId,
             method: METHODS[s.method]!,
             one_way: s.oneWay,
-            params: hex(bodyBytes(framing, s.params)),
+            params: hex(paramsBytes(framing, s.params)),
           },
         });
         (s.oneWay ? spent : waiting).push(next++);
@@ -303,7 +315,7 @@ function concretize(framing: FramingName, ordered: boolean, seq: Sequence): Sess
         const oneWay = json && s.oneWay;
         const requestId = oneWay ? 0n : s.requestId;
         const call: Call = { id: s.callId, name: METHODS[s.method]! };
-        events.push({ receive: hex(f.encodeRequest(s.protocol, call, requestId, bodyBytes(framing, s.params), oneWay)) });
+        events.push({ receive: hex(f.encodeRequest(s.protocol, call, requestId, paramsBytes(framing, s.params), oneWay)) });
         received.push({ protocol: s.protocol, requestId, oneWay, answered: false });
         break;
       }

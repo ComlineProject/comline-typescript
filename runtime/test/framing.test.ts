@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   DatagramFraming,
+  JsonRpcConnectionFraming,
   JsonRpcFraming,
   call,
   decodeEnvelope,
@@ -54,14 +55,40 @@ test("JSON-RPC sends a fault as the standard -32603 internal error", () => {
 test("a JSON-RPC code that cannot be an ordinal decodes as a fault", () => {
   const f = new JsonRpcFraming();
   for (const body of [
-    '{"jsonrpc":"2.0","error":{"code":-32700},"id":1}',
-    '{"jsonrpc":"2.0","error":{"code":70000},"id":1}',
+    '{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":1}',
+    '{"jsonrpc":"2.0","error":{"code":70000,"message":"x"},"id":1}',
   ]) {
     assert.deepEqual(f.decodeResponse(enc.encode(body)), {
       requestId: 1n,
       envelope: { fault: true },
     });
   }
+});
+
+test("frames that aren't JSON-RPC 2.0 are refused (runtime#75)", () => {
+  const f = new JsonRpcFraming();
+  const conn = new JsonRpcConnectionFraming();
+  for (const body of [
+    '{"jsonrpc":"1.0","method":"greet","params":[],"id":1}',
+    '{"method":"greet","params":[],"id":1}',
+    '{"jsonrpc":"2.0","method":"greet","params":"x","id":1}',
+    '{"jsonrpc":"2.0","method":"greet","params":7,"id":1}',
+    '{"jsonrpc":"2.0","method":"greet","params":[],"id":null}',
+  ]) {
+    assert.equal(f.decodeRequest(enc.encode(body)), undefined, body);
+    assert.equal(conn.decode(enc.encode(body)), undefined, body);
+  }
+  for (const body of [
+    '{"jsonrpc":"2.0","result":1,"error":{"code":1,"message":"x"},"id":1}',
+    '{"jsonrpc":"2.0","error":{"code":1},"id":1}',
+    '{"jsonrpc":"2.0","error":{"code":1,"message":7},"id":1}',
+    '{"result":1,"id":1}',
+  ]) {
+    assert.equal(f.decodeResponse(enc.encode(body)), undefined, body);
+    assert.equal(conn.decode(enc.encode(body)), undefined, body);
+  }
+  assert.ok(f.decodeRequest(enc.encode('{"jsonrpc":"2.0","method":"greet","params":{"a":1},"id":1}')));
+  assert.ok(f.decodeRequest(enc.encode('{"jsonrpc":"2.0","method":"greet","id":1}')));
 });
 
 test("datagram request: header layout matches the Rust framing", () => {

@@ -72,10 +72,17 @@ function okText(codec: JsonCodec, envelope: Envelope): string {
 }
 
 test("connect and accept run on the core with a built-in framing", async () => {
-  for (const framing of [() => new Datagram2Framing(), () => new JsonRpcConnectionFraming()]) {
+  // JSON-RPC params are an array or an object, as generated code sends them.
+  const cases: [() => ConnectionFraming, unknown][] = [
+    [() => new Datagram2Framing(), "hi"],
+    [() => new JsonRpcConnectionFraming(), ["hi"]],
+  ];
+  for (const [framing, params] of cases) {
     const { client, server, dialler, codec } = await pair(framing);
     assert.ok(wireOf(client) && wireOf(server));
-    assert.equal(okText(codec, await client.call(ECHO, ECHO_CALL, "hi")), "hi");
+    const reply = await client.call(ECHO, ECHO_CALL, params);
+    assert.ok("ok" in reply, JSON.stringify(reply));
+    assert.deepEqual(codec.decode(reply.ok), params);
     dialler.close();
   }
 });
@@ -205,9 +212,9 @@ test("jsonrpc@1 on the core: a method name spelled with escapes is unescaped", a
       reply.ok(enc.encode("true"));
     },
   });
-  await theirs.send(enc.encode(String.raw`{"jsonrpc":"2.0","method":"chat.Chat\/send","params":7,"id":1}`));
+  await theirs.send(enc.encode(String.raw`{"jsonrpc":"2.0","method":"chat.Chat\/send","params":[7],"id":1}`));
   assert.equal(dec.decode(await theirs.recv()), `{"jsonrpc":"2.0","result":true,"id":1}`);
-  assert.deepEqual(names, ["7"]);
+  assert.deepEqual(names, ["[7]"]);
   theirs.close();
 });
 
