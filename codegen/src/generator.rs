@@ -55,7 +55,7 @@ use comline_codegen::stdlib::{self, is_std_namespace};
 use comline_codegen::symbols::{error_names, SymbolTable, UseTracker};
 use comline_codegen::encodings::type_of;
 
-use crate::ident::{ident, is_reserved};
+use crate::ident::{ident, is_reserved, method_ident};
 use comline_codegen::protocol::EncodingMapping;
 use comline_codegen::{GenerateRequest, GeneratedFile, Mode, PackageMeta};
 
@@ -138,7 +138,7 @@ pub fn generate_typescript(req: &GenerateRequest) -> Result<Vec<GeneratedFile>> 
         Mode::Code => Ok(emitted
             .iter()
             .map(|(namespace, units)| {
-                let source = schema_source(&header, namespace, units, req, codec, external_std);
+                let source = schema_source(&header, namespace, units, req, external_std);
                 // `code` mode has no manifest to add the dependency to, so
                 // the file says what it needs - the same courtesy the Rust
                 // generator extends for `Cargo.toml`.
@@ -169,7 +169,7 @@ pub fn generate_typescript(req: &GenerateRequest) -> Result<Vec<GeneratedFile>> 
             // them, including an external `std` this package emits no file
             // for.
             let mut sources = tree.emit("src", &TsLayout, &|namespace, units| {
-                schema_source(&header, namespace, units, req, codec, external_std)
+                schema_source(&header, namespace, units, req, external_std)
             });
             // The package module beside the schemas, its names at the root.
             if let Some(contents) = package {
@@ -183,15 +183,19 @@ pub fn generate_typescript(req: &GenerateRequest) -> Result<Vec<GeneratedFile>> 
             // A protocol needs the runtime. A type's `Layout` only names it
             // in an erased `import type`, so types alone make it an optional
             // peer: whoever encodes them has the runtime already.
-            let layouts_only = format!("import type {{ Layout }} from \"{RUNTIME_PACKAGE}\";");
+            let layouts_only = [
+                format!("import type {{ Layout }} from \"{RUNTIME_PACKAGE}\";"),
+                format!("import type {{ Layout as $Layout }} from \"{RUNTIME_PACKAGE}\";"),
+            ];
             let imports_runtime = |f: &GeneratedFile| {
-                f.contents
-                    .replace(&layouts_only, "")
+                layouts_only
+                    .iter()
+                    .fold(f.contents.clone(), |contents, line| contents.replace(line, ""))
                     .contains(&format!("from \"{RUNTIME_PACKAGE}\""))
             };
             let runtime = if sources.iter().any(imports_runtime) {
                 RuntimeDep::Required
-            } else if sources.iter().any(|f| f.contents.contains(&layouts_only)) {
+            } else if sources.iter().any(|f| layouts_only.iter().any(|line| f.contents.contains(line))) {
                 RuntimeDep::Peer
             } else {
                 RuntimeDep::None
@@ -484,7 +488,6 @@ fn schema_source(
     namespace: &str,
     units: &[FrozenUnit],
     req: &GenerateRequest,
-    codec: &str,
     external_std: bool,
 ) -> String {
     let schemas = &req.schemas;
@@ -557,7 +560,7 @@ fn schema_source(
                     namespace,
                     functions,
                     parameters,
-                    &framing_choice(parameters, encodings),
+                    &framing_choice(parameters, encodings, &types),
                     method_names,
                     number,
                     &errors,
@@ -579,7 +582,7 @@ fn schema_source(
         .iter()
         .filter_map(|u| match u {
             FrozenUnit::Protocol { parameters, .. } if !on_connection(parameters) => {
-                Some(framing_choice(parameters, encodings))
+                Some(framing_choice(parameters, encodings, &types))
             }
             _ => None,
         })
@@ -629,7 +632,7 @@ fn schema_source(
         }
         runtime_import.push_str("import {\n");
         for v in values {
-            runtime_import.push_str(&format!("    {v},\n"));
+            runtime_import.push_str(&format!("    {},\n", types.binding(v)));
         }
         let mut type_names = vec!["Codec"];
         if has_connection {
@@ -651,10 +654,10 @@ fn schema_source(
             type_names.push("Transport");
         }
         for t in type_names {
-            runtime_import.push_str(&format!("    type {t},\n"));
+            runtime_import.push_str(&format!("    type {},\n", types.binding(t)));
         }
         runtime_import.push_str("} from \"@comline/runtime\";\n\n");
-        runtime_import.push_str(&external_imports(&external));
+        runtime_import.push_str(&external_imports(&external, |name| types.binding(name)));
 
         ir_hash.push_str(&format!(
             "/** Canonical digest of the frozen IR this file was generated from — the\n\
@@ -674,11 +677,13 @@ fn schema_source(
             ir_hash.push_str(&format!(
                 "/** The package's wire format (`wire.format`): what this file's helpers\n\
                  *  encode with, and what the peer has to speak too. */\n\
-                 export const Format: Codec = new {codec}();\n\n"
+                 export const Format: {codec_t} = new {codec}();\n\n",
+                codec_t = types.rt("Codec"),
+                codec = class_ref(encodings, &req.wire_format, &types),
             ));
         }
     } else if types.declares_layouts() {
-        runtime_import.push_str(&format!("import type {{ Layout }} from \"{RUNTIME_PACKAGE}\";\n\n"));
+        runtime_import.push_str(&format!("import type {{ {} }} from \"{RUNTIME_PACKAGE}\";\n\n", types.binding("Layout")));
     }
 
     // External package first, then relative imports, then the file's own
@@ -845,15 +850,26 @@ struct FramingChoice {
 /// A protocol's framing: its `@framing`, which core has filled in from the
 /// package's `wire.framing`, else `datagram@2`, mapped to the class the
 /// request's encodings name (`encodings::check` has vouched for it).
-fn framing_choice(parameters: &[FrozenUnit], encodings: &Encodings) -> FramingChoice {
+fn framing_choice(parameters: &[FrozenUnit], encodings: &Encodings, types: &TypeMapper) -> FramingChoice {
     let name = connections::framing_name(parameters);
     let jsonrpc = name == FRAMING_JSONRPC;
     FramingChoice {
-        ctor: type_of(encodings, &name).to_string(),
-        codec: if jsonrpc { format!("new {}()", type_of(encodings, FORMAT_JSON)) } else { "Format".to_string() },
+        ctor: class_ref(encodings, &name, types),
+        codec: if jsonrpc { format!("new {}()", class_ref(encodings, FORMAT_JSON, types)) } else { "Format".to_string() },
         jsonrpc,
+        handshake: custom_handshake(parameters, encodings)
+            .map(|(handshake, _)| { let class = class_ref(encodings, &handshake, types); (handshake, class) }),
         name,
-        handshake: custom_handshake(parameters, encodings),
+    }
+}
+
+/// The class encoding `name` maps to, as this file refers to it: under the
+/// alias it's imported as when a schema name here takes its name.
+fn class_ref(encodings: &Encodings, name: &str, types: &TypeMapper) -> String {
+    let class = type_of(encodings, name);
+    match encodings.get(name).and_then(|mapping| mapping.package.as_ref()) {
+        Some(_) => types.rt(class),
+        None => class.to_string(),
     }
 }
 
@@ -892,9 +908,10 @@ fn import_class<'a>(
 /// One import per package other than the runtime that a mapped encoding's
 /// class comes from, in package order. Empty when there's none, as there is
 /// for the official encodings.
-fn external_imports(external: &BTreeMap<&str, Vec<&str>>) -> String {
+fn external_imports(external: &BTreeMap<&str, Vec<&str>>, binding: impl Fn(&str) -> String) -> String {
     let mut s = String::new();
     for (package, classes) in external {
+        let classes: Vec<String> = classes.iter().map(|class| binding(class)).collect();
         s.push_str(&format!("import {{ {} }} from \"{package}\";\n", classes.join(", ")));
     }
     if !s.is_empty() {
@@ -966,7 +983,7 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
         s.push_str(&format!("    {v},\n"));
     }
     s.push_str("    type Codec,\n    type Transport,\n} from \"@comline/runtime\";\n");
-    s.push_str(external_imports(&external).trim_end_matches('\n'));
+    s.push_str(external_imports(&external, str::to_string).trim_end_matches('\n'));
     if !external.is_empty() {
         s.push('\n');
     }
@@ -1072,6 +1089,7 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
 // ── protocol ───────────────────────────────────────────────────────────────
 
 struct FnInfo {
+    /// The method's identifier ([`method_ident`]).
     name: String,
     /// What a call names it on the wire, and the call table holds: `name`,
     /// or under JSON-RPC's qualified method names `ns.Proto/name`.
@@ -1136,6 +1154,14 @@ fn protocol(
     // The provider interface's identifier; the classes and helpers named
     // after the protocol (`<Proto>Client`) never need escaping.
     let proto_ty = ident(proto);
+    // The runtime's names and the globals this code uses, as this file
+    // refers to them: aliased where a schema name takes one.
+    let [kind_t, codec_t, reply_t, peer_t, dispatch_t, connection_t, transport_t, framing_t, client_t, server_t] =
+        ["Kind", "Codec", "Reply", "Peer", "Dispatch", "Connection", "Transport", "Framing", "Client", "Server"]
+            .map(|name| types.rt(name));
+    let [runtime_error, resolve_kind, no_handshake_t] =
+        ["RuntimeError", "resolveKind", "NoHandshake"].map(|name| types.rt(name));
+    let [promise, bytes] = ["Promise", "Uint8Array"].map(|name| types.global(name));
     let fns: Vec<FnInfo> = functions
         .iter()
         .filter_map(|f| match f {
@@ -1177,7 +1203,7 @@ fn protocol(
                         .collect()
                 };
                 Some(FnInfo {
-                    name: name.clone(),
+                    name: method_ident(name),
                     method: connections::method_name(namespace, proto, name, method_names),
                     params_ty,
                     args,
@@ -1227,10 +1253,10 @@ fn protocol(
         }
         let mut params: Vec<String> = Vec::new();
         if number.is_some() {
-            params.push("peer: Peer".to_string());
+            params.push(format!("peer: {peer_t}"));
         }
         params.extend(f.params_ty.as_ref().map(|t| format!("params: {t}")));
-        s.push_str(&format!("    {}({}): Promise<{}>;\n", f.name, params.join(", "), f.ret));
+        s.push_str(&format!("    {}({}): {promise}<{}>;\n", f.name, params.join(", "), f.ret));
     }
     s.push_str("}\n\n");
 
@@ -1247,7 +1273,7 @@ fn protocol(
 
     let doc = unverified_doc(parameters);
     let (handshake_arg, handshake_note) = if no_handshake(parameters) {
-        (", new NoHandshake()".to_string(), "        // No handshake: `@handshake = \"none\"`.\n")
+        (format!(", new {no_handshake_t}()"), "        // No handshake: `@handshake = \"none\"`.\n")
     } else if let Some((_, class)) = &framing.handshake {
         (format!(", new {class}()"), "")
     } else {
@@ -1257,7 +1283,7 @@ fn protocol(
     // 4. the dispatcher
     s.push_str(&doc);
     s.push_str(&format!(
-        "export class {proto}Dispatcher implements Dispatch {{\n"
+        "export class {proto}Dispatcher implements {dispatch_t} {{\n"
     ));
     if let Some(number) = number {
         s.push_str(&format!(
@@ -1276,20 +1302,20 @@ fn protocol(
     ));
     if number.is_some() {
         // Its handlers take the peer, which only a connection has.
-        s.push_str(
+        s.push_str(&format!(
             "    /** Only served on a connection, whose handlers are given the peer: anywhere else the caller hears a fault. */\n\
-            \x20   async dispatch(_call: Kind, _params: Uint8Array, _codec: Codec, reply: Reply): Promise<void> {\n\
+            \x20   async dispatch(_call: {kind_t}, _params: {bytes}, _codec: {codec_t}, reply: {reply_t}): {promise}<void> {{\n\
             \x20       reply.fault();\n\
-            \x20   }\n\n\
-            \x20   async dispatchWith(call: Kind, params: Uint8Array, reply: Reply, peer: Peer): Promise<void> {\n\
+            \x20   }}\n\n\
+            \x20   async dispatchWith(call: {kind_t}, params: {bytes}, reply: {reply_t}, peer: {peer_t}): {promise}<void> {{\n\
             \x20       const codec = peer.codec;\n",
-        );
+        ));
     } else {
-        s.push_str(
-            "    async dispatch(call: Kind, params: Uint8Array, codec: Codec, reply: Reply): Promise<void> {\n",
-        );
+        s.push_str(&format!(
+            "    async dispatch(call: {kind_t}, params: {bytes}, codec: {codec_t}, reply: {reply_t}): {promise}<void> {{\n",
+        ));
     }
-    s.push_str(&format!("        switch (resolveKind(call, {calls_const})) {{\n"));
+    s.push_str(&format!("        switch ({resolve_kind}(call, {calls_const})) {{\n"));
     let peer_arg = if number.is_some() { Some("peer") } else { None };
     for (i, f) in fns.iter().enumerate() {
         s.push_str(&format!("            case {i}: {{\n"));
@@ -1357,12 +1383,12 @@ fn protocol(
         }
         s.push_str("            }\n");
     }
-    s.push_str(
+    s.push_str(&format!(
         "            default:\n\
-        \x20               throw RuntimeError.unknownCall();\n\
-        \x20       }\n\
-        \x20   }\n",
-    );
+        \x20               throw {runtime_error}.unknownCall();\n\
+        \x20       }}\n\
+        \x20   }}\n",
+    ));
     if number.is_some() {
         let open = match (framing.jsonrpc, no_handshake(parameters), &framing.handshake) {
             (false, false, Some((_, class))) => {
@@ -1390,7 +1416,7 @@ fn protocol(
         };
         s.push_str(&format!(
             "\n    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with {open}, or let the package's `serve` / `connect` do it. */\n\
-            \x20   provideOn(conn: Connection): void {{\n\
+            \x20   provideOn(conn: {connection_t}): void {{\n\
             \x20       conn.provide({proto}Dispatcher.PROTOCOL, this);\n\
             \x20   }}\n"
         ));
@@ -1406,8 +1432,8 @@ fn protocol(
                 export class {proto}Sender {{\n\
                 \x20   /** This protocol's number on a connection. */\n\
                 \x20   static readonly PROTOCOL = {number};\n\n\
-                \x20   private readonly peer: Peer;\n\n\
-                \x20   constructor(peer: Peer) {{\n\
+                \x20   private readonly peer: {peer_t};\n\n\
+                \x20   constructor(peer: {peer_t}) {{\n\
                 \x20       this.peer = peer;\n\
                 \x20   }}\n"
             ));
@@ -1417,13 +1443,13 @@ fn protocol(
             let codec = &framing.codec;
             s.push_str(&format!(
                 "export class {proto}Client {{\n\
-                \x20   private readonly client: Client;\n\n\
-                \x20   constructor(client: Client) {{\n\
+                \x20   private readonly client: {client_t};\n\n\
+                \x20   constructor(client: {client_t}) {{\n\
                 \x20       this.client = client;\n\
                 \x20   }}\n\n\
-                \x20   static async connect(transport: Transport, codec: Codec = {codec}, framing: Framing = new {ctor}()): Promise<{proto}Client> {{\n\
+                \x20   static async connect(transport: {transport_t}, codec: {codec_t} = {codec}, framing: {framing_t} = new {ctor}()): {promise}<{proto}Client> {{\n\
                 {handshake_note}\
-                \x20       return new {proto}Client(await Client.connect(transport, codec, IR_HASH, framing{handshake_arg}));\n\
+                \x20       return new {proto}Client(await {client_t}.connect(transport, codec, IR_HASH, framing{handshake_arg}));\n\
                 \x20   }}\n",
                 ctor = framing.ctor
             ));
@@ -1444,7 +1470,7 @@ fn protocol(
         s.push('\n');
         if f.one_way {
             s.push_str(&format!(
-                "    async {}({sig_params}): Promise<void> {{\n\
+                "    async {}({sig_params}): {promise}<void> {{\n\
                  \x20       await this.{field}.notify({call_prefix}{{ id: {i}, name: \"{}\" }}, {arg}, {{ layout: {layout} }});\n\
                  \x20   }}\n",
                 f.name, f.method
@@ -1452,7 +1478,7 @@ fn protocol(
             continue;
         }
         s.push_str(&format!(
-            "    async {}({sig_params}): Promise<{}> {{\n\
+            "    async {}({sig_params}): {promise}<{}> {{\n\
              \x20       const env = await this.{field}.call({call_prefix}{{ id: {i}, name: \"{}\" }}, {arg}, {{ layout: {layout} }});\n",
             f.name, f.ret, f.method
         ));
@@ -1467,9 +1493,9 @@ fn protocol(
         // A fault is not an `err`, so it has to be taken off the union before
         // anything reads `env.err` - and a peer can send one for any call,
         // including one that declares no `!`.
-        s.push_str("        if (\"fault\" in env) throw RuntimeError.provider();\n");
+        s.push_str(&format!("        if (\"fault\" in env) throw {runtime_error}.provider();\n"));
         if f.throws.is_empty() {
-            s.push_str("        throw RuntimeError.remote(env.err.id);\n");
+            s.push_str(&format!("        throw {runtime_error}.remote(env.err.id);\n"));
         } else {
             s.push_str("        switch (env.err.id) {\n");
             for (_, err) in &f.throws {
@@ -1480,7 +1506,7 @@ fn protocol(
                 ));
             }
             s.push_str("            default:\n");
-            s.push_str("                throw RuntimeError.remote(env.err.id);\n");
+            s.push_str(&format!("                throw {runtime_error}.remote(env.err.id);\n"));
             s.push_str("        }\n");
         }
         s.push_str("    }\n");
@@ -1490,9 +1516,9 @@ fn protocol(
     // 6. the serve helper, for the lockstep `Server`
     if number.is_none() {
         s.push_str(&format!(
-            "export function serve{proto}(impl: {proto_ty}, transport: Transport, codec: Codec = {codec}, framing: Framing = new {ctor}()): Promise<void> {{\n\
+            "export function serve{proto}(impl: {proto_ty}, transport: {transport_t}, codec: {codec_t} = {codec}, framing: {framing_t} = new {ctor}()): {promise}<void> {{\n\
             {handshake_note}\
-            \x20   return new Server(new {proto}Dispatcher(impl), codec, framing).serve(transport, IR_HASH{handshake_arg});\n\
+            \x20   return new {server_t}(new {proto}Dispatcher(impl), codec, framing).serve(transport, IR_HASH{handshake_arg});\n\
             }}\n\n",
             ctor = framing.ctor,
             codec = framing.codec,
@@ -1521,6 +1547,11 @@ struct TypeMapper {
     layouts: RefCell<BTreeSet<String>>,
     /// Whether this file declares a `Layout`, and so imports the type.
     declares_layouts: Cell<bool>,
+    /// The identifiers this file's schema declares or imports from another
+    /// schema. A name the runtime exports, or a global the generated code
+    /// uses, is referred to another way where one of these takes it
+    /// (comline-typescript#116).
+    taken: BTreeSet<String>,
 }
 
 impl TypeMapper {
@@ -1535,11 +1566,59 @@ impl TypeMapper {
         let table = SymbolTable::with_external(units, schemas, |namespace| {
             external_std && is_std_namespace(namespace)
         });
+        let taken = units
+            .iter()
+            .filter_map(|unit| match unit {
+                FrozenUnit::Struct { name, .. }
+                | FrozenUnit::Enum { name, .. }
+                | FrozenUnit::TypeAlias { name, .. }
+                | FrozenUnit::Error { name, imported_from: None, .. }
+                | FrozenUnit::Constant { name, .. }
+                | FrozenUnit::Protocol { name, .. } => Some(name.as_str()),
+                FrozenUnit::Import(path, alias, _) => {
+                    Some(alias.as_deref().unwrap_or_else(|| path.rsplit("::").next().unwrap_or(path)))
+                }
+                _ => None,
+            })
+            .map(ident)
+            .collect();
         Self {
             uses: UseTracker::new(table),
             external_std,
             layouts: RefCell::new(BTreeSet::new()),
             declares_layouts: Cell::new(false),
+            taken,
+        }
+    }
+
+    /// A name this file imports from a package (`Layout`, `Connection`,
+    /// `DatagramFraming`), as the file refers to it: `$Layout` where a schema
+    /// name takes `Layout`, which no schema name can be (an IDL name has no
+    /// `$`), otherwise itself.
+    fn rt(&self, name: &str) -> String {
+        if self.taken.contains(name) {
+            format!("${name}")
+        } else {
+            name.to_string()
+        }
+    }
+
+    /// How `name` is bound in an import from a package: `Layout as $Layout`
+    /// where [`rt`](Self::rt) aliases it.
+    fn binding(&self, name: &str) -> String {
+        match self.rt(name) {
+            alias if alias != name => format!("{name} as {alias}"),
+            _ => name.to_string(),
+        }
+    }
+
+    /// A global the generated code uses (`Promise`, `Uint8Array`), through
+    /// `globalThis` where a schema name takes it.
+    fn global(&self, name: &str) -> String {
+        if self.taken.contains(name) {
+            format!("globalThis.{name}")
+        } else {
+            name.to_string()
         }
     }
 
@@ -1579,7 +1658,7 @@ impl TypeMapper {
     /// declares.
     fn layout_decl(&self, name: &str, layout: &str) -> String {
         self.declares_layouts.set(true);
-        format!("export const {name}Layout: Layout = {layout};\n\n")
+        format!("export const {name}Layout: {} = {layout};\n\n", self.rt("Layout"))
     }
 
     fn declares_layouts(&self) -> bool {
