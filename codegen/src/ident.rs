@@ -39,6 +39,20 @@ pub fn ident(name: &str) -> String {
     }
 }
 
+/// A function's name as the method generated for it: on the provider
+/// interface, and on the sender or client that calls it. `then` would make
+/// either thenable (`await` would call it), `constructor` is the class's
+/// own, and `peer` and `client` are the fields the sender and the client
+/// hold. Each takes a trailing underscore; the name a call sends doesn't
+/// change.
+pub fn method_ident(name: &str) -> String {
+    if ["then", "constructor", "peer", "client"].contains(&name) {
+        format!("{name}_")
+    } else {
+        name.to_string()
+    }
+}
+
 /// Whether `name` needs [`ident`]'s underscore.
 pub fn is_reserved(name: &str) -> bool {
     RESERVED.contains(&name)
