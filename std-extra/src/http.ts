@@ -18,7 +18,7 @@ export interface Request {
     uri: string;
 }
 
-export const RequestLayout: Layout = { struct: [["method", () => HttpMethodLayout], ["uri", "string"]] };
+export const RequestLayout: Layout = { struct: [["method", () => HttpMethodLayout], ["uri", { chars: { max: 8192 } }]] };
 
 export interface Response {
     status_code: number;

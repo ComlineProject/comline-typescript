@@ -1854,3 +1854,77 @@ fn schema_names_the_generated_code_also_needs_are_kept() {
         );
     }
 }
+
+/// Bounds and `char` (core#98): a named bounded string is branded with a
+/// checked factory, every other bound lives in the `Layout`, which the codecs
+/// check on every encode and decode, and a type that contains itself carries
+/// its depth limit.
+const BOUNDS: &str = r#"
+type CountryCode = char[2]
+type Name = char[max 32]
+
+struct Customer {
+    name: Name
+    country: CountryCode
+    grade: char
+    tags: char[max 16][max 4]
+    scores: u32[max 3]
+    optional nickname: char[max 8]
+}
+
+@max_depth = 3
+struct Folder {
+    name: char[max 16]
+    children: Folder[max 2]
+}
+
+protocol Directory {
+    function find(query: char[max 8]) -> Customer[max 2];
+    function tree(root: Folder) -> u32;
+}
+"#;
+
+fn bounds_units() -> Vec<FrozenUnit> {
+    IncrementalInterpreter::from_source(BOUNDS)
+}
+
+#[test]
+fn bounds_are_in_the_layouts_and_a_named_string_is_branded() {
+    let out = one(bounds_units());
+    assert!(out.contains("export type Name = string & { readonly __brand: \"Name\" };"), "{out}");
+    assert!(out.contains("checkCharsExact(value, 2);"), "{out}");
+    assert!(out.contains("[\"grade\", \"char\"]"), "{out}");
+    assert!(out.contains("[\"tags\", { array: { chars: { max: 16 } }, max: 4 }]"), "{out}");
+    assert!(out.contains("export const FolderLayout: Layout = { depth: 3, of: { struct: "), "{out}");
+    assert!(out.contains("{ array: CustomerLayout, max: 2 }"), "{out}");
+    assert!(out.contains("[\"query\", { chars: { max: 8 } }]"), "{out}");
+}
+
+/// A schema without bounds or `char` generates what it did before them:
+/// no check is imported, and every `Layout` is the plain one.
+#[test]
+fn a_schema_without_bounds_imports_no_check() {
+    let out = one(chat_units());
+    assert!(!out.contains("checkChars"), "{out}");
+    assert!(!out.contains("max:"), "{out}");
+}
+
+/// The generated `Directory`, kept in `runtime/test/generated/bounds.ts` so
+/// the Node job type-checks it (also at the TypeScript 5.0 floor) and runs it
+/// against the codecs' bound checks. Regenerate with
+/// `TS_BLESS=1 cargo test -p comline-codegen-typescript`.
+#[test]
+fn generated_bounds_match_the_runtime_test_fixture() {
+    let generated = one(bounds_units());
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../runtime/test/generated/bounds.ts");
+    if std::env::var_os("TS_BLESS").is_some() {
+        std::fs::write(path, &generated).unwrap();
+        return;
+    }
+    let committed = std::fs::read_to_string(path).unwrap_or_default();
+    assert_eq!(
+        generated, committed,
+        "generated Directory drifted from runtime/test/generated/bounds.ts - \
+         re-bless with TS_BLESS=1 cargo test -p comline-codegen-typescript"
+    );
+}

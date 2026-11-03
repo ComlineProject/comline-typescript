@@ -86,22 +86,6 @@ pub fn generate_typescript(req: &GenerateRequest) -> Result<Vec<GeneratedFile>> 
     // named, before a single file is produced.
     comline_codegen::features::refuse_unsupported("typescript", req, crate::SUPPORT)?;
 
-    // Bounds aren't checked yet (core#98, rollout step 9): every maximum is
-    // dropped, so a bounded string is a `string` and a bounded list an
-    // array, exactly what the schema generates without them.
-    let unbounded;
-    let req = match comline_codegen::features::strip(
-        comline_codegen::features::Feature::Bounds,
-        &req.schemas,
-        &comline_codegen::features::Options::default(),
-    ) {
-        Some((schemas, _)) => {
-            unbounded = GenerateRequest { schemas, ..req.clone() };
-            &unbounded
-        }
-        None => req,
-    };
-
     // Every encoding the package uses (its format, each protocol's framing
     // and handshake) has to be mapped to a class: an unmapped one is refused
     // here, before a file is produced, never rendered as something else.
@@ -518,9 +502,9 @@ fn schema_source(
     let mut decls = String::new();
     for unit in units {
         match unit {
-            FrozenUnit::Struct { name, fields, .. } => {
+            FrozenUnit::Struct { name, fields, parameters, .. } => {
                 decls.push_str(&interface(name, fields, &types));
-                decls.push_str(&fields_layout(name, fields, &types));
+                decls.push_str(&struct_layout(name, fields, max_depth(parameters), &types));
             }
             FrozenUnit::Error {
                 name,
@@ -546,6 +530,7 @@ fn schema_source(
             FrozenUnit::TypeAlias { name, target, .. } => {
                 decls.push_str(&type_alias(name, target, &types));
                 decls.push_str(&types.layout_decl(name, &types.layout(target, true)));
+                decls.push_str(&branded_factory(name, target, &types));
             }
             FrozenUnit::Constant {
                 docstring,
@@ -625,6 +610,7 @@ fn schema_source(
             values.extend(["Client", "Server"]);
         }
         values.extend(["RuntimeError", "resolveKind"]);
+        values.extend(types.checks());
         // Each lockstep framing's class, then the package's codec, and JSON
         // for a lockstep JSON-RPC protocol: the runtime's from the runtime
         // import, any other package's from an import of its own.
@@ -699,8 +685,19 @@ fn schema_source(
                 codec = class_ref(encodings, &req.wire_format, &types),
             ));
         }
-    } else if types.declares_layouts() {
-        runtime_import.push_str(&format!("import type {{ {} }} from \"{RUNTIME_PACKAGE}\";\n\n", types.binding("Layout")));
+    } else {
+        // A branded alias's factory calls a runtime check, a value import;
+        // a `Layout` is only a type.
+        let checks = types.checks();
+        if !checks.is_empty() {
+            let mut names: Vec<String> = checks.iter().map(|c| types.binding(c)).collect();
+            if types.declares_layouts() {
+                names.push(format!("type {}", types.binding("Layout")));
+            }
+            runtime_import.push_str(&format!("import {{ {} }} from \"{RUNTIME_PACKAGE}\";\n\n", names.join(", ")));
+        } else if types.declares_layouts() {
+            runtime_import.push_str(&format!("import type {{ {} }} from \"{RUNTIME_PACKAGE}\";\n\n", types.binding("Layout")));
+        }
     }
 
     // External package first, then relative imports, then the file's own
@@ -721,7 +718,86 @@ fn schema_source(
 /// already goes through, just at the top level of the file instead of
 /// inside an interface.
 fn type_alias(name: &str, target: &TypeRef, types: &TypeMapper) -> String {
+    if let Some(bound) = string_bound(target) {
+        // A bounded string, named: a branded `string` (char-strings.md,
+        // level 2), so a value of the type comes only from its checked
+        // factory or from a decoder, which checks it too.
+        let name = ident(name);
+        return format!(
+            "/** A string of {}: make one with `{name}.from`. */\n\
+             export type {name} = string & {{ readonly __brand: \"{name}\" }};\n\n",
+            bound.describe()
+        );
+    }
     format!("export type {} = {};\n\n", ident(name), types.ts_type(target))
+}
+
+/// What a bounded string (`char[max N]`, `char[N]`) allows.
+#[derive(Clone, Copy)]
+enum StringBound {
+    Max(u64),
+    Exactly(u64),
+}
+
+impl StringBound {
+    fn describe(self) -> String {
+        match self {
+            StringBound::Max(n) => format!("at most {n} {}", if n == 1 { "character" } else { "characters" }),
+            StringBound::Exactly(n) => format!("exactly {n} {}", if n == 1 { "character" } else { "characters" }),
+        }
+    }
+}
+
+/// The bound of `ty` if it's a bounded string: an array of `char` with a
+/// maximum or a length.
+fn string_bound(ty: &TypeRef) -> Option<StringBound> {
+    match ty {
+        TypeRef::Array { element, length, max } if **element == TypeRef::Primitive(PrimitiveType::Char) => {
+            match (length, max) {
+                (Some(n), _) => Some(StringBound::Exactly(*n)),
+                (None, Some(n)) => Some(StringBound::Max(*n)),
+                (None, None) => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// The checked factory beside a branded alias: `Name.from(s)` gives `s` as a
+/// `Name`, or throws the runtime's `boundExceeded` (or `serialization`, for
+/// too few characters in a `char[N]`) when it isn't one.
+fn branded_factory(name: &str, target: &TypeRef, types: &TypeMapper) -> String {
+    let Some(bound) = string_bound(target) else {
+        return String::new();
+    };
+    let name = ident(name);
+    let check = match bound {
+        StringBound::Max(n) => format!("{}(value, {n})", types.check("checkChars")),
+        StringBound::Exactly(n) => format!("{}(value, {n})", types.check("checkCharsExact")),
+    };
+    format!(
+        "export const {name} = {{\n\
+        \x20   /** `value` as a `{name}`; throws a `RuntimeError` unless it holds {}. */\n\
+        \x20   from(value: string): {name} {{\n\
+        \x20       {check};\n\
+        \x20       return value as {name};\n\
+        \x20   }},\n\
+        }};\n\n",
+        bound.describe()
+    )
+}
+
+/// A struct's `@max_depth`, if it has one: how deep a type that contains
+/// itself may nest.
+fn max_depth(parameters: &[FrozenUnit]) -> Option<i64> {
+    parameters.iter().find_map(|p| match p {
+        FrozenUnit::Property { name, value: comline_core::schema::ir::frozen::unit::ConfigValue::Integer(d) }
+            if name == "max_depth" =>
+        {
+            Some(*d)
+        }
+        _ => None,
+    })
 }
 
 /// `const MAX_RETRIES: u8 = 5` -> `export const MAX_RETRIES = 5;`.
@@ -795,6 +871,14 @@ fn interface(name: &str, fields: &[FrozenUnit], types: &TypeMapper) -> String {
     s
 }
 
+/// A struct's `Layout`: its fields', under its depth limit if it has one.
+fn struct_layout(name: &str, fields: &[FrozenUnit], depth: Option<i64>, types: &TypeMapper) -> String {
+    let Some(depth) = depth else {
+        return fields_layout(name, fields, types);
+    };
+    types.layout_decl(name, &format!("{{ depth: {depth}, of: {} }}", fields_struct(fields, types)))
+}
+
 /// The `Layout` of a struct, an `error` or a params interface: its fields,
 /// in declaration order, an optional one wrapped.
 fn fields_layout(name: &str, fields: &[FrozenUnit], types: &TypeMapper) -> String {
@@ -808,7 +892,22 @@ fn fields_layout(name: &str, fields: &[FrozenUnit], types: &TypeMapper) -> Strin
     args_layout(name, &members, types)
 }
 
+fn fields_struct(fields: &[FrozenUnit], types: &TypeMapper) -> String {
+    let members: Vec<(&str, &TypeRef, bool)> = fields
+        .iter()
+        .filter_map(|f| match f {
+            FrozenUnit::Field { name, ty, optional, .. } => Some((name.as_str(), ty, *optional)),
+            _ => None,
+        })
+        .collect();
+    args_struct(&members, types)
+}
+
 fn args_layout(name: &str, fields: &[(&str, &TypeRef, bool)], types: &TypeMapper) -> String {
+    types.layout_decl(name, &args_struct(fields, types))
+}
+
+fn args_struct(fields: &[(&str, &TypeRef, bool)], types: &TypeMapper) -> String {
     let members: Vec<String> = fields
         .iter()
         .map(|(field, ty, optional)| {
@@ -817,7 +916,7 @@ fn args_layout(name: &str, fields: &[(&str, &TypeRef, bool)], types: &TypeMapper
             format!("[\"{field}\", {layout}]")
         })
         .collect();
-    types.layout_decl(name, &format!("{{ struct: [{}] }}", members.join(", ")))
+    format!("{{ struct: [{}] }}", members.join(", "))
 }
 
 /// The throwable for an `error`: a provider `throw`s `new <Name>Error(data)`;
@@ -1572,6 +1671,9 @@ struct TypeMapper {
     layouts: RefCell<BTreeSet<String>>,
     /// Whether this file declares a `Layout`, and so imports the type.
     declares_layouts: Cell<bool>,
+    /// The runtime's bound checks a branded alias's factory calls
+    /// (`checkChars`, `checkCharsExact`), imported as values.
+    checks: RefCell<BTreeSet<&'static str>>,
     /// The identifiers this file's schema declares or imports from another
     /// schema. A name the runtime exports, or a global the generated code
     /// uses, is referred to another way where one of these takes it
@@ -1612,6 +1714,7 @@ impl TypeMapper {
             external_std,
             layouts: RefCell::new(BTreeSet::new()),
             declares_layouts: Cell::new(false),
+            checks: RefCell::new(BTreeSet::new()),
             taken,
         }
     }
@@ -1667,6 +1770,18 @@ impl TypeMapper {
                     format!("{name}Layout")
                 }
             }
+            // An array of `char` is a string, sent as text: bounded, or of
+            // an exact length.
+            TypeRef::Array { element, length, max } if **element == TypeRef::Primitive(PrimitiveType::Char) => {
+                match (length, max) {
+                    (Some(n), _) => format!("{{ chars: {{ length: {n} }} }}"),
+                    (None, Some(n)) => format!("{{ chars: {{ max: {n} }} }}"),
+                    (None, None) => "\"string\"".to_string(),
+                }
+            }
+            TypeRef::Array { element, length: None, max: Some(n) } => {
+                format!("{{ array: {}, max: {n} }}", self.layout(element, lazy))
+            }
             TypeRef::Array { element, length: None, .. } => format!("{{ array: {} }}", self.layout(element, lazy)),
             TypeRef::Array { element, length: Some(n), .. } => {
                 format!("{{ fixed: {}, length: {n} }}", self.layout(element, lazy))
@@ -1688,6 +1803,18 @@ impl TypeMapper {
 
     fn declares_layouts(&self) -> bool {
         self.declares_layouts.get()
+    }
+
+    /// A bound check from the runtime, as this file refers to it, recorded
+    /// for the import.
+    fn check(&self, name: &'static str) -> String {
+        self.checks.borrow_mut().insert(name);
+        self.rt(name)
+    }
+
+    /// The runtime checks this file calls, sorted.
+    fn checks(&self) -> Vec<&'static str> {
+        self.checks.borrow().iter().copied().collect()
     }
 
     /// `import type` lines for every imported name the rendering reached for,
@@ -1767,6 +1894,8 @@ impl TypeMapper {
             // TypeScript has no fixed-length array short of a tuple, so `T[N]`
             // is `T[]` too. A union element needs its parentheses.
             TypeRef::Array { element, .. } => match **element {
+                // An array of `char` is a string.
+                TypeRef::Primitive(PrimitiveType::Char) => "string".to_string(),
                 TypeRef::Union(_) => format!("({})[]", self.ts_type(element)),
                 _ => format!("{}[]", self.ts_type(element)),
             },
@@ -1829,7 +1958,6 @@ fn primitive_layout(p: PrimitiveType) -> &'static str {
         PrimitiveType::F64 => "f64",
         PrimitiveType::Bool => "bool",
         PrimitiveType::String => "string",
-        // Refused by `refuse_unsupported`: no format carries one yet.
         PrimitiveType::Char => "char",
     }
 }
@@ -1837,7 +1965,9 @@ fn primitive_layout(p: PrimitiveType) -> &'static str {
 /// The TypeScript type for an IDL primitive.
 fn primitive_ts_type(p: PrimitiveType) -> &'static str {
     match p {
-        PrimitiveType::String => "string",
+        // A single `char` is a string of exactly one code point, checked by
+        // the codecs: TypeScript has no character type.
+        PrimitiveType::String | PrimitiveType::Char => "string",
         PrimitiveType::Bool => "boolean",
         // 64- and 128-bit integers overflow `number`'s 2^53 exact range.
         p if is_wide(p) => "bigint",

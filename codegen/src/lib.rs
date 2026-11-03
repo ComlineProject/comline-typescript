@@ -71,12 +71,12 @@ pub const SUPPORT: SupportTable = &[
     (Feature::FormatPacked, Support::supported()),
     (Feature::FormatJson, Support::supported()),
     (Feature::FormatMsgPack, Support::unsupported("`@comline/runtime` has no MessagePack codec yet")),
-    (
-        Feature::Bounds,
-        Support::ignored("a bounded string is a `string` and a bounded list an array; nothing checks the maximum yet")
-            .tracked("core#98"),
-    ),
-    (Feature::Chars, Support::unsupported("no wire format carries a single `char` yet").tracked("core#98")),
+    // Checked on every encode and decode through each type's `Layout`, as
+    // the runtime's spec 0.3 conformance vectors prove; a named bounded
+    // string is a branded `string` with a checked factory.
+    (Feature::Bounds, Support::supported()),
+    // A string of exactly one code point, checked.
+    (Feature::Chars, Support::supported()),
 ];
 
 /// Contribute the TypeScript generator to a CLI's [`Registry`](comline_codegen::Registry),
