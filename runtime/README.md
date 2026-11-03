@@ -6,9 +6,21 @@ the counterpart of the Rust `comline-runtime` crate.
 ## Status
 
 The contract, three framings, an in-memory transport, a `Client` / `Server`,
-and a `Connection` carrying calls in both directions.
-Next: a generator that emits a `<Proto>Client` / dispatcher against this
-package, and a stream transport.
+and a `Connection` carrying calls in both directions. The generator
+(`codegen/`) emits a `<Proto>Client`, a dispatcher and a `serve<Proto>` helper
+against this package. Decoding is strict: it refuses what the Rust runtime
+refuses, and the differential properties in `test/prop/` check that on random
+inputs. The wire contract is proven against the shared byte-exact vectors,
+and `comline conformance` drives this runtime over the stdio ops server
+([Wire conformance](#wire-conformance)). The built-in framings and the
+`comline@1` handshake run on the wasm Comline core ([The core](#the-core)),
+with the TypeScript as a fallback.
+
+Not yet: a stream transport and its framing ([#80](https://github.com/ComlineProject/comline-typescript/issues/80)),
+a MessagePack codec, JSON decoding that checks enum variants and integer ranges
+([#57](https://github.com/ComlineProject/comline-typescript/issues/57)), and
+checks on the maxima of bounded types (`char[max N]`; the generator ignores
+them for now).
 
 | Piece | State |
 |---|---|
@@ -20,6 +32,8 @@ package, and a stream transport.
 | `Transport` interface + `duplex()` in-memory pair | ✅ |
 | `Client` (`connect` / `unverified` / `call` / `notify`) and `Server` (`serve` / `serveUnverified`) | ✅ |
 | `Connection` (`connect` / `accept` / `unverified`, `provide`, `call` / `notify`, `closed`): calls in both directions, several protocols, a `Peer` handle for handlers (`Dispatch.dispatchWith`), `Extensions`; `ConnectionFraming` + `Datagram2Framing` (`datagram@2`) and `JsonRpcConnectionFraming` (JSON-RPC, a one-way call as a notification), wire-compatible with `comline-runtime` | ✅ |
+| Strict decoding, checked differentially against the Rust runtime | ✅ (JSON enum variants and integer ranges: partial) |
+| The wasm core under `ComlineHandshake` and the built-in framings | ✅ |
 | A stream `Transport`; a MessagePack `Codec` | — |
 
 ## Writing a transport
