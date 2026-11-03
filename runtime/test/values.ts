@@ -44,6 +44,24 @@ export type Type =
   | { struct: { name: string; fields: [string, Type][] } }
   | { enum: { name: string; variants: string[] } };
 
+/**
+ * A reader type as any case may describe it: {@link Type} and, from spec
+ * 0.3, a single `char`, bounds (core#98), and a recursive type with
+ * `self` inside it standing for itself.
+ */
+export type CaseType =
+  | Scalar
+  | "char"
+  | "self"
+  | { option: CaseType }
+  | { array: CaseType }
+  | { fixed: { of: CaseType; len: number } }
+  | { struct: { name: string; fields: [string, CaseType][] } }
+  | { enum: { name: string; variants: string[] } }
+  | { bounded_string: { max: number } }
+  | { bounded_array: { of: CaseType; max: number } }
+  | { recursive: { max_depth: number; of: CaseType } };
+
 /** The integers generated TypeScript holds as `number`, with their ranges. */
 export const NARROW: Record<string, readonly [number, number]> = {
   u8: [0, 0xff],
@@ -88,6 +106,7 @@ export function toJs(value: Json): unknown {
     case "f32":
     case "f64":
     case "string":
+    case "char":
       return inner;
     case "unit":
       return undefined;
@@ -108,7 +127,7 @@ export function toJs(value: Json): unknown {
 }
 
 /** A scalar type's {@link Layout} name: signed integers are `s`-prefixed. */
-function scalarLayout(name: Scalar): Layout {
+function scalarLayout(name: Scalar | "char"): Layout {
   return (name.startsWith("i") ? `s${name.slice(1)}` : name) as Layout;
 }
 
@@ -120,7 +139,7 @@ function scalarLayout(name: Scalar): Layout {
  */
 export function layoutOf(value: Json): Layout {
   const [kind, inner] = kindOf(value);
-  if ((SCALARS as readonly string[]).includes(kind)) return scalarLayout(kind as Scalar);
+  if ((SCALARS as readonly string[]).includes(kind) || kind === "char") return scalarLayout(kind as Scalar);
   switch (kind) {
     case "array": {
       const [first] = inner as Json[];
@@ -147,14 +166,31 @@ export function layoutOf(value: Json): Layout {
   }
 }
 
-/** A reader type as the {@link Layout} generated code declares for it. */
-export function layoutOfType(type: Type): Layout {
+/**
+ * A reader type as the {@link Layout} generated code declares for it.
+ * `self` is the innermost enclosing recursive type, which generated code
+ * names as a function returning that type's layout.
+ */
+export function layoutOfType(type: CaseType, self?: () => Layout): Layout {
+  if (type === "self") {
+    if (!self) throw new Error("`self` outside a recursive type");
+    return self;
+  }
   if (typeof type === "string") return scalarLayout(type);
-  if ("option" in type) return { option: layoutOfType(type.option) };
-  if ("array" in type) return { array: layoutOfType(type.array) };
-  if ("fixed" in type) return { fixed: layoutOfType(type.fixed.of), length: type.fixed.len };
+  if ("option" in type) return { option: layoutOfType(type.option, self) };
+  if ("array" in type) return { array: layoutOfType(type.array, self) };
+  if ("fixed" in type) return { fixed: layoutOfType(type.fixed.of, self), length: type.fixed.len };
   if ("struct" in type) {
-    return { struct: type.struct.fields.map(([name, t]) => [name, layoutOfType(t)] as const) };
+    return { struct: type.struct.fields.map(([name, t]) => [name, layoutOfType(t, self)] as const) };
+  }
+  if ("bounded_string" in type) return { chars: { max: type.bounded_string.max } };
+  if ("bounded_array" in type) {
+    return { array: layoutOfType(type.bounded_array.of, self), max: type.bounded_array.max };
+  }
+  if ("recursive" in type) {
+    const recursive: { depth: number; of: Layout } = { depth: type.recursive.max_depth, of: "unit" };
+    recursive.of = layoutOfType(type.recursive.of, () => recursive);
+    return recursive;
   }
   return { enum: type.enum.variants };
 }
@@ -169,7 +205,8 @@ export function layoutOfType(type: Type): Layout {
  * An `f32` is rounded to single precision, as the field holds it; a
  * non-finite float is `null`, as the corpus's JSON writes it.
  */
-export function fromJs(type: Type, v: unknown): Json {
+export function fromJs(type: CaseType, v: unknown, self?: CaseType): Json {
+  if (type === "self") return fromJs(self!, v, self);
   if (typeof type === "string") {
     switch (type) {
       case "u64":
@@ -189,11 +226,13 @@ export function fromJs(type: Type, v: unknown): Json {
         return { [type]: v as Json };
     }
   }
-  if ("option" in type) return { option: v === undefined || v === null ? null : fromJs(type.option, v) };
-  if ("array" in type || "fixed" in type) {
-    const kind = "array" in type ? "array" : "tuple";
-    const of = "array" in type ? type.array : type.fixed.of;
-    return { [kind]: Array.isArray(v) ? v.map((item) => fromJs(of, item)) : (v as Json) };
+  if ("option" in type) return { option: v === undefined || v === null ? null : fromJs(type.option, v, self) };
+  if ("bounded_string" in type) return { string: v as Json };
+  if ("recursive" in type) return fromJs(type.recursive.of, v, type.recursive.of);
+  if ("array" in type || "fixed" in type || "bounded_array" in type) {
+    const kind = "fixed" in type ? "tuple" : "array";
+    const of = "array" in type ? type.array : "fixed" in type ? type.fixed.of : type.bounded_array.of;
+    return { [kind]: Array.isArray(v) ? v.map((item) => fromJs(of, item, self)) : (v as Json) };
   }
   if ("struct" in type) {
     if (typeof v !== "object" || v === null || Array.isArray(v)) return { struct: v as Json };
@@ -201,7 +240,7 @@ export function fromJs(type: Type, v: unknown): Json {
     return {
       struct: {
         name: type.struct.name,
-        fields: type.struct.fields.map(([field, t]) => [field, fromJs(t, o[field])]),
+        fields: type.struct.fields.map(([field, t]) => [field, fromJs(t, o[field], self)]),
       },
     };
   }

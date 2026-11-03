@@ -598,6 +598,54 @@
       "compare": "json"
     },
     {
+      "id": "format-json/char-ascii",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "value": {
+          "char": "a"
+        }
+      },
+      "bytes": "226122",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/char-2-byte",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "value": {
+          "char": "é"
+        }
+      },
+      "bytes": "22c3a922",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/char-3-byte",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "value": {
+          "char": "€"
+        }
+      },
+      "bytes": "22e282ac22",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/char-4-byte",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "value": {
+          "char": "😀"
+        }
+      },
+      "bytes": "22f09f988022",
+      "compare": "json"
+    },
+    {
       "id": "format-json/reject-struct-by-position",
       "op": "decode",
       "input": {
@@ -645,6 +693,1107 @@
         }
       },
       "bytes": "5b7b2278223a312c2279223a2d327d2c5b332c345d5d",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/decode-char-ascii",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": "char",
+        "value": {
+          "char": "a"
+        }
+      },
+      "bytes": "226122"
+    },
+    {
+      "id": "format-json/decode-char-2-byte",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": "char",
+        "value": {
+          "char": "é"
+        }
+      },
+      "bytes": "22c3a922"
+    },
+    {
+      "id": "format-json/decode-char-3-byte",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": "char",
+        "value": {
+          "char": "€"
+        }
+      },
+      "bytes": "22e282ac22"
+    },
+    {
+      "id": "format-json/decode-char-4-byte",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": "char",
+        "value": {
+          "char": "😀"
+        }
+      },
+      "bytes": "22f09f988022"
+    },
+    {
+      "id": "format-json/decode-char-reject-empty",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": "char"
+      },
+      "bytes": "2222",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/decode-char-reject-two",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": "char"
+      },
+      "bytes": "22616222",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/decode-char-reject-lone-surrogate",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": "char"
+      },
+      "bytes": "225c756438303022",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/decode-char-reject-integer",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": "char"
+      },
+      "bytes": "3937",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/decode-chars-empty",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        },
+        "value": {
+          "string": ""
+        }
+      },
+      "bytes": "2222"
+    },
+    {
+      "id": "format-json/decode-chars-at-max",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        },
+        "value": {
+          "string": "abcd"
+        }
+      },
+      "bytes": "226162636422"
+    },
+    {
+      "id": "format-json/decode-chars-over-max",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        }
+      },
+      "bytes": "22616263646522",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/decode-chars-multibyte-at-max",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        },
+        "value": {
+          "string": "é€😀a"
+        }
+      },
+      "bytes": "22c3a9e282acf09f98806122"
+    },
+    {
+      "id": "format-json/decode-chars-4-byte-at-max",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        },
+        "value": {
+          "string": "😀😀😀😀"
+        }
+      },
+      "bytes": "22f09f9880f09f9880f09f9880f09f988022"
+    },
+    {
+      "id": "format-json/decode-chars-multibyte-over-max",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        }
+      },
+      "bytes": "22c3a9c3a9c3a9c3a9c3a922",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/decode-chars-bytes-over-4n",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        }
+      },
+      "bytes": "22f09f9880f09f9880f09f9880f09f98806122",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/decode-chars-max-0",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_string": {
+            "max": 0
+          }
+        },
+        "value": {
+          "string": ""
+        }
+      },
+      "bytes": "2222"
+    },
+    {
+      "id": "format-json/decode-chars-max-0-over",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_string": {
+            "max": 0
+          }
+        }
+      },
+      "bytes": "226122",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/decode-items-empty",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_array": {
+            "max": 3,
+            "of": "u8"
+          }
+        },
+        "value": {
+          "array": []
+        }
+      },
+      "bytes": "5b5d"
+    },
+    {
+      "id": "format-json/decode-items-at-max",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_array": {
+            "max": 3,
+            "of": "u8"
+          }
+        },
+        "value": {
+          "array": [
+            {
+              "u8": 1
+            },
+            {
+              "u8": 2
+            },
+            {
+              "u8": 3
+            }
+          ]
+        }
+      },
+      "bytes": "5b312c322c335d"
+    },
+    {
+      "id": "format-json/decode-items-over-max",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_array": {
+            "max": 3,
+            "of": "u8"
+          }
+        }
+      },
+      "bytes": "5b312c322c332c345d",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/decode-items-of-chars-at-max",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_array": {
+            "max": 2,
+            "of": {
+              "bounded_string": {
+                "max": 2
+              }
+            }
+          }
+        },
+        "value": {
+          "array": [
+            {
+              "string": "ab"
+            },
+            {
+              "string": "é😀"
+            }
+          ]
+        }
+      },
+      "bytes": "5b226162222c22c3a9f09f9880225d"
+    },
+    {
+      "id": "format-json/decode-items-of-chars-over-max",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_array": {
+            "max": 2,
+            "of": {
+              "bounded_string": {
+                "max": 2
+              }
+            }
+          }
+        }
+      },
+      "bytes": "5b226162222c22616263225d",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/decode-depth-at-max",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "recursive": {
+            "max_depth": 3,
+            "of": {
+              "struct": {
+                "fields": [
+                  [
+                    "next",
+                    {
+                      "option": "self"
+                    }
+                  ]
+                ],
+                "name": "Node"
+              }
+            }
+          }
+        },
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "next",
+                {
+                  "option": {
+                    "struct": {
+                      "fields": [
+                        [
+                          "next",
+                          {
+                            "option": {
+                              "struct": {
+                                "fields": [
+                                  [
+                                    "next",
+                                    {
+                                      "option": null
+                                    }
+                                  ]
+                                ],
+                                "name": "Node"
+                              }
+                            }
+                          }
+                        ]
+                      ],
+                      "name": "Node"
+                    }
+                  }
+                }
+              ]
+            ],
+            "name": "Node"
+          }
+        }
+      },
+      "bytes": "7b226e657874223a7b226e657874223a7b226e657874223a6e756c6c7d7d7d"
+    },
+    {
+      "id": "format-json/decode-depth-over-max",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "recursive": {
+            "max_depth": 3,
+            "of": {
+              "struct": {
+                "fields": [
+                  [
+                    "next",
+                    {
+                      "option": "self"
+                    }
+                  ]
+                ],
+                "name": "Node"
+              }
+            }
+          }
+        }
+      },
+      "bytes": "7b226e657874223a7b226e657874223a7b226e657874223a7b226e657874223a6e756c6c7d7d7d7d",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/decode-depth-tree-at-max",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "recursive": {
+            "max_depth": 2,
+            "of": {
+              "struct": {
+                "fields": [
+                  [
+                    "children",
+                    {
+                      "bounded_array": {
+                        "max": 2,
+                        "of": "self"
+                      }
+                    }
+                  ]
+                ],
+                "name": "Tree"
+              }
+            }
+          }
+        },
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "children",
+                {
+                  "array": [
+                    {
+                      "struct": {
+                        "fields": [
+                          [
+                            "children",
+                            {
+                              "array": []
+                            }
+                          ]
+                        ],
+                        "name": "Tree"
+                      }
+                    },
+                    {
+                      "struct": {
+                        "fields": [
+                          [
+                            "children",
+                            {
+                              "array": []
+                            }
+                          ]
+                        ],
+                        "name": "Tree"
+                      }
+                    }
+                  ]
+                }
+              ]
+            ],
+            "name": "Tree"
+          }
+        }
+      },
+      "bytes": "7b226368696c6472656e223a5b7b226368696c6472656e223a5b5d7d2c7b226368696c6472656e223a5b5d7d5d7d"
+    },
+    {
+      "id": "format-json/decode-depth-tree-over-max",
+      "op": "decode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "recursive": {
+            "max_depth": 2,
+            "of": {
+              "struct": {
+                "fields": [
+                  [
+                    "children",
+                    {
+                      "bounded_array": {
+                        "max": 2,
+                        "of": "self"
+                      }
+                    }
+                  ]
+                ],
+                "name": "Tree"
+              }
+            }
+          }
+        }
+      },
+      "bytes": "7b226368696c6472656e223a5b7b226368696c6472656e223a5b5d7d2c7b226368696c6472656e223a5b7b226368696c6472656e223a5b5d7d5d7d5d7d",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/encode-chars-empty",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        },
+        "value": {
+          "string": ""
+        }
+      },
+      "bytes": "2222",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/encode-chars-at-max",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        },
+        "value": {
+          "string": "abcd"
+        }
+      },
+      "bytes": "226162636422",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/encode-chars-over-max",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        },
+        "value": {
+          "string": "abcde"
+        }
+      },
+      "bytes": "",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/encode-chars-multibyte-at-max",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        },
+        "value": {
+          "string": "é€😀a"
+        }
+      },
+      "bytes": "22c3a9e282acf09f98806122",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/encode-chars-4-byte-at-max",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        },
+        "value": {
+          "string": "😀😀😀😀"
+        }
+      },
+      "bytes": "22f09f9880f09f9880f09f9880f09f988022",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/encode-chars-multibyte-over-max",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        },
+        "value": {
+          "string": "ééééé"
+        }
+      },
+      "bytes": "",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/encode-chars-bytes-over-4n",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        },
+        "value": {
+          "string": "😀😀😀😀a"
+        }
+      },
+      "bytes": "",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/encode-chars-max-0",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_string": {
+            "max": 0
+          }
+        },
+        "value": {
+          "string": ""
+        }
+      },
+      "bytes": "2222",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/encode-chars-max-0-over",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_string": {
+            "max": 0
+          }
+        },
+        "value": {
+          "string": "a"
+        }
+      },
+      "bytes": "",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/encode-items-empty",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_array": {
+            "max": 3,
+            "of": "u8"
+          }
+        },
+        "value": {
+          "array": []
+        }
+      },
+      "bytes": "5b5d",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/encode-items-at-max",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_array": {
+            "max": 3,
+            "of": "u8"
+          }
+        },
+        "value": {
+          "array": [
+            {
+              "u8": 1
+            },
+            {
+              "u8": 2
+            },
+            {
+              "u8": 3
+            }
+          ]
+        }
+      },
+      "bytes": "5b312c322c335d",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/encode-items-over-max",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_array": {
+            "max": 3,
+            "of": "u8"
+          }
+        },
+        "value": {
+          "array": [
+            {
+              "u8": 1
+            },
+            {
+              "u8": 2
+            },
+            {
+              "u8": 3
+            },
+            {
+              "u8": 4
+            }
+          ]
+        }
+      },
+      "bytes": "",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/encode-items-of-chars-at-max",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_array": {
+            "max": 2,
+            "of": {
+              "bounded_string": {
+                "max": 2
+              }
+            }
+          }
+        },
+        "value": {
+          "array": [
+            {
+              "string": "ab"
+            },
+            {
+              "string": "é😀"
+            }
+          ]
+        }
+      },
+      "bytes": "5b226162222c22c3a9f09f9880225d",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/encode-items-of-chars-over-max",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "bounded_array": {
+            "max": 2,
+            "of": {
+              "bounded_string": {
+                "max": 2
+              }
+            }
+          }
+        },
+        "value": {
+          "array": [
+            {
+              "string": "ab"
+            },
+            {
+              "string": "abc"
+            }
+          ]
+        }
+      },
+      "bytes": "",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/encode-depth-at-max",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "recursive": {
+            "max_depth": 3,
+            "of": {
+              "struct": {
+                "fields": [
+                  [
+                    "next",
+                    {
+                      "option": "self"
+                    }
+                  ]
+                ],
+                "name": "Node"
+              }
+            }
+          }
+        },
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "next",
+                {
+                  "option": {
+                    "struct": {
+                      "fields": [
+                        [
+                          "next",
+                          {
+                            "option": {
+                              "struct": {
+                                "fields": [
+                                  [
+                                    "next",
+                                    {
+                                      "option": null
+                                    }
+                                  ]
+                                ],
+                                "name": "Node"
+                              }
+                            }
+                          }
+                        ]
+                      ],
+                      "name": "Node"
+                    }
+                  }
+                }
+              ]
+            ],
+            "name": "Node"
+          }
+        }
+      },
+      "bytes": "7b226e657874223a7b226e657874223a7b226e657874223a6e756c6c7d7d7d",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/encode-depth-over-max",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "recursive": {
+            "max_depth": 3,
+            "of": {
+              "struct": {
+                "fields": [
+                  [
+                    "next",
+                    {
+                      "option": "self"
+                    }
+                  ]
+                ],
+                "name": "Node"
+              }
+            }
+          }
+        },
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "next",
+                {
+                  "option": {
+                    "struct": {
+                      "fields": [
+                        [
+                          "next",
+                          {
+                            "option": {
+                              "struct": {
+                                "fields": [
+                                  [
+                                    "next",
+                                    {
+                                      "option": {
+                                        "struct": {
+                                          "fields": [
+                                            [
+                                              "next",
+                                              {
+                                                "option": null
+                                              }
+                                            ]
+                                          ],
+                                          "name": "Node"
+                                        }
+                                      }
+                                    }
+                                  ]
+                                ],
+                                "name": "Node"
+                              }
+                            }
+                          }
+                        ]
+                      ],
+                      "name": "Node"
+                    }
+                  }
+                }
+              ]
+            ],
+            "name": "Node"
+          }
+        }
+      },
+      "bytes": "",
+      "expect": "reject"
+    },
+    {
+      "id": "format-json/encode-depth-tree-at-max",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "recursive": {
+            "max_depth": 2,
+            "of": {
+              "struct": {
+                "fields": [
+                  [
+                    "children",
+                    {
+                      "bounded_array": {
+                        "max": 2,
+                        "of": "self"
+                      }
+                    }
+                  ]
+                ],
+                "name": "Tree"
+              }
+            }
+          }
+        },
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "children",
+                {
+                  "array": [
+                    {
+                      "struct": {
+                        "fields": [
+                          [
+                            "children",
+                            {
+                              "array": []
+                            }
+                          ]
+                        ],
+                        "name": "Tree"
+                      }
+                    },
+                    {
+                      "struct": {
+                        "fields": [
+                          [
+                            "children",
+                            {
+                              "array": []
+                            }
+                          ]
+                        ],
+                        "name": "Tree"
+                      }
+                    }
+                  ]
+                }
+              ]
+            ],
+            "name": "Tree"
+          }
+        }
+      },
+      "bytes": "7b226368696c6472656e223a5b7b226368696c6472656e223a5b5d7d2c7b226368696c6472656e223a5b5d7d5d7d",
+      "compare": "json"
+    },
+    {
+      "id": "format-json/encode-depth-tree-over-max",
+      "op": "encode",
+      "input": {
+        "format": "json@1",
+        "type": {
+          "recursive": {
+            "max_depth": 2,
+            "of": {
+              "struct": {
+                "fields": [
+                  [
+                    "children",
+                    {
+                      "bounded_array": {
+                        "max": 2,
+                        "of": "self"
+                      }
+                    }
+                  ]
+                ],
+                "name": "Tree"
+              }
+            }
+          }
+        },
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "children",
+                {
+                  "array": [
+                    {
+                      "struct": {
+                        "fields": [
+                          [
+                            "children",
+                            {
+                              "array": []
+                            }
+                          ]
+                        ],
+                        "name": "Tree"
+                      }
+                    },
+                    {
+                      "struct": {
+                        "fields": [
+                          [
+                            "children",
+                            {
+                              "array": [
+                                {
+                                  "struct": {
+                                    "fields": [
+                                      [
+                                        "children",
+                                        {
+                                          "array": []
+                                        }
+                                      ]
+                                    ],
+                                    "name": "Tree"
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        ],
+                        "name": "Tree"
+                      }
+                    }
+                  ]
+                }
+              ]
+            ],
+            "name": "Tree"
+          }
+        }
+      },
+      "bytes": "",
       "expect": "reject"
     },
     {

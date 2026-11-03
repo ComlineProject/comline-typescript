@@ -33,6 +33,7 @@ them for now).
 | `Client` (`connect` / `unverified` / `call` / `notify`) and `Server` (`serve` / `serveUnverified`) | ✅ |
 | `Connection` (`connect` / `accept` / `unverified`, `provide`, `call` / `notify`, `closed`): calls in both directions, several protocols, a `Peer` handle for handlers (`Dispatch.dispatchWith`), `Extensions`; `ConnectionFraming` + `Datagram2Framing` (`datagram@2`) and `JsonRpcConnectionFraming` (JSON-RPC, a one-way call as a notification), wire-compatible with `comline-runtime` | ✅ |
 | Strict decoding, checked differentially against the Rust runtime | ✅ (JSON enum variants and integer ranges: partial) |
+| Bounds (core#98): `char`, `char[max N]` / `char[N]`, `T[max N]` and `@max_depth` in `Layout`, checked on every encode and decode (`RuntimeError` `boundExceeded`, with its `measure`), refused before allocating where `packed@1` allows; proven by the spec 0.3 vectors | ✅ |
 | The wasm core under `ComlineHandshake` and the built-in framings | ✅ |
 | A stream `Transport`; a MessagePack `Codec` | — |
 
@@ -224,7 +225,8 @@ src/
   contract.ts        RuntimeError, Kind, Call, Envelope, Reply, CallError, Codec, Dispatch, Framing
   handshake.ts       Handshake, ComlineHandshake, NoHandshake, HandshakeFrame, nameHash, the names
   codec.ts           JsonCodec
-  packed.ts          PackedCodec, Layout
+  packed.ts          PackedCodec, Layout, checkBounds
+  bounds.ts          bounds (core#98): character counting, the checks, depth
   json.ts            exact JSON: digits kept, bigint written and read in full (Shape)
   envelope.ts        the datagram tag-byte Envelope form
   framing/

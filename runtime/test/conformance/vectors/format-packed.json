@@ -568,6 +568,50 @@
       "bytes": ""
     },
     {
+      "id": "format-packed/char-ascii",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "char": "a"
+        }
+      },
+      "bytes": "61"
+    },
+    {
+      "id": "format-packed/char-2-byte",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "char": "é"
+        }
+      },
+      "bytes": "c3a9"
+    },
+    {
+      "id": "format-packed/char-3-byte",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "char": "€"
+        }
+      },
+      "bytes": "e282ac"
+    },
+    {
+      "id": "format-packed/char-4-byte",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "value": {
+          "char": "😀"
+        }
+      },
+      "bytes": "f09f9880"
+    },
+    {
       "id": "format-packed/f32",
       "op": "encode",
       "input": {
@@ -1683,6 +1727,1127 @@
         }
       },
       "bytes": "01",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-char-ascii",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": "char",
+        "value": {
+          "char": "a"
+        }
+      },
+      "bytes": "61"
+    },
+    {
+      "id": "format-packed/decode-char-2-byte",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": "char",
+        "value": {
+          "char": "é"
+        }
+      },
+      "bytes": "c3a9"
+    },
+    {
+      "id": "format-packed/decode-char-3-byte",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": "char",
+        "value": {
+          "char": "€"
+        }
+      },
+      "bytes": "e282ac"
+    },
+    {
+      "id": "format-packed/decode-char-4-byte",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": "char",
+        "value": {
+          "char": "😀"
+        }
+      },
+      "bytes": "f09f9880"
+    },
+    {
+      "id": "format-packed/decode-char-reject-empty",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": "char"
+      },
+      "bytes": "",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-char-reject-continuation-byte",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": "char"
+      },
+      "bytes": "80",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-char-reject-truncated",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": "char"
+      },
+      "bytes": "c3",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-char-reject-overlong",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": "char"
+      },
+      "bytes": "c080",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-char-reject-surrogate",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": "char"
+      },
+      "bytes": "eda080",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-char-reject-past-max",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": "char"
+      },
+      "bytes": "f4908080",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-char-reject-two",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": "char"
+      },
+      "bytes": "6162",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-chars-empty",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        },
+        "value": {
+          "string": ""
+        }
+      },
+      "bytes": "00"
+    },
+    {
+      "id": "format-packed/decode-chars-at-max",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        },
+        "value": {
+          "string": "abcd"
+        }
+      },
+      "bytes": "0461626364"
+    },
+    {
+      "id": "format-packed/decode-chars-over-max",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        }
+      },
+      "bytes": "056162636465",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-chars-multibyte-at-max",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        },
+        "value": {
+          "string": "é€😀a"
+        }
+      },
+      "bytes": "0ac3a9e282acf09f988061"
+    },
+    {
+      "id": "format-packed/decode-chars-4-byte-at-max",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        },
+        "value": {
+          "string": "😀😀😀😀"
+        }
+      },
+      "bytes": "10f09f9880f09f9880f09f9880f09f9880"
+    },
+    {
+      "id": "format-packed/decode-chars-multibyte-over-max",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        }
+      },
+      "bytes": "0ac3a9c3a9c3a9c3a9c3a9",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-chars-bytes-over-4n",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        }
+      },
+      "bytes": "11f09f9880f09f9880f09f9880f09f988061",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-chars-max-0",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_string": {
+            "max": 0
+          }
+        },
+        "value": {
+          "string": ""
+        }
+      },
+      "bytes": "00"
+    },
+    {
+      "id": "format-packed/decode-chars-max-0-over",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_string": {
+            "max": 0
+          }
+        }
+      },
+      "bytes": "0161",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-items-empty",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_array": {
+            "max": 3,
+            "of": "u8"
+          }
+        },
+        "value": {
+          "array": []
+        }
+      },
+      "bytes": "00"
+    },
+    {
+      "id": "format-packed/decode-items-at-max",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_array": {
+            "max": 3,
+            "of": "u8"
+          }
+        },
+        "value": {
+          "array": [
+            {
+              "u8": 1
+            },
+            {
+              "u8": 2
+            },
+            {
+              "u8": 3
+            }
+          ]
+        }
+      },
+      "bytes": "03010203"
+    },
+    {
+      "id": "format-packed/decode-items-over-max",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_array": {
+            "max": 3,
+            "of": "u8"
+          }
+        }
+      },
+      "bytes": "0401020304",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-items-of-chars-at-max",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_array": {
+            "max": 2,
+            "of": {
+              "bounded_string": {
+                "max": 2
+              }
+            }
+          }
+        },
+        "value": {
+          "array": [
+            {
+              "string": "ab"
+            },
+            {
+              "string": "é😀"
+            }
+          ]
+        }
+      },
+      "bytes": "0202616206c3a9f09f9880"
+    },
+    {
+      "id": "format-packed/decode-items-of-chars-over-max",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_array": {
+            "max": 2,
+            "of": {
+              "bounded_string": {
+                "max": 2
+              }
+            }
+          }
+        }
+      },
+      "bytes": "0202616203616263",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-depth-at-max",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "recursive": {
+            "max_depth": 3,
+            "of": {
+              "struct": {
+                "fields": [
+                  [
+                    "next",
+                    {
+                      "option": "self"
+                    }
+                  ]
+                ],
+                "name": "Node"
+              }
+            }
+          }
+        },
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "next",
+                {
+                  "option": {
+                    "struct": {
+                      "fields": [
+                        [
+                          "next",
+                          {
+                            "option": {
+                              "struct": {
+                                "fields": [
+                                  [
+                                    "next",
+                                    {
+                                      "option": null
+                                    }
+                                  ]
+                                ],
+                                "name": "Node"
+                              }
+                            }
+                          }
+                        ]
+                      ],
+                      "name": "Node"
+                    }
+                  }
+                }
+              ]
+            ],
+            "name": "Node"
+          }
+        }
+      },
+      "bytes": "010100"
+    },
+    {
+      "id": "format-packed/decode-depth-over-max",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "recursive": {
+            "max_depth": 3,
+            "of": {
+              "struct": {
+                "fields": [
+                  [
+                    "next",
+                    {
+                      "option": "self"
+                    }
+                  ]
+                ],
+                "name": "Node"
+              }
+            }
+          }
+        }
+      },
+      "bytes": "01010100",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/decode-depth-tree-at-max",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "recursive": {
+            "max_depth": 2,
+            "of": {
+              "struct": {
+                "fields": [
+                  [
+                    "children",
+                    {
+                      "bounded_array": {
+                        "max": 2,
+                        "of": "self"
+                      }
+                    }
+                  ]
+                ],
+                "name": "Tree"
+              }
+            }
+          }
+        },
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "children",
+                {
+                  "array": [
+                    {
+                      "struct": {
+                        "fields": [
+                          [
+                            "children",
+                            {
+                              "array": []
+                            }
+                          ]
+                        ],
+                        "name": "Tree"
+                      }
+                    },
+                    {
+                      "struct": {
+                        "fields": [
+                          [
+                            "children",
+                            {
+                              "array": []
+                            }
+                          ]
+                        ],
+                        "name": "Tree"
+                      }
+                    }
+                  ]
+                }
+              ]
+            ],
+            "name": "Tree"
+          }
+        }
+      },
+      "bytes": "020000"
+    },
+    {
+      "id": "format-packed/decode-depth-tree-over-max",
+      "op": "decode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "recursive": {
+            "max_depth": 2,
+            "of": {
+              "struct": {
+                "fields": [
+                  [
+                    "children",
+                    {
+                      "bounded_array": {
+                        "max": 2,
+                        "of": "self"
+                      }
+                    }
+                  ]
+                ],
+                "name": "Tree"
+              }
+            }
+          }
+        }
+      },
+      "bytes": "02000100",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/encode-chars-empty",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        },
+        "value": {
+          "string": ""
+        }
+      },
+      "bytes": "00"
+    },
+    {
+      "id": "format-packed/encode-chars-at-max",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        },
+        "value": {
+          "string": "abcd"
+        }
+      },
+      "bytes": "0461626364"
+    },
+    {
+      "id": "format-packed/encode-chars-over-max",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        },
+        "value": {
+          "string": "abcde"
+        }
+      },
+      "bytes": "",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/encode-chars-multibyte-at-max",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        },
+        "value": {
+          "string": "é€😀a"
+        }
+      },
+      "bytes": "0ac3a9e282acf09f988061"
+    },
+    {
+      "id": "format-packed/encode-chars-4-byte-at-max",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        },
+        "value": {
+          "string": "😀😀😀😀"
+        }
+      },
+      "bytes": "10f09f9880f09f9880f09f9880f09f9880"
+    },
+    {
+      "id": "format-packed/encode-chars-multibyte-over-max",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        },
+        "value": {
+          "string": "ééééé"
+        }
+      },
+      "bytes": "",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/encode-chars-bytes-over-4n",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_string": {
+            "max": 4
+          }
+        },
+        "value": {
+          "string": "😀😀😀😀a"
+        }
+      },
+      "bytes": "",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/encode-chars-max-0",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_string": {
+            "max": 0
+          }
+        },
+        "value": {
+          "string": ""
+        }
+      },
+      "bytes": "00"
+    },
+    {
+      "id": "format-packed/encode-chars-max-0-over",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_string": {
+            "max": 0
+          }
+        },
+        "value": {
+          "string": "a"
+        }
+      },
+      "bytes": "",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/encode-items-empty",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_array": {
+            "max": 3,
+            "of": "u8"
+          }
+        },
+        "value": {
+          "array": []
+        }
+      },
+      "bytes": "00"
+    },
+    {
+      "id": "format-packed/encode-items-at-max",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_array": {
+            "max": 3,
+            "of": "u8"
+          }
+        },
+        "value": {
+          "array": [
+            {
+              "u8": 1
+            },
+            {
+              "u8": 2
+            },
+            {
+              "u8": 3
+            }
+          ]
+        }
+      },
+      "bytes": "03010203"
+    },
+    {
+      "id": "format-packed/encode-items-over-max",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_array": {
+            "max": 3,
+            "of": "u8"
+          }
+        },
+        "value": {
+          "array": [
+            {
+              "u8": 1
+            },
+            {
+              "u8": 2
+            },
+            {
+              "u8": 3
+            },
+            {
+              "u8": 4
+            }
+          ]
+        }
+      },
+      "bytes": "",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/encode-items-of-chars-at-max",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_array": {
+            "max": 2,
+            "of": {
+              "bounded_string": {
+                "max": 2
+              }
+            }
+          }
+        },
+        "value": {
+          "array": [
+            {
+              "string": "ab"
+            },
+            {
+              "string": "é😀"
+            }
+          ]
+        }
+      },
+      "bytes": "0202616206c3a9f09f9880"
+    },
+    {
+      "id": "format-packed/encode-items-of-chars-over-max",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "bounded_array": {
+            "max": 2,
+            "of": {
+              "bounded_string": {
+                "max": 2
+              }
+            }
+          }
+        },
+        "value": {
+          "array": [
+            {
+              "string": "ab"
+            },
+            {
+              "string": "abc"
+            }
+          ]
+        }
+      },
+      "bytes": "",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/encode-depth-at-max",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "recursive": {
+            "max_depth": 3,
+            "of": {
+              "struct": {
+                "fields": [
+                  [
+                    "next",
+                    {
+                      "option": "self"
+                    }
+                  ]
+                ],
+                "name": "Node"
+              }
+            }
+          }
+        },
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "next",
+                {
+                  "option": {
+                    "struct": {
+                      "fields": [
+                        [
+                          "next",
+                          {
+                            "option": {
+                              "struct": {
+                                "fields": [
+                                  [
+                                    "next",
+                                    {
+                                      "option": null
+                                    }
+                                  ]
+                                ],
+                                "name": "Node"
+                              }
+                            }
+                          }
+                        ]
+                      ],
+                      "name": "Node"
+                    }
+                  }
+                }
+              ]
+            ],
+            "name": "Node"
+          }
+        }
+      },
+      "bytes": "010100"
+    },
+    {
+      "id": "format-packed/encode-depth-over-max",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "recursive": {
+            "max_depth": 3,
+            "of": {
+              "struct": {
+                "fields": [
+                  [
+                    "next",
+                    {
+                      "option": "self"
+                    }
+                  ]
+                ],
+                "name": "Node"
+              }
+            }
+          }
+        },
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "next",
+                {
+                  "option": {
+                    "struct": {
+                      "fields": [
+                        [
+                          "next",
+                          {
+                            "option": {
+                              "struct": {
+                                "fields": [
+                                  [
+                                    "next",
+                                    {
+                                      "option": {
+                                        "struct": {
+                                          "fields": [
+                                            [
+                                              "next",
+                                              {
+                                                "option": null
+                                              }
+                                            ]
+                                          ],
+                                          "name": "Node"
+                                        }
+                                      }
+                                    }
+                                  ]
+                                ],
+                                "name": "Node"
+                              }
+                            }
+                          }
+                        ]
+                      ],
+                      "name": "Node"
+                    }
+                  }
+                }
+              ]
+            ],
+            "name": "Node"
+          }
+        }
+      },
+      "bytes": "",
+      "expect": "reject"
+    },
+    {
+      "id": "format-packed/encode-depth-tree-at-max",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "recursive": {
+            "max_depth": 2,
+            "of": {
+              "struct": {
+                "fields": [
+                  [
+                    "children",
+                    {
+                      "bounded_array": {
+                        "max": 2,
+                        "of": "self"
+                      }
+                    }
+                  ]
+                ],
+                "name": "Tree"
+              }
+            }
+          }
+        },
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "children",
+                {
+                  "array": [
+                    {
+                      "struct": {
+                        "fields": [
+                          [
+                            "children",
+                            {
+                              "array": []
+                            }
+                          ]
+                        ],
+                        "name": "Tree"
+                      }
+                    },
+                    {
+                      "struct": {
+                        "fields": [
+                          [
+                            "children",
+                            {
+                              "array": []
+                            }
+                          ]
+                        ],
+                        "name": "Tree"
+                      }
+                    }
+                  ]
+                }
+              ]
+            ],
+            "name": "Tree"
+          }
+        }
+      },
+      "bytes": "020000"
+    },
+    {
+      "id": "format-packed/encode-depth-tree-over-max",
+      "op": "encode",
+      "input": {
+        "format": "packed@1",
+        "type": {
+          "recursive": {
+            "max_depth": 2,
+            "of": {
+              "struct": {
+                "fields": [
+                  [
+                    "children",
+                    {
+                      "bounded_array": {
+                        "max": 2,
+                        "of": "self"
+                      }
+                    }
+                  ]
+                ],
+                "name": "Tree"
+              }
+            }
+          }
+        },
+        "value": {
+          "struct": {
+            "fields": [
+              [
+                "children",
+                {
+                  "array": [
+                    {
+                      "struct": {
+                        "fields": [
+                          [
+                            "children",
+                            {
+                              "array": []
+                            }
+                          ]
+                        ],
+                        "name": "Tree"
+                      }
+                    },
+                    {
+                      "struct": {
+                        "fields": [
+                          [
+                            "children",
+                            {
+                              "array": [
+                                {
+                                  "struct": {
+                                    "fields": [
+                                      [
+                                        "children",
+                                        {
+                                          "array": []
+                                        }
+                                      ]
+                                    ],
+                                    "name": "Tree"
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        ],
+                        "name": "Tree"
+                      }
+                    }
+                  ]
+                }
+              ]
+            ],
+            "name": "Tree"
+          }
+        }
+      },
+      "bytes": "",
       "expect": "reject"
     },
     {

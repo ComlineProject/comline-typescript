@@ -43,6 +43,16 @@ const readJson = <T>(url: URL): T => JSON.parse(readFileSync(url, "utf8")) as T;
 function run(c: Case): Outcome {
   try {
     const bytes = unhex(c.bytes);
+    // An `encode` rejection (spec 0.3) asks only to encode, which must fail.
+    if (c.expect === "reject" && c.op === "encode") {
+      try {
+        const got = encode(c);
+        return { fail: `encoded a value it must refuse, to ${show(got)}` };
+      } catch (e) {
+        if (e instanceof NotImplemented) throw e;
+        return { pass: true };
+      }
+    }
     if (c.expect === "reject") {
       const got = decode(c, bytes);
       return got === undefined
