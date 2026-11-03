@@ -34,7 +34,7 @@ import {
   type Framing,
 } from "../src/index.js";
 import { jsonEqual, parseJson } from "../src/json.js";
-import { fromJs, layoutOf, layoutOfType, toJs, type Json, type Type } from "./values.js";
+import { fromJs, layoutOf, layoutOfType, toJs, type CaseType as Type, type Json } from "./values.js";
 
 export interface Case {
   id: string;
@@ -99,10 +99,16 @@ export function canon(value: unknown): string {
   );
 }
 
-export function encodeValue(format: string, value: Json): Uint8Array {
-  if (format === FORMAT_PACKED) return new PackedCodec().encode(toJs(value), layoutOf(value));
+/**
+ * `value` encoded as `format`. With a `type` (an `encode` case whose bounds
+ * matter), the layout is the type's, as generated code declares it, so its
+ * bounds are checked; without one it's the value's own shape.
+ */
+export function encodeValue(format: string, value: Json, type?: Type): Uint8Array {
+  const layout = type === undefined ? layoutOf(value) : layoutOfType(type);
+  if (format === FORMAT_PACKED) return new PackedCodec().encode(toJs(value), layout);
   if (format !== FORMAT_JSON) throw new NotImplemented(`format \`${format}\``);
-  return new JsonCodec().encode(toJs(value));
+  return new JsonCodec().encode(toJs(value), layout);
 }
 
 function framingOf(name: string): Framing {
@@ -203,7 +209,7 @@ export function encode(c: Case): Uint8Array {
     }
     // falls through: every reply kind returns
     case "encode":
-      return encodeValue(i.format as string, i.value as Json);
+      return encodeValue(i.format as string, i.value as Json, i.type as Type | undefined);
     case "decode":
       throw new Error("`decode` cases are decode only");
     case "stream_prefix":

@@ -53,6 +53,15 @@ export {
 } from "./handshake.js";
 
 export { JsonCodec } from "./codec.js";
+export {
+  type Measure,
+  countChars,
+  checkChars,
+  checkCharsExact,
+  checkItems,
+  checkChar,
+  isChar,
+} from "./bounds.js";
 export { type Shape } from "./json.js";
 export { PackedCodec, type Layout, jsonShape } from "./packed.js";
 

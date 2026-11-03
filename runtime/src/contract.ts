@@ -8,6 +8,7 @@
  * `Client` / `Server` are written against these types.
  */
 
+import type { Measure } from "./bounds.js";
 import type { Shape } from "./json.js";
 import type { Layout } from "./packed.js";
 
@@ -23,6 +24,7 @@ export type RuntimeErrorKind =
   | "handshake" // the connection handshake disagreed
   | "frameTooLarge" // a frame is over the connection's size limit
   | "busy" // the connection is in use by another call
+  | "boundExceeded" // a value is over its type's bound (core#98); `measure` says which
   | "poisoned"; // the core trapped; it's discarded and the next connection loads a fresh one
 
 export class RuntimeError extends Error {
@@ -30,11 +32,24 @@ export class RuntimeError extends Error {
   readonly kind: RuntimeErrorKind;
   /** Schema-global error ordinal, set only when `kind === "remote"`. */
   readonly remoteId?: number;
+  /**
+   * What the bound limits, set only when `kind === "boundExceeded"`. The
+   * maximum itself is in the type, as in the Rust runtime's
+   * `RuntimeError::BoundExceeded { measure }`.
+   */
+  readonly measure?: Measure;
 
-  constructor(kind: RuntimeErrorKind, remoteId?: number) {
-    super(remoteId === undefined ? kind : `${kind} (#${remoteId})`);
+  constructor(kind: RuntimeErrorKind, remoteId?: number, measure?: Measure) {
+    super(
+      measure !== undefined
+        ? `more ${measure === "chars" ? "characters" : measure === "items" ? "items" : "levels"} than its type allows`
+        : remoteId === undefined
+          ? kind
+          : `${kind} (#${remoteId})`,
+    );
     this.kind = kind;
     this.remoteId = remoteId;
+    this.measure = measure;
   }
 
   static transport(): RuntimeError {
@@ -66,6 +81,13 @@ export class RuntimeError extends Error {
   }
   static busy(): RuntimeError {
     return new RuntimeError("busy");
+  }
+  /**
+   * A value over its type's bound: on decode, malformed input refused
+   * before the value is allocated; on encode, nothing was written.
+   */
+  static boundExceeded(measure: Measure): RuntimeError {
+    return new RuntimeError("boundExceeded", undefined, measure);
   }
   static poisoned(): RuntimeError {
     return new RuntimeError("poisoned");

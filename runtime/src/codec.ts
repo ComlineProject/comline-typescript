@@ -12,7 +12,7 @@
 import type { Codec } from "./contract.js";
 import { FORMAT_JSON } from "./handshake.js";
 import { type Shape, decodeJson, parseJson, stringifyJson } from "./json.js";
-import { type Layout, jsonShape } from "./packed.js";
+import { type Layout, checkBounds, jsonShape } from "./packed.js";
 
 const strictUtf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
@@ -26,7 +26,12 @@ const strictUtf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 export class JsonCodec implements Codec {
   readonly name = FORMAT_JSON;
 
-  encode(value: unknown): Uint8Array {
+  /**
+   * With a {@link Layout}, its bounds (core#98) are checked first: a value
+   * over one is refused before anything is written.
+   */
+  encode(value: unknown, layout?: Layout): Uint8Array {
+    if (layout !== undefined) checkBounds(layout, value);
     return new TextEncoder().encode(stringifyJson(value));
   }
 
@@ -34,7 +39,13 @@ export class JsonCodec implements Codec {
     // Strict, as serde_json is: invalid UTF-8 is refused, not replaced, and
     // a byte-order mark is a character, not something to skip.
     const text = strictUtf8.decode(bytes);
-    if (shape !== undefined) return decodeJson(parseJson(text), jsonShape(shape)) as T;
+    if (shape !== undefined) {
+      // JSON has no count or length ahead of a value, so bounds are checked
+      // once it's parsed; the frame limit caps what parsing allocates.
+      const value = decodeJson(parseJson(text), jsonShape(shape));
+      checkBounds(shape, value);
+      return value as T;
+    }
     return JSON.parse(text, (_key, v: unknown) => (v === null ? undefined : v)) as T;
   }
 }

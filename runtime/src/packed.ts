@@ -14,6 +14,12 @@
  * - An optional is `00`, or `01` and the value.
  * - A struct is its fields in declaration order, with no names or header.
  * - An enum is its variant index, as a varint.
+ * - A single `char` is its UTF-8 bytes alone, 1 to 4, with no length: the
+ *   first byte gives the width.
+ * - Bounds (core#98) don't change the bytes, only what's accepted: a count
+ *   above an array's maximum is refused before any item is read, a byte
+ *   length above 4 × a string's maximum before the string is decoded, and a
+ *   recursive type nested past its depth before it's read.
  *
  * Varints are unsigned LEB128 in their shortest form; any other spelling is
  * refused. Decoding is strict: a value must use every byte it is given, and a
@@ -23,6 +29,7 @@
  * {@link Layout}, which generated code declares beside each type.
  */
 
+import { Depths, checkChar, checkChars, checkCharsExact, checkItems, isChar } from "./bounds.js";
 import { RuntimeError, type Codec } from "./contract.js";
 import { FORMAT_PACKED } from "./handshake.js";
 import type { Shape } from "./json.js";
@@ -35,7 +42,15 @@ import type { Shape } from "./json.js";
  *
  * - A scalar by name. Signed integers are `s`-prefixed, as in the IDL;
  *   `"unit"` is `()`, which takes no bytes.
- * - `{ array }`: `T[]`. `{ fixed, length }`: `T[N]`.
+ * - `"char"`: one Unicode scalar value, a string of exactly one code point.
+ * - `{ array }`: `T[]`; with `max`, `T[max N]`. `{ fixed, length }`: `T[N]`.
+ * - `{ chars: { max } }`: `char[max N]`, a string of at most N characters.
+ *   `{ chars: { length } }`: `char[N]`, exactly N characters. Both are a
+ *   string on the wire, like `"string"`.
+ * - `{ depth, of }`: a type that can contain itself, under
+ *   `@max_depth = depth`. `of` is the type; it refers back to itself through
+ *   a function returning this same object, which is how its levels are
+ *   counted: the outermost value is level 1.
  * - `{ option }`: an optional field.
  * - `{ struct }`: the fields, in declaration order.
  * - `{ enum }`: the variant names, in declaration order.
@@ -59,8 +74,11 @@ export type Layout =
   | "f32"
   | "f64"
   | "string"
+  | "char"
   | "unit"
-  | { readonly array: Layout }
+  | { readonly array: Layout; readonly max?: number }
+  | { readonly chars: { readonly max: number } | { readonly length: number } }
+  | { readonly depth: number; readonly of: Layout }
   | { readonly fixed: Layout; readonly length: number }
   | { readonly option: Layout }
   | { readonly struct: readonly (readonly [name: string, layout: Layout])[] }
@@ -98,6 +116,7 @@ const strictUtf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 /** A byte sink that grows by doubling. */
 class Writer {
+  readonly depths = new Depths();
   private buf = new Uint8Array(64);
   private view = new DataView(this.buf.buffer);
   length = 0;
@@ -224,6 +243,9 @@ function write(w: Writer, layout: Layout, value: unknown): void {
         w.varint(b.length);
         return w.bytes(b);
       }
+      case "char":
+        checkChar(value);
+        return w.bytes(utf8.encode(value));
       case "unit":
         return;
       default: {
@@ -234,9 +256,24 @@ function write(w: Writer, layout: Layout, value: unknown): void {
       }
     }
   }
+  if ("chars" in l) {
+    if (typeof value !== "string") refuse();
+    const s = value as string;
+    if ("max" in l.chars) checkChars(s, l.chars.max);
+    else checkCharsExact(s, l.chars.length);
+    const b = utf8.encode(s);
+    w.varint(b.length);
+    return w.bytes(b);
+  }
+  if ("depth" in l) {
+    w.depths.enter(l, l.depth);
+    write(w, l.of, value);
+    return w.depths.leave(l);
+  }
   if ("array" in l) {
     if (!Array.isArray(value)) refuse();
     const items = value as unknown[];
+    if (l.max !== undefined) checkItems(items.length, l.max);
     w.varint(items.length);
     for (const item of items) write(w, l.array, item);
     return;
@@ -286,17 +323,23 @@ function holds(layout: Layout, value: unknown): boolean {
         return typeof value === "bigint";
       case "string":
         return typeof value === "string";
+      case "char":
+        return isChar(value);
       case "unit":
         return value === undefined || value === null;
       case "f32":
       case "f64":
         return typeof value === "number";
       default: {
-        const { min, max } = INTEGERS[l as Integer];
-        return Number.isInteger(value) && (value as number) >= min && (value as number) <= max;
+        // A JSON `Shape`'s scalar (`"number"`) isn't an integer layout.
+        const range = INTEGERS[l as Integer] as (typeof INTEGERS)[Integer] | undefined;
+        if (range === undefined) return false;
+        return Number.isInteger(value) && (value as number) >= range.min && (value as number) <= range.max;
       }
     }
   }
+  if ("chars" in l) return typeof value === "string";
+  if ("depth" in l) return holds(l.of, value);
   if ("array" in l) return Array.isArray(value);
   if ("fixed" in l) return Array.isArray(value) && value.length === l.length;
   if ("option" in l) return value === undefined || value === null || holds(l.option, value);
@@ -305,8 +348,65 @@ function holds(layout: Layout, value: unknown): boolean {
   return typeof value === "string" && l.enum.includes(value);
 }
 
+/**
+ * Refuses `value` if it breaks a bound its {@link Layout} declares: a
+ * single `char` that isn't one, a string or array over its maximum, a
+ * recursive type nested too deep. For formats whose bytes the check can't
+ * see into while decoding (`json@1`): run before encoding, and after
+ * decoding. Anything else about the value is left to the codec, and a JSON
+ * {@link Shape} passed instead declares no bounds.
+ */
+export function checkBounds(layout: Layout | Shape, value: unknown, depths = new Depths()): void {
+  if (typeof layout === "function") return checkBounds(layout(), value, depths);
+  if (typeof layout === "string") {
+    if (layout === "char") checkChar(value);
+    return;
+  }
+  if ("chars" in layout) {
+    if (typeof value !== "string") return;
+    if ("max" in layout.chars) checkChars(value, layout.chars.max);
+    else checkCharsExact(value, layout.chars.length);
+    return;
+  }
+  if ("depth" in layout) {
+    depths.enter(layout, layout.depth);
+    checkBounds(layout.of, value, depths);
+    return depths.leave(layout);
+  }
+  if ("array" in layout) {
+    if (!Array.isArray(value)) return;
+    const max = (layout as { max?: number }).max;
+    if (max !== undefined) checkItems(value.length, max);
+    for (const item of value) checkBounds(layout.array, item, depths);
+    return;
+  }
+  if ("fixed" in layout) {
+    if (!Array.isArray(value)) return;
+    for (const item of value) checkBounds(layout.fixed, item, depths);
+    return;
+  }
+  if ("option" in layout) {
+    if (value !== undefined && value !== null) checkBounds(layout.option, value, depths);
+    return;
+  }
+  if ("struct" in layout) {
+    if (typeof value !== "object" || value === null) return;
+    const o = value as { [field: string]: unknown };
+    for (const [name, field] of layout.struct) {
+      if (Object.hasOwn(o, name)) checkBounds(field, o[name], depths);
+    }
+    return;
+  }
+  if ("union" in layout) {
+    const members = layout.union as readonly Layout[];
+    const member = members.find((m) => holds(m, value));
+    if (member !== undefined) checkBounds(member, value, depths);
+  }
+}
+
 /** A cursor over the bytes being decoded. */
 class Reader {
+  readonly depths = new Depths();
   private readonly view: DataView;
   at = 0;
 
@@ -400,14 +500,47 @@ class Reader {
     return this.view.getFloat64(this.take(8), true);
   }
 
-  string(): string {
+  /**
+   * A string; with `max`, of at most that many characters, a byte length
+   * above 4 × `max` refused before anything is decoded. With `exact`, of
+   * exactly that many: a byte length below it is refused at once.
+   */
+  string(max?: number, exact?: number): string {
     const n = this.len();
+    const limit = max ?? exact;
+    if (limit !== undefined && n > 4 * limit) throw RuntimeError.boundExceeded("chars");
+    if (exact !== undefined && n < exact) refuse();
     const at = this.take(n);
+    let s: string;
     try {
-      return strictUtf8.decode(this.bytes.subarray(at, at + n));
+      s = strictUtf8.decode(this.bytes.subarray(at, at + n));
     } catch {
       return refuse();
     }
+    // A string of at most `max` bytes has at most `max` characters.
+    if (max !== undefined && n > max) checkChars(s, max);
+    if (exact !== undefined) checkCharsExact(s, exact);
+    return s;
+  }
+
+  /** One character's UTF-8 bytes, no prefix: the first byte gives the width. */
+  char(): string {
+    const first = this.bytes[this.at];
+    if (first === undefined) return refuse();
+    const width =
+      first < 0x80 ? 1 : first >= 0xc2 && first <= 0xdf ? 2 : first >= 0xe0 && first <= 0xef ? 3 : first >= 0xf0 && first <= 0xf4 ? 4 : 0;
+    if (width === 0) refuse();
+    const at = this.take(width);
+    let s: string;
+    try {
+      s = strictUtf8.decode(this.bytes.subarray(at, at + width));
+    } catch {
+      return refuse();
+    }
+    // Strict decoding refuses overlong forms, surrogates and truncation, so
+    // `width` bytes that decode are exactly one character.
+    if (!isChar(s)) refuse();
+    return s;
   }
 }
 
@@ -431,6 +564,8 @@ function read(r: Reader, layout: Layout): unknown {
         return r.f64();
       case "string":
         return r.string();
+      case "char":
+        return r.char();
       case "unit":
         return undefined;
       default: {
@@ -439,8 +574,18 @@ function read(r: Reader, layout: Layout): unknown {
       }
     }
   }
+  if ("chars" in l) {
+    return "max" in l.chars ? r.string(l.chars.max) : r.string(undefined, l.chars.length);
+  }
+  if ("depth" in l) {
+    r.depths.enter(l, l.depth);
+    const value = read(r, l.of);
+    r.depths.leave(l);
+    return value;
+  }
   if ("array" in l) {
     const n = r.len();
+    if (l.max !== undefined) checkItems(n, l.max);
     const items: unknown[] = [];
     for (let i = 0; i < n; i++) items.push(read(r, l.array));
     return items;
@@ -486,11 +631,14 @@ export function jsonShape(s: Shape | Layout): Shape {
       case "boolean":
         return "boolean";
       case "string":
+      case "char":
         return "string";
       default:
         return "number";
     }
   }
+  if ("chars" in s) return "string";
+  if ("depth" in s) return jsonShape(s.of);
   if ("array" in s) return { array: jsonShape(s.array) };
   if ("fixed" in s) return { array: jsonShape(s.fixed), length: s.length };
   if ("option" in s) return jsonShape(s.option);
