@@ -115,23 +115,10 @@ jobs:
           rustup update stable && rustup default stable
           cargo install --locked --git https://github.com/ComlineProject/cli --rev "${{ steps.cli.outputs.sha }}" comline
       - run: npm ci && npm run build
-      # TODO(core#98 step 10): drop this filter once the CLI's default branch
-      # runs spec 0.3. Until then its runner is 0.2: it sends an encode
-      # rejection (an `encode` case with `"expect": "reject"`, new in 0.3) as
-      # a decode of empty bytes, which the ops protocol answers with an error.
-      # Those cases are left out of the corpus it's given; every other 0.3
-      # case (bounds and `char`, decoded and encoded) still runs, and
-      # `npm test` runs all of them, encode rejections included.
-      - name: Corpus for the pre-0.3 CLI (encode rejections left out)
-        run: |
-          rm -rf "$RUNNER_TEMP/corpus" && cp -r test/conformance "$RUNNER_TEMP/corpus"
-          for f in "$RUNNER_TEMP"/corpus/vectors/*.json; do
-            jq '.cases |= map(select((.op == "encode" and .expect == "reject") | not))' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
-          done
       # Every official encoding that is fully implemented here.
       - name: Conformance - datagram@1, datagram@2, jsonrpc@1, packed@1, comline@1
         run: |
-          comline conformance --plain --impl "node dist/test/conformance-server.js" --corpus "$RUNNER_TEMP/corpus" \
+          comline conformance --plain --impl "node dist/test/conformance-server.js" --corpus test/conformance \
             --encoding datagram@1 --encoding datagram@2 --encoding jsonrpc@1 --encoding packed@1 --encoding comline@1
       # json@1 is partial (conformance-support.json): decoding doesn't reject
       # unknown variants or out-of-range integers (comline-typescript#57),
@@ -140,7 +127,7 @@ jobs:
       - name: Conformance - json@1 (known failures, not gating)
         continue-on-error: true
         run: |
-          comline conformance --plain --impl "node dist/test/conformance-server.js" --corpus "$RUNNER_TEMP/corpus" \
+          comline conformance --plain --impl "node dist/test/conformance-server.js" --corpus test/conformance \
             --encoding json@1
 
   std_extra:
