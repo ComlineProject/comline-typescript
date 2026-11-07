@@ -41,7 +41,7 @@ use std::path::PathBuf;
 
 use comline_core::schema::ir::frozen::types::{Literal, PrimitiveType, TypeRef};
 use comline_core::schema::ir::frozen::schema_ir_hash;
-use comline_core::schema::idl::annotations::{MethodNames, DEFAULT_HANDSHAKE, FORMAT_JSON, FRAMING_JSONRPC, HANDSHAKE_NONE};
+use comline_core::schema::idl::annotations::{MethodNames, IMPLICIT_HANDSHAKE, FORMAT_JSON, FRAMING_JSONRPC, HANDSHAKE_NONE};
 use comline_core::schema::ir::frozen::unit::FrozenUnit;
 use comline_core::schema::ir::unverified;
 
@@ -1028,7 +1028,7 @@ fn class_ref(encodings: &Encodings, name: &str, types: &TypeMapper) -> String {
 /// neither `comline@1` nor `none`.
 fn custom_handshake(parameters: &[FrozenUnit], encodings: &Encodings) -> Option<(String, String)> {
     let name = connections::handshake_name(parameters);
-    (name != DEFAULT_HANDSHAKE && name != HANDSHAKE_NONE).then(|| {
+    (name != IMPLICIT_HANDSHAKE && name != HANDSHAKE_NONE).then(|| {
         let class = type_of(encodings, &name).to_string();
         (name, class)
     })
@@ -1133,7 +1133,7 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
     }
     // A handshake that's neither `comline@1` nor `none` is passed in; those
     // two keep the arguments they always had.
-    let custom = (package.handshake != DEFAULT_HANDSHAKE && !unverified && !comline2)
+    let custom = (package.handshake != IMPLICIT_HANDSHAKE && !unverified && !comline2)
         .then(|| type_of(encodings, &package.handshake));
     if custom.is_some() || comline2 {
         import_class(encodings, &package.handshake, &mut values, &mut external);
