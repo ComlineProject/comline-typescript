@@ -424,12 +424,65 @@ fn acme_req(mode: Mode) -> GenerateRequest {
         type_path: class.into(),
         package: Some("acme-encodings".into()),
         version: Some("^0.2.0".into()),
+        ..Default::default()
     };
     let schemas = vec![("account".to_string(), acme_units("com.acme.lines@1"))];
     let mut req = GenerateRequest { mode, wire_format: "com.acme.cbor@1".into(), ..lib_req(&schemas) };
     req.encodings.insert("com.acme.lines@1".into(), acme("LinesFraming"));
     req.encodings.insert("com.acme.cbor@1".into(), acme("CborCodec"));
     req
+}
+
+/// A third party's framing, by what its mapping says its profile states.
+fn stating(grammar: Option<&str>, calls: &str) -> comline_codegen::protocol::EncodingMapping {
+    comline_codegen::protocol::EncodingMapping {
+        type_path: "LinesFraming".into(),
+        package: Some("acme-encodings".into()),
+        version: Some("^0.2.0".into()),
+        grammar: grammar.map(str::to_string),
+        calls: Some(calls.to_string()),
+    }
+}
+
+#[test]
+fn a_third_party_framing_writing_json_encodes_with_json() {
+    let schemas = vec![("account".to_string(), acme_units("com.acme.lines@1"))];
+    let source = |grammar| {
+        let mut req = lib_req(&schemas);
+        req.mode = Mode::Code;
+        req.encodings.insert("com.acme.lines@1".into(), stating(grammar, "by_index"));
+        generate_typescript(&req).unwrap().remove(0).contents
+    };
+    let writes_json = source(Some("json"));
+    assert!(writes_json.contains("new JsonCodec()"), "{writes_json}");
+    assert!(!writes_json.contains("export const Format"), "{writes_json}");
+    let opaque = source(None);
+    assert!(opaque.contains("Format"), "{opaque}");
+    assert!(!opaque.contains("new JsonCodec()"), "{opaque}");
+}
+
+#[test]
+fn a_third_party_framing_naming_its_calls_takes_method_names() {
+    let mut units = acme_units("com.acme.lines@1");
+    for unit in &mut units {
+        if let FrozenUnit::Protocol { parameters, .. } = unit {
+            parameters.retain(|p| !matches!(p, FrozenUnit::Property { name, .. } if name == "framing" || name == "provider"));
+            parameters.push(FrozenUnit::Property { name: "provider".into(), value: ConfigValue::Name("Client".into()) });
+            parameters.push(FrozenUnit::Property {
+                name: "framing".into(),
+                value: ConfigValue::Dict(vec![
+                    ("name".into(), ConfigValue::Str("com.acme.lines@1".into())),
+                    ("method_names".into(), ConfigValue::Name("qualified".into())),
+                ]),
+            });
+        }
+    }
+    let schemas = vec![("account".to_string(), units)];
+    let mut req = lib_req(&schemas);
+    req.mode = Mode::Code;
+    req.encodings.insert("com.acme.lines@1".into(), stating(None, "by_name"));
+    let source = generate_typescript(&req).unwrap().remove(0).contents;
+    assert!(source.contains(r#"name: "account."#), "{source}");
 }
 
 #[test]
@@ -509,6 +562,7 @@ fn a_third_party_handshake_is_imported_and_run() {
             type_path: "HelloHandshake".into(),
             package: Some("acme-encodings".into()),
             version: Some("^0.2.0".into()),
+            ..Default::default()
         },
     );
     let files = generate_typescript(&req).unwrap();
