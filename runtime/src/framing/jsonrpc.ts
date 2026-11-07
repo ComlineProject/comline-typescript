@@ -56,6 +56,16 @@ function raw(text: string, node: JsonNode | undefined): Uint8Array {
   return node ? enc.encode(text.slice(node.start, node.end)) : NULL;
 }
 
+/**
+ * A request up to its id. JSON-RPC 2.0 has `params` omitted when there are
+ * none, not `null`, so params that are empty or `null` are left out.
+ */
+function requestHead(call: Call, params: Uint8Array): string {
+  const p = dec.decode(params);
+  const method = `{"jsonrpc":"2.0","method":${JSON.stringify(call.name)}`;
+  return p === "" || p === "null" ? method : `${method},"params":${p}`;
+}
+
 /** A `u64` id, or `undefined` if `node` isn't one. */
 function u64(node: JsonNode | undefined): bigint | undefined {
   const n = jsonInteger(node);
@@ -67,7 +77,8 @@ function u64(node: JsonNode | undefined): bigint | undefined {
  * human-readable. Pair with {@link JsonCodec}. Matches
  * `comline_runtime::framing::JsonRpcFraming`:
  *
- * - request: `{"jsonrpc":"2.0","method":<name>,"params":<params>,"id":<n>}`
+ * - request: `{"jsonrpc":"2.0","method":<name>,"params":<params>,"id":<n>}`,
+ *   without `params` when there are none
  * - ok:      `{"jsonrpc":"2.0","result":<r>,"id":<n>}`
  * - err:     `{"jsonrpc":"2.0","error":{"code":<ordinal>,"message":...,"data":<body>},"id":<n>}`
  *
@@ -79,18 +90,15 @@ export class JsonRpcFraming implements Framing {
   readonly name = FRAMING_JSONRPC;
 
   encodeRequest(call: Call, requestId: bigint, params: Uint8Array): Uint8Array {
-    const p = params.length === 0 ? "null" : dec.decode(params);
-    return enc.encode(
-      `{"jsonrpc":"2.0","method":${JSON.stringify(call.name)},"params":${p},"id":${requestId}}`,
-    );
+    return enc.encode(`${requestHead(call, params)},"id":${requestId}}`);
   }
 
   decodeRequest(frame: Uint8Array): DecodedRequest | undefined {
     const r = members(frame);
     const method = r?.members.get("method");
     if (!r || method?.kind !== "string") return undefined;
-    // Params are an array or an object, or the `null` this framing writes
-    // for none.
+    // Params are an array or an object. `null` isn't JSON-RPC 2.0's, and this
+    // framing no longer writes it, but it's read as none: peers send it.
     const params = r.members.get("params");
     if (params && !["array", "object", "null"].includes(params.kind)) return undefined;
     // A notification has no id; it's request 0. A null id is refused: it
@@ -174,8 +182,7 @@ export class JsonRpcConnectionFraming implements ConnectionFraming {
     oneWay = false,
   ): Uint8Array {
     if (!oneWay) return this.frames.encodeRequest(call, requestId, params);
-    const p = params.length === 0 ? "null" : dec.decode(params);
-    return enc.encode(`{"jsonrpc":"2.0","method":${JSON.stringify(call.name)},"params":${p}}`);
+    return enc.encode(`${requestHead(call, params)}}`);
   }
 
   encodeReply(_protocol: number, requestId: bigint, reply: Envelope): Uint8Array {

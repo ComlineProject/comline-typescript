@@ -137,6 +137,32 @@ test("JSON-RPC request matches the spec wording byte-for-byte", () => {
   assert.equal(dec.decode(req!.params), '[7,"x"]');
 });
 
+test("JSON-RPC leaves params out when there are none, and still reads null as none", () => {
+  const f = new JsonRpcFraming();
+  const conn = new JsonRpcConnectionFraming();
+  const ping = call(0, "ping");
+  for (const none of ["", "null"]) {
+    const params = enc.encode(none);
+    assert.equal(dec.decode(f.encodeRequest(ping, 8n, params)), `{"jsonrpc":"2.0","method":"ping","id":8}`);
+    assert.equal(dec.decode(conn.encodeRequest(0, ping, 8n, params)), `{"jsonrpc":"2.0","method":"ping","id":8}`);
+    assert.equal(dec.decode(conn.encodeRequest(0, ping, 8n, params, true)), `{"jsonrpc":"2.0","method":"ping"}`);
+  }
+  // Params that say something are kept, empty ones too.
+  for (const some of ["[]", "{}", "[null]"]) {
+    assert.equal(
+      dec.decode(f.encodeRequest(ping, 8n, enc.encode(some))),
+      `{"jsonrpc":"2.0","method":"ping","params":${some},"id":8}`,
+    );
+  }
+  for (const frame of [
+    `{"jsonrpc":"2.0","method":"ping","id":8}`,
+    `{"jsonrpc":"2.0","method":"ping","params":null,"id":8}`,
+  ]) {
+    const req = f.decodeRequest(enc.encode(frame));
+    assert.equal(req && dec.decode(req.params), "null");
+  }
+});
+
 test("JSON-RPC ok / err responses carry result / code+data", () => {
   const f = new JsonRpcFraming();
 
