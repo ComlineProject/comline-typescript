@@ -34,15 +34,20 @@ export {
   type Peer,
   type CallOptions,
   Extensions,
+  type Refusal,
+  type RefusalReason,
+  type Unavailable,
 } from "./contract.js";
 
 export {
   FRAMING_DATAGRAM,
   FRAMING_DATAGRAM2,
+  FRAMING_DATAGRAM3,
   FRAMING_JSONRPC,
   FORMAT_JSON,
   FORMAT_PACKED,
   HANDSHAKE_COMLINE,
+  HANDSHAKE_COMLINE2,
   HANDSHAKE_NONE,
   nameHash,
   HandshakeFrame,
@@ -74,6 +79,14 @@ export {
 
 export { DatagramFraming } from "./framing/datagram.js";
 export { Datagram2Framing } from "./framing/datagram2.js";
+export { Datagram3Framing } from "./framing/datagram3.js";
+export {
+  Comline2Handshake,
+  type Comline2Params,
+  Negotiated,
+  type ProtocolState,
+  checkCall,
+} from "./comline2.js";
 export { JsonRpcConnectionFraming, JsonRpcFraming } from "./framing/jsonrpc.js";
 
 export { type Transport, type InMemoryTransport, duplex } from "./transport.js";

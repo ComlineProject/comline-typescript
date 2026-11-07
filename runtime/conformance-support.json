@@ -6,9 +6,12 @@
     "envelope": { "state": "supported" },
     "framing-datagram": { "state": "supported" },
     "framing-datagram2": { "state": "supported" },
-    "framing-datagram3": { "state": "unsupported", "note": "datagram@2 is the connection framing here" },
+    "framing-datagram3": { "state": "supported" },
     "framing-jsonrpc": { "state": "supported" },
-    "handshake-comline2": { "state": "unsupported", "note": "comline@1 is the handshake here" },
+    "handshake-comline2": {
+      "state": "unsupported",
+      "note": "Comline2Handshake runs on the Comline core (ABI 0.2), whose C and Node replays in the runtime repo prove these vectors; this harness doesn't drive the core's steps itself yet"
+    },
     "stream": {
       "state": "unsupported",
       "note": "no length-prefixed framing or frame limit yet: the transports are message-oriented",

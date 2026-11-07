@@ -17,6 +17,7 @@ import { Extensions, Reply, RuntimeError, resolveKind } from "./contract.js";
 import { ComlineHandshake, type Handshake } from "./handshake.js";
 import type { Transport } from "./transport.js";
 import { Datagram2Framing } from "./framing/datagram2.js";
+import { Datagram3Framing } from "./framing/datagram3.js";
 import { JsonRpcConnectionFraming } from "./framing/jsonrpc.js";
 import { currentCore, loadedCore, type Core } from "./core/core.js";
 import { Wire, release, type Encoded } from "./core/wire.js";
@@ -390,7 +391,7 @@ export class Connection implements Peer {
 /** Whether `framing` is one of the built-in framings, unchanged, which the core carries. */
 function builtIn(framing: ConnectionFraming): boolean {
   const ctor = framing.constructor;
-  return ctor === Datagram2Framing || ctor === JsonRpcConnectionFraming;
+  return ctor === Datagram2Framing || ctor === Datagram3Framing || ctor === JsonRpcConnectionFraming;
 }
 
 /**

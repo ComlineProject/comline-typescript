@@ -35,6 +35,8 @@ them for now).
 | Strict decoding, checked differentially against the Rust runtime | ✅ (JSON enum variants and integer ranges: partial) |
 | Bounds (core#98): `char`, `char[max N]` / `char[N]`, `T[max N]` and `@max_depth` in `Layout`, checked on every encode and decode (`RuntimeError` `boundExceeded`, with its `measure`), refused before allocating where `packed@1` allows; proven by the spec 0.3 vectors | ✅ |
 | The wasm core under `ComlineHandshake` and the built-in framings | ✅ |
+| `datagram@3` (`Datagram3Framing`): calls addressed by wire numbers, on the core or in TypeScript; proven by the `framing-datagram3` vectors | ✅ |
+| `comline@2` (`Comline2Handshake`, on the core): `Negotiated` and `checkCall` (a call the peer lacks fails locally as `RuntimeError` `unavailable`), refusals as `refused` with their reason and side | ✅ (the `handshake-comline2` vectors are replayed by the core's own C and Node tests, not by this harness yet) |
 | A stream `Transport`; a MessagePack `Codec` | — |
 
 ## Writing a transport

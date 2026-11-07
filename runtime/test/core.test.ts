@@ -14,11 +14,11 @@ test("loadCore loads the vendored core, once", async () => {
   assert.equal(core.poisoned, false);
 });
 
-test("the vendored core is ABI 0.1", async () => {
+test("the vendored core is ABI 0.2", async () => {
   const core = await loadCore();
   assert.equal(ABI_MAJOR, 0);
-  assert.equal(ABI_MINOR, 1);
-  assert.equal(core.abiVersion(), (0 << 16) | 1);
+  assert.equal(ABI_MINOR, 2);
+  assert.equal(core.abiVersion(), (0 << 16) | 2);
 });
 
 test("the core's nameHash is the TypeScript nameHash", async () => {

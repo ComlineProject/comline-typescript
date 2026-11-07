@@ -71,7 +71,7 @@
 /** The ABI version this glue is written against. Before 1.0 a minor counts
  * as a major, so `instantiate` accepts exactly this. */
 export const ABI_MAJOR = 0;
-export const ABI_MINOR = 1;
+export const ABI_MINOR = 2;
 
 /** `comline_status`. Below 16 is an outcome, 16 and up an error. A number
  * not here is a code from a newer library. */
@@ -88,10 +88,37 @@ export const Status = Object.freeze({
   ERR_POISONED: 22,
   ERR_BUSY: 23,
   ERR_PEER_REFUSED: 24,
+  ERR_REFUSED: 25,
+  ERR_UNAVAILABLE: 26,
 });
 
 /** `comline_config.handshake`. */
-export const Handshake = Object.freeze({ COMLINE: 0, NONE: 1 });
+export const Handshake = Object.freeze({ COMLINE: 0, NONE: 1, COMLINE2: 2 });
+
+/** `comline_comline2_config.side` and a refusal's `side`. */
+export const Side = Object.freeze({ INITIATOR: 0, RESPONDER: 1 });
+
+/** `comline_comline2_config`'s parameters. Each one's default is 0. */
+export const Scope = Object.freeze({ PROTOCOL: 0, PACKAGE: 1 });
+export const NewerConsumer = Object.freeze({ DEGRADE: 0, REFUSE: 1 });
+export const SameVersionDiffers = Object.freeze({ REFUSE: 0, WARN: 1 });
+export const Exchange = Object.freeze({ OFFER: 0, SYMMETRIC: 1 });
+
+/** A `comline@2` refusal's `reason`, and a refused protocol's. */
+export const Reason = Object.freeze({
+  MALFORMED: 1,
+  HANDSHAKE_VERSION: 2,
+  EXCHANGE_MISMATCH: 3,
+  PACKAGE_MISMATCH: 4,
+  ENCODING_MISMATCH: 5,
+  LINE_MISMATCH: 6,
+  SAME_VERSION_DIFFERS: 7,
+  NEWER_CONSUMER: 8,
+  UNKNOWN_PROTOCOL: 9,
+});
+
+/** `comline2MessageCheck`'s `kind`. */
+export const Comline2Message = Object.freeze({ HELLO: 1, ANSWER: 2, VERDICT: 3 });
 
 /** `comline_event.kind`. */
 export const EventKind = Object.freeze({
@@ -99,6 +126,7 @@ export const EventKind = Object.freeze({
   REQUEST: 1,
   REPLY: 2,
   STALE: 3,
+  HANDSHAKE_CONTINUE: 4,
 });
 
 /** `comline_event.flags` bits. */
@@ -108,6 +136,7 @@ export const EventFlag = Object.freeze({
   CALL_BY_NAME: 1 << 2,
   BODY_ABSENT: 1 << 3,
   NAME_ESCAPED: 1 << 4,
+  SEND: 1 << 5,
 });
 
 /** `comline_event.envelope` and `encodeReply`'s `envelope`. */
@@ -132,6 +161,10 @@ const CONFIG = {
   unordered: 42, reserved: 43,
 };
 const HANDSHAKE_SIZE = 32;
+const COMLINE2_CONFIG_SIZE = 16;
+const COMLINE2_CONFIG = {
+  hello: 0, helloLen: 4, side: 8, scope: 9, newerConsumer: 10, sameVersionDiffers: 11, exchange: 12,
+};
 
 /** The least a region is reserved at, so small calls never reserve again. */
 const REGION_MIN = 1024;
@@ -360,6 +393,19 @@ export function encodeBound(args) {
     envelope !== Envelope.OK && envelope !== Envelope.ERR && envelope !== Envelope.FAULT
   ) {
     throw new TypeError("comline: a reply's envelope must be an Envelope");
+  }
+
+  if (framing === "datagram@3") {
+    // Request: [0][protocol varint][function varint][request_id u64][params]
+    // Reply:   as `datagram@2`.
+    const protocol = isU16(args.protocol) ? varintLen(args.protocol) : VARINT_MAX;
+    if (kind === "request") {
+      const call = isU16(args.callId) ? varintLen(args.callId) : VARINT_MAX;
+      return prefix + 1 + protocol + call + 8 + bodyLen;
+    }
+    const sealed =
+      envelope === Envelope.OK ? 1 + bodyLen : envelope === Envelope.ERR ? 3 + bodyLen : 1;
+    return prefix + 1 + protocol + 8 + sealed;
   }
 
   if (framing === "datagram@2") {
@@ -696,7 +742,9 @@ export class Comline {
   /**
    * `comline_connection_new`: `{ status, connection }`, `connection` a
    * `Connection` on `OK` and null otherwise. Fields left out are 0, as in a
-   * zeroed `comline_config` (so `handshake` defaults to `COMLINE`).
+   * zeroed `comline_config` (so `handshake` defaults to `COMLINE`). With
+   * `Handshake.COMLINE2`, `config.comline2` holds its facts and parameters,
+   * and this is `comline_connection_new_comline2`.
    *
    * @param {import("./comline.d.mts").Config} config
    */
@@ -706,13 +754,16 @@ export class Comline {
     const f = bytesOf(config.framing ?? "");
     const irHash = u64(config.irHash ?? 0);
     const maxFrame = u64(config.maxFrame ?? 0);
+    const comline2 = config.comline2;
+    const hello = bytesOf(comline2?.hello ?? new Uint8Array(0));
     try {
-      this.#room(CONFIG_SIZE + Comline.#size([w, f]), 4);
+      const fixed = CONFIG_SIZE + COMLINE2_CONFIG_SIZE;
+      this.#room(fixed + Comline.#size([w, f, hello]), 4);
       const c = this.#inPtr;
       const outPtr = this.#outPtr;
       const u8 = this.#u8;
       const dv = this.#dv;
-      const [wPtr, fPtr] = Comline.#place(u8, c + CONFIG_SIZE, [w, f]);
+      const [wPtr, fPtr, helloPtr] = Comline.#place(u8, c + fixed, [w, f, hello]);
       u8.fill(0, c, c + CONFIG_SIZE);
       dv.setBigUint64(c + CONFIG.irHash, irHash, true);
       dv.setUint32(c + CONFIG.wireFormat, wPtr, true);
@@ -726,7 +777,21 @@ export class Comline {
       dv.setUint8(c + CONFIG.stream, config.stream ? 1 : 0);
       dv.setUint8(c + CONFIG.unordered, config.unordered ? 1 : 0);
       dv.setUint32(outPtr, 0, true);
-      const status = this.#x.comline_connection_new(c, outPtr);
+      let status;
+      if (comline2) {
+        const c2 = c + CONFIG_SIZE;
+        u8.fill(0, c2, c2 + COMLINE2_CONFIG_SIZE);
+        dv.setUint32(c2 + COMLINE2_CONFIG.hello, helloPtr, true);
+        dv.setUint32(c2 + COMLINE2_CONFIG.helloLen, hello.length, true);
+        dv.setUint8(c2 + COMLINE2_CONFIG.side, comline2.side ?? 0);
+        dv.setUint8(c2 + COMLINE2_CONFIG.scope, comline2.scope ?? 0);
+        dv.setUint8(c2 + COMLINE2_CONFIG.newerConsumer, comline2.newerConsumer ?? 0);
+        dv.setUint8(c2 + COMLINE2_CONFIG.sameVersionDiffers, comline2.sameVersionDiffers ?? 0);
+        dv.setUint8(c2 + COMLINE2_CONFIG.exchange, comline2.exchange ?? 0);
+        status = this.#x.comline_connection_new_comline2(c, c2, outPtr);
+      } else {
+        status = this.#x.comline_connection_new(c, outPtr);
+      }
       // `new` allocates the handle, which may grow memory.
       this.#sync();
       const handle = this.#dv.getUint32(outPtr, true);
@@ -739,7 +804,134 @@ export class Comline {
     }
   }
 
+  /**
+   * `comline_comline2_message_check`: `{ status, kind, reason }`, `kind` a
+   * `Comline2Message` on `OK`, `reason` a `Reason` on `ERR_HANDSHAKE`, the
+   * other 0.
+   */
+  comline2MessageCheck(message) {
+    if (this.#dead) return { status: POISONED, kind: 0, reason: 0 };
+    const m = bytesOf(message);
+    try {
+      this.#room(m.length, 2);
+      const outPtr = this.#outPtr;
+      this.#u8.set(m, this.#inPtr);
+      const status = this.#x.comline_comline2_message_check(this.#inPtr, m.length, outPtr, outPtr + 1);
+      this.#sync();
+      return { status, kind: this.#u8[outPtr], reason: this.#u8[outPtr + 1] };
+    } catch (e) {
+      return this.#fail(e, { status: POISONED, kind: 0, reason: 0 });
+    }
+  }
+
   // ── for Connection ──────────────────────────────────────────────────────
+
+  /** @internal */
+  _checkCall(handle, protocol, callId) {
+    if (this.#dead) return POISONED;
+    try {
+      return this.#x.comline_connection_check_call(handle, protocol, callId);
+    } catch (e) {
+      return this.#fail(e, POISONED);
+    }
+  }
+
+  /** @internal */
+  _refusal(handle) {
+    if (this.#dead) return { status: POISONED };
+    try {
+      this.#room(0, 8);
+      const outPtr = this.#outPtr;
+      const status = this.#x.comline_connection_refusal(handle, outPtr);
+      if (status !== OK) return { status };
+      this.#sync();
+      const dv = this.#dv;
+      const refusal = { reason: dv.getUint8(outPtr), side: dv.getUint8(outPtr + 1) };
+      if (dv.getUint8(outPtr + 2) === 1) refusal.protocol = dv.getUint16(outPtr + 4, true);
+      return { status, refusal };
+    } catch (e) {
+      return this.#fail(e, { status: POISONED });
+    }
+  }
+
+  /** A list of `u16`s from `call(out, cap, written)`, `cap` of them. */
+  #numbers(cap, call) {
+    if (this.#dead) return { status: POISONED, written: 0 };
+    try {
+      this.#room(0, 8 + cap * 2);
+      const outPtr = this.#outPtr;
+      this.#dv.setUint32(outPtr, 0, true);
+      const status = call(outPtr + 8, cap, outPtr);
+      this.#sync();
+      const dv = this.#dv;
+      const written = dv.getUint32(outPtr, true);
+      if (status !== OK) return { status, written };
+      const numbers = [];
+      for (let i = 0; i < written; i++) numbers.push(dv.getUint16(outPtr + 8 + i * 2, true));
+      return { status, written, numbers };
+    } catch (e) {
+      return this.#fail(e, { status: POISONED, written: 0 });
+    }
+  }
+
+  /** @internal */
+  _warnings(handle, cap) {
+    return this.#numbers(cap, (out, n, written) => this.#x.comline_connection_warnings(handle, out, n, written));
+  }
+
+  /** @internal */
+  _peerLacks(handle, protocol, cap) {
+    return this.#numbers(cap, (out, n, written) =>
+      this.#x.comline_connection_peer_lacks(handle, protocol, out, n, written),
+    );
+  }
+
+  /** @internal */
+  _protocols(handle, cap) {
+    if (this.#dead) return { status: POISONED, written: 0 };
+    try {
+      this.#room(0, 8 + cap * 4);
+      const outPtr = this.#outPtr;
+      this.#dv.setUint32(outPtr, 0, true);
+      const status = this.#x.comline_connection_protocols(handle, outPtr + 8, cap, outPtr);
+      this.#sync();
+      const dv = this.#dv;
+      const written = dv.getUint32(outPtr, true);
+      if (status !== OK) return { status, written };
+      const protocols = [];
+      for (let i = 0; i < written; i++) {
+        const at = outPtr + 8 + i * 4;
+        protocols.push({ number: dv.getUint16(at, true), reason: dv.getUint8(at + 2) });
+      }
+      return { status, written, protocols };
+    } catch (e) {
+      return this.#fail(e, { status: POISONED, written: 0 });
+    }
+  }
+
+  /** @internal */
+  _peerVersion(handle, cap) {
+    if (this.#dead) return { status: POISONED, written: 0 };
+    try {
+      this.#room(0, 24 + cap);
+      const outPtr = this.#outPtr;
+      this.#dv.setUint32(outPtr, 0, true);
+      const status = this.#x.comline_connection_peer_version(handle, outPtr + 8, outPtr + 24, cap, outPtr);
+      this.#sync();
+      const dv = this.#dv;
+      const written = dv.getUint32(outPtr, true);
+      if (status !== OK) return { status, written };
+      const version = {
+        major: dv.getUint32(outPtr + 8, true),
+        minor: dv.getUint32(outPtr + 12, true),
+        patch: dv.getUint32(outPtr + 16, true),
+      };
+      const pre = new TextDecoder().decode(this.#u8.subarray(outPtr + 24, outPtr + 24 + written));
+      return { status, written, version, pre };
+    } catch (e) {
+      return this.#fail(e, { status: POISONED, written: 0 });
+    }
+  }
 
   /** `{ status, written, bytes }` from a `*written` at `writtenPtr` and
    * bytes at `bytesPtr`. */
@@ -1017,6 +1209,44 @@ export class Connection {
   /** @internal The `comline_connection *`, 0 once freed. */
   get handle() {
     return this.#handle;
+  }
+
+  /** `comline_connection_check_call`: the status. */
+  checkCall(protocol, callId) {
+    return this.#lib._checkCall(this.#live(), protocol, callId);
+  }
+
+  /** `comline_connection_refusal`: `{ status, refusal }`; `refusal` on `OK`,
+   * `{ reason, side, protocol }`, `protocol` when it's about one. It works on
+   * the closed connection a refusal leaves. */
+  refusal() {
+    return this.#lib._refusal(this.#live());
+  }
+
+  /** `comline_connection_warnings`: `{ status, written, numbers }`; `numbers`
+   * on `OK`. `cap` counts numbers. */
+  warnings(cap) {
+    return this.#lib._warnings(this.#live(), cap);
+  }
+
+  /** `comline_connection_protocols`: `{ status, written, protocols }`;
+   * `protocols` on `OK`, each `{ number, reason }`, `reason` 0 when it's
+   * usable. `cap` counts protocols. */
+  protocols(cap) {
+    return this.#lib._protocols(this.#live(), cap);
+  }
+
+  /** `comline_connection_peer_lacks`: `{ status, written, numbers }`; `numbers`
+   * on `OK`. `cap` counts numbers. */
+  peerLacks(protocol, cap) {
+    return this.#lib._peerLacks(this.#live(), protocol, cap);
+  }
+
+  /** `comline_connection_peer_version`: `{ status, written, version, pre }`;
+   * `version` (`{ major, minor, patch }`) and `pre` on `OK`. `cap` counts the
+   * pre-release's bytes. */
+  peerVersion(cap) {
+    return this.#lib._peerVersion(this.#live(), cap);
   }
 
   /** `comline_connection_start`: `{ status, written, bytes }`. */

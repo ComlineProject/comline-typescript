@@ -19,6 +19,7 @@ fn code_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenerateRequest {
         validate_on_decode: Default::default(),
         async_api: false,
         encodings: comline_codegen::encodings::official_for("typescript"),
+        facts: None,
     }
 }
 
@@ -36,6 +37,7 @@ fn lib_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenerateRequest {
         validate_on_decode: Default::default(),
         async_api: false,
         encodings: comline_codegen::encodings::official_for("typescript"),
+        facts: None,
     }
 }
 
@@ -1981,4 +1983,150 @@ fn generated_bounds_match_the_runtime_test_fixture() {
         "generated Directory drifted from runtime/test/generated/bounds.ts - \
          re-bless with TS_BLESS=1 cargo test -p comline-codegen-typescript"
     );
+}
+
+// ── datagram@3 + comline@2 ─────────────────────────────────────────────────
+
+/// Version 0.1.0 of a package choosing `datagram@3` and `comline@2`.
+const CHAT_V1: &str = "@framing = \"datagram@3\"\n@handshake = { name = \"comline@2\", newer_consumer = \"degrade\" }\n\
+    protocol Chat {\n    function hello(name: string) -> u32;\n    function shout(text: string) -> u32;\n}\n";
+/// Version 0.2.0: `shout` moved first and `whisper` added. Each keeps its
+/// wire number, so an old peer still answers the right one.
+const CHAT_V2: &str = "@framing = \"datagram@3\"\n@handshake = { name = \"comline@2\", newer_consumer = \"degrade\" }\n\
+    protocol Chat {\n    function shout(text: string) -> u32;\n    function whisper(text: string) -> u32;\n    \
+    function hello(name: string) -> u32;\n}\n";
+
+/// The facts core's history would give `chat::Chat` at `version`, with the
+/// encodings' real parameter hashes. The same as comline-rust's test, so the
+/// two languages' output can meet.
+fn chat_facts(
+    id: &str,
+    version: &str,
+    shape: &str,
+    functions: &[(&str, u16)],
+) -> comline_codegen::facts::PackageFacts {
+    use comline_codegen::facts::{EncodingFacts, FunctionFacts, PackageFacts, ProtocolFacts};
+    let encoding = |kind: &str, name: &str| {
+        let e = comline_core::compat::encoding(kind, name, Default::default());
+        EncodingFacts {
+            kind: e.kind,
+            name: e.name,
+            params: e.params,
+            param_hash: e.param_hash,
+        }
+    };
+    PackageFacts {
+        id: Some(id.into()),
+        version: version.into(),
+        protocols: vec![ProtocolFacts {
+            path: "chat::Chat".into(),
+            namespace: "chat".into(),
+            name: "Chat".into(),
+            line: "0.1.0".into(),
+            number: 0,
+            shape_hash: shape.repeat(32),
+            functions: functions
+                .iter()
+                .map(|(name, number)| FunctionFacts {
+                    name: (*name).into(),
+                    since: "0.1.0".into(),
+                    number: *number,
+                })
+                .collect(),
+        }],
+        encodings: vec![
+            encoding("format", "packed@1"),
+            encoding("framing", "datagram@3"),
+            encoding("handshake", "comline@2"),
+        ],
+    }
+}
+
+fn chat_req(source: &str, facts: comline_codegen::facts::PackageFacts) -> GenerateRequest {
+    let mut req = code_req(&[(
+        "chat".to_string(),
+        IncrementalInterpreter::from_source(source),
+    )]);
+    req.package.version = facts.version.clone();
+    req.facts = Some(facts);
+    req
+}
+
+/// Three packages' output, kept in `runtime/test/generated/comline2/` so the
+/// Node job runs them against each other (`generated-comline2.test.ts`):
+/// `old` (0.1.0), `new` (0.2.0, functions reordered and one added) and
+/// `alien` (the 0.1.0 schema under another package id). Regenerate with
+/// `TS_BLESS=1`.
+#[test]
+fn generated_comline2_matches_the_runtime_test_fixture() {
+    const ID: &str = "0123456789abcdef0123456789abcdef";
+    const ALIEN: &str = "fedcba9876543210fedcba9876543210";
+    let v1 = [("hello", 0), ("shout", 1)];
+    let packages = [
+        ("old", chat_req(CHAT_V1, chat_facts(ID, "0.1.0", "aa", &v1))),
+        (
+            "alien",
+            chat_req(CHAT_V1, chat_facts(ALIEN, "0.1.0", "aa", &v1)),
+        ),
+        (
+            "new",
+            chat_req(
+                CHAT_V2,
+                chat_facts(
+                    ID,
+                    "0.2.0",
+                    "bb",
+                    &[("shout", 1), ("whisper", 2), ("hello", 0)],
+                ),
+            ),
+        ),
+    ];
+    for (name, req) in &packages {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../runtime/test/generated/comline2")
+            .join(name);
+        for file in generate_typescript(req).unwrap() {
+            let path = dir.join(&file.path);
+            if std::env::var_os("TS_BLESS").is_some() {
+                std::fs::create_dir_all(&dir).unwrap();
+                std::fs::write(&path, &file.contents).unwrap();
+                continue;
+            }
+            let committed = std::fs::read_to_string(&path).unwrap_or_default();
+            assert_eq!(
+                file.contents, committed,
+                "generated comline@2 output drifted from {} — re-bless with TS_BLESS=1 cargo test -p comline-codegen-typescript",
+                path.display()
+            );
+        }
+    }
+    let chat = generate_typescript(&packages[2].1).unwrap();
+    let chat = &chat
+        .iter()
+        .find(|f| f.path.to_str() == Some("chat.ts"))
+        .unwrap()
+        .contents;
+    // `whisper` is called by its wire number, 2, though it's declared second.
+    assert!(chat.contains("{ id: 2, name: \"whisper\" }"), "{chat}");
+    assert!(
+        chat.contains("checkCall(this.peer, ChatSender.PROTOCOL, 2, \"chat::Chat\", \"whisper\");"),
+        "{chat}"
+    );
+}
+
+/// Wire numbers come from the facts or not at all.
+#[test]
+fn datagram3_without_its_facts_is_refused() {
+    let mut req = chat_req(
+        CHAT_V1,
+        chat_facts(
+            "0123456789abcdef0123456789abcdef",
+            "0.1.0",
+            "aa",
+            &[("hello", 0), ("shout", 1)],
+        ),
+    );
+    req.facts = None;
+    let err = generate_typescript(&req).unwrap_err().to_string();
+    assert!(err.contains("the request carries no facts"), "{err}");
 }
