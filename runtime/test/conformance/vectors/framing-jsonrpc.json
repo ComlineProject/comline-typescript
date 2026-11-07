@@ -1,4 +1,5 @@
 {
+  "$schema": "../specs/gen/vectors.schema.json",
   "feature": "framing-jsonrpc",
   "cases": [
     {
@@ -130,6 +131,39 @@
       "compare": "json"
     },
     {
+      "id": "framing-jsonrpc/request-no-params",
+      "op": "request",
+      "input": {
+        "call_id": 0,
+        "format": "json@1",
+        "framing": "jsonrpc@1",
+        "method": "ping",
+        "params": {
+          "unit": null
+        },
+        "request_id": "8"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226d6574686f64223a2270696e67222c226964223a387d",
+      "compare": "json"
+    },
+    {
+      "id": "framing-jsonrpc/notification-no-params",
+      "op": "request",
+      "input": {
+        "call_id": 0,
+        "format": "json@1",
+        "framing": "jsonrpc@1",
+        "method": "ping",
+        "one_way": true,
+        "params": {
+          "unit": null
+        },
+        "request_id": "0"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226d6574686f64223a2270696e67227d",
+      "compare": "json"
+    },
+    {
       "id": "framing-jsonrpc/found-request-method-needs-escapes",
       "op": "request",
       "input": {
@@ -240,6 +274,121 @@
       "expect": "reject"
     },
     {
+      "id": "framing-jsonrpc/accept-request-params-null",
+      "op": "request",
+      "input": {
+        "call_id": 0,
+        "format": "json@1",
+        "framing": "jsonrpc@1",
+        "method": "ping",
+        "params": {
+          "unit": null
+        },
+        "request_id": "8"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226d6574686f64223a2270696e67222c22706172616d73223a6e756c6c2c226964223a387d",
+      "expect": "accept"
+    },
+    {
+      "id": "framing-jsonrpc/reject-request-repeated-jsonrpc",
+      "op": "request",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226a736f6e727063223a22322e30222c226d6574686f64223a226772656574222c22706172616d73223a5b5d2c226964223a317d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-request-repeated-method",
+      "op": "request",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226d6574686f64223a226772656574222c22706172616d73223a5b5d2c226d6574686f64223a226f74686572222c226964223a317d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-request-repeated-params",
+      "op": "request",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226d6574686f64223a226772656574222c22706172616d73223a5b5d2c22706172616d73223a5b315d2c226964223a317d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-request-repeated-id",
+      "op": "request",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226d6574686f64223a226772656574222c226964223a312c22706172616d73223a5b5d2c226964223a327d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-response-repeated-jsonrpc",
+      "op": "response",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226a736f6e727063223a22322e30222c22726573756c74223a312c226964223a317d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-response-repeated-result",
+      "op": "response",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c22726573756c74223a312c22726573756c74223a322c226964223a317d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-response-repeated-id",
+      "op": "response",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c22726573756c74223a312c226964223a312c226964223a327d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-response-repeated-error",
+      "op": "response",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226572726f72223a7b22636f6465223a312c226d657373616765223a2278227d2c226572726f72223a7b22636f6465223a322c226d657373616765223a2279227d2c226964223a317d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-response-repeated-error-code",
+      "op": "response",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226572726f72223a7b22636f6465223a312c22636f6465223a322c226d657373616765223a2278227d2c226964223a317d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-response-repeated-error-message",
+      "op": "response",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226572726f72223a7b22636f6465223a312c226d657373616765223a2278222c226d657373616765223a2279227d2c226964223a317d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-response-repeated-error-data",
+      "op": "response",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226572726f72223a7b22636f6465223a312c226d657373616765223a2278222c2264617461223a312c2264617461223a327d2c226964223a317d",
+      "expect": "reject"
+    },
+    {
       "id": "framing-jsonrpc/found-reject-request-invalid-utf8-in-jsonrpc",
       "op": "request",
       "input": {
@@ -285,6 +434,60 @@
       "expect": "reject"
     },
     {
+      "id": "framing-jsonrpc/reject-request-params-msgpack",
+      "op": "request",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226d6574686f64223a226772656574222c22706172616d73223a9207a1782c226964223a34327d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-response-result-msgpack",
+      "op": "response",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c22726573756c74223a9207a1782c226964223a377d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-response-error-data-msgpack",
+      "op": "response",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226572726f72223a7b22636f6465223a322c226d657373616765223a226170706c69636174696f6e206572726f72222c2264617461223a9207a1787d2c226964223a377d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-request-params-packed",
+      "op": "request",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226d6574686f64223a226772656574222c22706172616d73223a020700000001782c226964223a34327d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-response-result-packed",
+      "op": "response",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c22726573756c74223a020700000001782c226964223a377d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-response-error-data-packed",
+      "op": "response",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226572726f72223a7b22636f6465223a322c226d657373616765223a226170706c69636174696f6e206572726f72222c2264617461223a020700000001787d2c226964223a377d",
+      "expect": "reject"
+    },
+    {
       "id": "framing-jsonrpc/found-request-method-escaped-slash",
       "op": "request",
       "input": {
@@ -315,6 +518,142 @@
       },
       "bytes": "7b226a736f6e727063223a22322e30222c226d6574686f64223a225c7530303637726565745c75303045395c75643833645c7564653030222c22706172616d73223a5b5d2c226964223a317d",
       "compare": "json"
+    },
+    {
+      "id": "framing-jsonrpc/accept-request-unknown-member",
+      "op": "request",
+      "input": {
+        "call_id": 0,
+        "format": "json@1",
+        "framing": "jsonrpc@1",
+        "method": "greet",
+        "params": {
+          "array": [
+            {
+              "u32": 7
+            },
+            {
+              "string": "x"
+            }
+          ]
+        },
+        "request_id": "42"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226d6574686f64223a226772656574222c22706172616d73223a5b372c2278225d2c2278223a5b315d2c226964223a34327d",
+      "expect": "accept"
+    },
+    {
+      "id": "framing-jsonrpc/accept-response-unknown-member",
+      "op": "response",
+      "input": {
+        "framing": "jsonrpc@1",
+        "kind": "ok",
+        "payload": "7b22626f6479223a226869227d",
+        "request_id": "7"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c22726573756c74223a7b22626f6479223a226869227d2c2278223a5b315d2c226964223a377d",
+      "expect": "accept"
+    },
+    {
+      "id": "framing-jsonrpc/accept-response-error-unknown-member",
+      "op": "response",
+      "input": {
+        "body": "7b22776879223a226e6f227d",
+        "framing": "jsonrpc@1",
+        "id": 2,
+        "kind": "err",
+        "request_id": "7"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226572726f72223a7b22636f6465223a322c226d657373616765223a226170706c69636174696f6e206572726f72222c2278223a5b315d2c2264617461223a7b22776879223a226e6f227d7d2c226964223a377d",
+      "expect": "accept"
+    },
+    {
+      "id": "framing-jsonrpc/peer-refusal-parse-error",
+      "op": "peer_refusal",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226572726f72223a7b22636f6465223a2d33323730302c226d657373616765223a225061727365206572726f72227d2c226964223a6e756c6c7d"
+    },
+    {
+      "id": "framing-jsonrpc/peer-refusal-invalid-request",
+      "op": "peer_refusal",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226572726f72223a7b22636f6465223a2d33323630302c226d657373616765223a22496e76616c69642052657175657374222c2264617461223a7b22776879223a226e6f227d7d2c226964223a6e756c6c7d"
+    },
+    {
+      "id": "framing-jsonrpc/reject-response-peer-refusal",
+      "op": "response",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226572726f72223a7b22636f6465223a2d33323730302c226d657373616765223a225061727365206572726f72227d2c226964223a6e756c6c7d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-peer-refusal-of-a-call",
+      "op": "peer_refusal",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226572726f72223a7b22636f6465223a2d33323730302c226d657373616765223a225061727365206572726f72227d2c226964223a317d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-peer-refusal-without-id",
+      "op": "peer_refusal",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226572726f72223a7b22636f6465223a2d33323730302c226d657373616765223a225061727365206572726f72227d7d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-peer-refusal-result",
+      "op": "peer_refusal",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c22726573756c74223a312c226964223a6e756c6c7d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-peer-refusal-result-and-error",
+      "op": "peer_refusal",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c22726573756c74223a312c226572726f72223a7b22636f6465223a2d33323730302c226d657373616765223a2278227d2c226964223a6e756c6c7d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-peer-refusal-without-message",
+      "op": "peer_refusal",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226572726f72223a7b22636f6465223a2d33323730307d2c226964223a6e756c6c7d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-peer-refusal-other-version",
+      "op": "peer_refusal",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22312e30222c226572726f72223a7b22636f6465223a2d33323730302c226d657373616765223a2278227d2c226964223a6e756c6c7d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-peer-refusal-repeated-id",
+      "op": "peer_refusal",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226572726f72223a7b22636f6465223a2d33323730302c226d657373616765223a2278227d2c226964223a6e756c6c2c226964223a6e756c6c7d",
+      "expect": "reject"
     }
   ]
 }

@@ -45,13 +45,14 @@ export interface Case {
     | "envelope"
     | "request"
     | "response"
+    | "peer_refusal"
     | "encode"
     | "decode"
     | "stream_prefix"
     | "stream_split";
   input?: { [key: string]: Json };
   bytes: string;
-  expect?: "reject";
+  expect?: "reject" | "accept";
   compare?: "json";
 }
 
@@ -109,6 +110,39 @@ export function encodeValue(format: string, value: Json, type?: Type): Uint8Arra
   if (format === FORMAT_PACKED) return new PackedCodec().encode(toJs(value), layout);
   if (format !== FORMAT_JSON) throw new NotImplemented(`format \`${format}\``);
   return new JsonCodec().encode(toJs(value), layout);
+}
+
+const FORMAT_MSGPACK = "msgpack@1";
+
+const concat = (parts: readonly Uint8Array[]): Uint8Array =>
+  Uint8Array.from(parts.flatMap((part) => Array.from(part)));
+
+/** The few MessagePack values a request case's params hold. */
+function msgpackOf(value: Json): Uint8Array {
+  const kind = Object.keys(value as object)[0];
+  const inner = (value as { [key: string]: Json })[kind as string];
+  if (kind === "array" && Array.isArray(inner) && inner.length < 16) {
+    return concat([Uint8Array.of(0x90 | inner.length), ...inner.map(msgpackOf)]);
+  }
+  if (kind === "u32" && typeof inner === "number" && inner < 128) return Uint8Array.of(inner);
+  if (kind === "string" && typeof inner === "string" && inner.length < 32) {
+    return concat([Uint8Array.of(0xa0 | inner.length), new TextEncoder().encode(inner)]);
+  }
+  throw new NotImplemented(`format \`msgpack@1\` for ${JSON.stringify(value)}`);
+}
+
+/**
+ * A request's params. A framing carries them as bytes, so all a case needs of
+ * them is those bytes, in a format this runtime doesn't ship too (MessagePack),
+ * or in a shape a {@link Layout} can't state (a `packed@1` array of mixed types).
+ */
+function requestParams(format: string, value: Json): Uint8Array {
+  if (format === FORMAT_MSGPACK) return msgpackOf(value);
+  const items = (value as { array?: Json[] }).array;
+  if (format === FORMAT_PACKED && items && items.length > 0 && items.length < 128) {
+    return concat([Uint8Array.of(items.length), ...items.map((item) => encodeValue(format, item))]);
+  }
+  return encodeValue(format, value);
 }
 
 function framingOf(name: string): Framing {
@@ -169,7 +203,7 @@ export function encode(c: Case): Uint8Array {
           i.protocol as number,
           call(i.call_id as number, i.method as string),
           BigInt(i.request_id as string),
-          encodeValue(i.format as string, i.params as Json),
+          requestParams(i.format as string, i.params as Json),
         );
       }
       if (i.one_way === true && i.framing === FRAMING_JSONRPC) {
@@ -178,14 +212,14 @@ export function encode(c: Case): Uint8Array {
           0,
           call(i.call_id as number, i.method as string),
           BigInt(i.request_id as string),
-          encodeValue(i.format as string, i.params as Json),
+          requestParams(i.format as string, i.params as Json),
           true,
         );
       }
       return framingOf(i.framing as string).encodeRequest(
         call(i.call_id as number, i.method as string),
         BigInt(i.request_id as string),
-        encodeValue(i.format as string, i.params as Json),
+        requestParams(i.format as string, i.params as Json),
       );
     case "response": {
       const id = BigInt(i.request_id as string);
@@ -215,6 +249,9 @@ export function encode(c: Case): Uint8Array {
     case "stream_prefix":
     case "stream_split":
       throw new NotImplemented("stream framing");
+    default:
+      // An op this harness doesn't know isn't one it can encode.
+      throw new NotImplemented(`op \`${c.op}\``);
   }
 }
 
@@ -265,7 +302,7 @@ export function decode(c: Case, bytes: Uint8Array): unknown {
         if (frame?.kind !== "request") return undefined;
         if (c.expect === "reject") return frame;
         const r = frame.request;
-        const params = encodeValue(i.format as string, i.params as Json);
+        const params = requestParams(i.format as string, i.params as Json);
         return {
           framing: i.framing,
           protocol: frame.protocol,
@@ -290,7 +327,7 @@ export function decode(c: Case, bytes: Uint8Array): unknown {
         r = framingOf(i.framing as string).decodeRequest(bytes);
       }
       if (!r || c.expect === "reject") return r;
-      const params = encodeValue(i.format as string, i.params as Json);
+      const params = requestParams(i.format as string, i.params as Json);
       return {
         framing: i.framing,
         call_id: "id" in r.call ? r.call.id : i.call_id,
@@ -348,6 +385,10 @@ export function decode(c: Case, bytes: Uint8Array): unknown {
         return undefined;
       }
       return { format: i.format, type: i.type, value: fromJs(i.type as Type, parsed) };
+    }
+    case "peer_refusal": {
+      const framing = framingOf(i.framing as string);
+      return framing.isPeerRefusal?.(bytes) ? c.input : undefined;
     }
     case "stream_prefix":
     case "stream_split":

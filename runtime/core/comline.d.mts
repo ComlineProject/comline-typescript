@@ -31,6 +31,7 @@ export declare const Status: Readonly<{
   ERR_STATE: 21;
   ERR_POISONED: 22;
   ERR_BUSY: 23;
+  ERR_PEER_REFUSED: 24;
 }>;
 export type Status = number;
 
@@ -165,7 +166,8 @@ export type EncodeBoundArgs = {
 /** The most bytes an encode can write (`*written`, a stream's prefix
  * included), to size `cap` so it never retries: never smaller than what
  * the ABI writes, and exactly that when every field the frame holds is
- * given. Pure; needs no instance. */
+ * given (but for params that are `null`, which `jsonrpc@1` leaves out and this
+ * counts). Pure; needs no instance. */
 export declare function encodeBound(args: EncodeBoundArgs): number;
 
 export declare class Comline {

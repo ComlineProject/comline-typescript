@@ -1,4 +1,5 @@
 {
+  "$schema": "../specs/gen/profile.schema.json",
   "name": "comline@1",
   "kind": "handshake",
   "facts": {

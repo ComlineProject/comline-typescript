@@ -1,0 +1,4034 @@
+{
+  "$schema": "../specs/gen/vectors.schema.json",
+  "feature": "handshake-comline2",
+  "cases": [
+    {
+      "id": "handshake-comline2/hello",
+      "op": "comline2_message",
+      "input": {
+        "message": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "type": "hello"
+      },
+      "bytes": "434f0201000123456789abcdef0123456789abcdef00030000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a00300010201000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001"
+    },
+    {
+      "id": "handshake-comline2/hello-symmetric-wide",
+      "op": "comline2_message",
+      "input": {
+        "message": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "symmetric",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [],
+              "line": {
+                "major": 1,
+                "minor": 0,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "01010101010101010101010101010101"
+            },
+            {
+              "functions": [
+                0,
+                127,
+                128,
+                65535
+              ],
+              "line": {
+                "major": 1,
+                "minor": 200,
+                "patch": 0
+              },
+              "number": 300,
+              "shape_hash": "02020202020202020202020202020202"
+            },
+            {
+              "functions": [
+                5
+              ],
+              "line": {
+                "major": 0,
+                "minor": 0,
+                "patch": 1
+              },
+              "number": 65535,
+              "shape_hash": "03030303030303030303030303030303"
+            }
+          ],
+          "version": {
+            "major": 1,
+            "minor": 200,
+            "patch": 70000,
+            "pre": "dev.2"
+          }
+        },
+        "type": "hello"
+      },
+      "bytes": "434f0201010123456789abcdef0123456789abcdef01c801f0a204056465762e320300111111111111111111111111111111110122222222222222222222222222222222023333333333333333333333333333333303000100000101010101010101010101010101010100ac0201c801000202020202020202020202020202020204007f8001ffff03ffff03000001030303030303030303030303030303030105"
+    },
+    {
+      "id": "handshake-comline2/hello-empty",
+      "op": "comline2_message",
+      "input": {
+        "message": {
+          "encodings": [],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "type": "hello"
+      },
+      "bytes": "434f0201000123456789abcdef0123456789abcdef000300000000"
+    },
+    {
+      "id": "handshake-comline2/answer-accept",
+      "op": "comline2_message",
+      "input": {
+        "message": {
+          "accept": {
+            "protocols": [
+              {
+                "number": 0,
+                "status": {
+                  "accepted": {
+                    "missing": [
+                      2,
+                      300
+                    ],
+                    "shape_differs": true
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "status": {
+                  "accepted": {
+                    "missing": [],
+                    "shape_differs": false
+                  }
+                }
+              },
+              {
+                "number": 5,
+                "status": {
+                  "refused": {
+                    "reason": "unknown_protocol"
+                  }
+                }
+              }
+            ],
+            "version": {
+              "major": 0,
+              "minor": 2,
+              "patch": 1
+            }
+          }
+        },
+        "type": "answer"
+      },
+      "bytes": "434f020200000201000300010202ac02010000050209"
+    },
+    {
+      "id": "handshake-comline2/answer-refuse",
+      "op": "comline2_message",
+      "input": {
+        "message": {
+          "refuse": {
+            "reason": "package_mismatch",
+            "side": "responder"
+          }
+        },
+        "type": "answer"
+      },
+      "bytes": "434f0202010401"
+    },
+    {
+      "id": "handshake-comline2/answer-refuse-protocol",
+      "op": "comline2_message",
+      "input": {
+        "message": {
+          "refuse": {
+            "protocol": 300,
+            "reason": "line_mismatch",
+            "side": "responder"
+          }
+        },
+        "type": "answer"
+      },
+      "bytes": "434f0202010601ac02"
+    },
+    {
+      "id": "handshake-comline2/verdict-accept",
+      "op": "comline2_message",
+      "input": {
+        "message": {
+          "accept": {
+            "refused": []
+          }
+        },
+        "type": "verdict"
+      },
+      "bytes": "434f02030000"
+    },
+    {
+      "id": "handshake-comline2/verdict-accept-refusing",
+      "op": "comline2_message",
+      "input": {
+        "message": {
+          "accept": {
+            "refused": [
+              {
+                "number": 0,
+                "reason": "same_version_differs"
+              },
+              {
+                "number": 1,
+                "reason": "newer_consumer"
+              }
+            ]
+          }
+        },
+        "type": "verdict"
+      },
+      "bytes": "434f0203000200070108"
+    },
+    {
+      "id": "handshake-comline2/verdict-refuse-malformed",
+      "op": "comline2_message",
+      "input": {
+        "message": {
+          "refuse": {
+            "reason": "malformed",
+            "side": "initiator"
+          }
+        },
+        "type": "verdict"
+      },
+      "bytes": "434f0203010100"
+    },
+    {
+      "id": "handshake-comline2/verdict-refuse-handshake_version",
+      "op": "comline2_message",
+      "input": {
+        "message": {
+          "refuse": {
+            "reason": "handshake_version",
+            "side": "initiator"
+          }
+        },
+        "type": "verdict"
+      },
+      "bytes": "434f0203010200"
+    },
+    {
+      "id": "handshake-comline2/verdict-refuse-exchange_mismatch",
+      "op": "comline2_message",
+      "input": {
+        "message": {
+          "refuse": {
+            "reason": "exchange_mismatch",
+            "side": "initiator"
+          }
+        },
+        "type": "verdict"
+      },
+      "bytes": "434f0203010300"
+    },
+    {
+      "id": "handshake-comline2/verdict-refuse-package_mismatch",
+      "op": "comline2_message",
+      "input": {
+        "message": {
+          "refuse": {
+            "reason": "package_mismatch",
+            "side": "initiator"
+          }
+        },
+        "type": "verdict"
+      },
+      "bytes": "434f0203010400"
+    },
+    {
+      "id": "handshake-comline2/verdict-refuse-encoding_mismatch",
+      "op": "comline2_message",
+      "input": {
+        "message": {
+          "refuse": {
+            "reason": "encoding_mismatch",
+            "side": "initiator"
+          }
+        },
+        "type": "verdict"
+      },
+      "bytes": "434f0203010500"
+    },
+    {
+      "id": "handshake-comline2/verdict-refuse-line_mismatch",
+      "op": "comline2_message",
+      "input": {
+        "message": {
+          "refuse": {
+            "protocol": 1,
+            "reason": "line_mismatch",
+            "side": "initiator"
+          }
+        },
+        "type": "verdict"
+      },
+      "bytes": "434f020301060001"
+    },
+    {
+      "id": "handshake-comline2/verdict-refuse-same_version_differs",
+      "op": "comline2_message",
+      "input": {
+        "message": {
+          "refuse": {
+            "protocol": 1,
+            "reason": "same_version_differs",
+            "side": "initiator"
+          }
+        },
+        "type": "verdict"
+      },
+      "bytes": "434f020301070001"
+    },
+    {
+      "id": "handshake-comline2/verdict-refuse-newer_consumer",
+      "op": "comline2_message",
+      "input": {
+        "message": {
+          "refuse": {
+            "protocol": 1,
+            "reason": "newer_consumer",
+            "side": "initiator"
+          }
+        },
+        "type": "verdict"
+      },
+      "bytes": "434f020301080001"
+    },
+    {
+      "id": "handshake-comline2/verdict-refuse-unknown_protocol",
+      "op": "comline2_message",
+      "input": {
+        "message": {
+          "refuse": {
+            "protocol": 1,
+            "reason": "unknown_protocol",
+            "side": "initiator"
+          }
+        },
+        "type": "verdict"
+      },
+      "bytes": "434f020301090001"
+    },
+    {
+      "id": "handshake-comline2/reject-empty",
+      "op": "comline2_message",
+      "bytes": "",
+      "expect": "reject"
+    },
+    {
+      "id": "handshake-comline2/reject-comline1-frame",
+      "op": "comline2_message",
+      "bytes": "434f010100000000000000e6960a06851063366b50a199ba43a44400000000",
+      "expect": "reject"
+    },
+    {
+      "id": "handshake-comline2/reject-bad-magic",
+      "op": "comline2_message",
+      "bytes": "584f0201000123456789abcdef0123456789abcdef00030000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a00300010201000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001",
+      "expect": "reject"
+    },
+    {
+      "id": "handshake-comline2/reject-unknown-type",
+      "op": "comline2_message",
+      "bytes": "434f0209000123456789abcdef0123456789abcdef00030000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a00300010201000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001",
+      "expect": "reject"
+    },
+    {
+      "id": "handshake-comline2/reject-unknown-exchange",
+      "op": "comline2_message",
+      "bytes": "434f0201020123456789abcdef0123456789abcdef00030000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a00300010201000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001",
+      "expect": "reject"
+    },
+    {
+      "id": "handshake-comline2/reject-truncated",
+      "op": "comline2_message",
+      "bytes": "434f0201000123456789abcdef0123456789abcdef00030000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a00300010201000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b00200",
+      "expect": "reject"
+    },
+    {
+      "id": "handshake-comline2/reject-trailing",
+      "op": "comline2_message",
+      "bytes": "434f0201000123456789abcdef0123456789abcdef00030000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a00300010201000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b002000100",
+      "expect": "reject"
+    },
+    {
+      "id": "handshake-comline2/reject-unsorted-protocols",
+      "op": "comline2_message",
+      "bytes": "434f0201000123456789abcdef0123456789abcdef00030000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330201000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b002000100000200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a003000102",
+      "expect": "reject"
+    },
+    {
+      "id": "handshake-comline2/reject-repeated-function",
+      "op": "comline2_message",
+      "bytes": "434f0201000123456789abcdef0123456789abcdef00030000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a002010101000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001",
+      "expect": "reject"
+    },
+    {
+      "id": "handshake-comline2/reject-unknown-reason",
+      "op": "comline2_message",
+      "bytes": "434f0203010a00",
+      "expect": "reject"
+    },
+    {
+      "id": "handshake-comline2/reject-unknown-side",
+      "op": "comline2_message",
+      "bytes": "434f0203010402",
+      "expect": "reject"
+    },
+    {
+      "id": "handshake-comline2/reject-overlong-number",
+      "op": "comline2_message",
+      "bytes": "434f02030106008000",
+      "expect": "reject"
+    },
+    {
+      "id": "handshake-comline2/offer-accept",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "accept": {
+              "protocols": [
+                {
+                  "number": 0,
+                  "status": {
+                    "accepted": {
+                      "missing": [],
+                      "shape_differs": false
+                    }
+                  }
+                },
+                {
+                  "number": 1,
+                  "status": {
+                    "accepted": {
+                      "missing": [],
+                      "shape_differs": false
+                    }
+                  }
+                }
+              ],
+              "version": {
+                "major": 0,
+                "minor": 3,
+                "patch": 0
+              }
+            }
+          },
+          "type": "answer"
+        },
+        "result": {
+          "accepted": {
+            "peer_version": {
+              "major": 0,
+              "minor": 3,
+              "patch": 0
+            },
+            "protocols": [
+              {
+                "number": 0,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "step": "answer_offer"
+      },
+      "bytes": "434f0201000123456789abcdef0123456789abcdef00030000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a00300010201000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001"
+    },
+    {
+      "id": "handshake-comline2/offer-newer-consumer-degrade",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "accept": {
+              "protocols": [
+                {
+                  "number": 0,
+                  "status": {
+                    "accepted": {
+                      "missing": [
+                        3
+                      ],
+                      "shape_differs": true
+                    }
+                  }
+                },
+                {
+                  "number": 1,
+                  "status": {
+                    "accepted": {
+                      "missing": [],
+                      "shape_differs": false
+                    }
+                  }
+                }
+              ],
+              "version": {
+                "major": 0,
+                "minor": 3,
+                "patch": 0
+              }
+            }
+          },
+          "type": "answer"
+        },
+        "result": {
+          "accepted": {
+            "peer_version": {
+              "major": 0,
+              "minor": 4,
+              "patch": 0
+            },
+            "protocols": [
+              {
+                "number": 0,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "step": "answer_offer"
+      },
+      "bytes": "434f0201000123456789abcdef0123456789abcdef00040000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000200a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1040001020301000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001"
+    },
+    {
+      "id": "handshake-comline2/offer-newer-consumer-refuse",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "refuse",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "accept": {
+              "protocols": [
+                {
+                  "number": 0,
+                  "status": {
+                    "refused": {
+                      "reason": "newer_consumer"
+                    }
+                  }
+                },
+                {
+                  "number": 1,
+                  "status": {
+                    "accepted": {
+                      "missing": [],
+                      "shape_differs": false
+                    }
+                  }
+                }
+              ],
+              "version": {
+                "major": 0,
+                "minor": 3,
+                "patch": 0
+              }
+            }
+          },
+          "type": "answer"
+        },
+        "result": {
+          "accepted": {
+            "peer_version": {
+              "major": 0,
+              "minor": 4,
+              "patch": 0
+            },
+            "protocols": [
+              {
+                "number": 0,
+                "state": {
+                  "refused": {
+                    "reason": "newer_consumer"
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "step": "answer_offer"
+      },
+      "bytes": "434f0201000123456789abcdef0123456789abcdef00040000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000200a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1040001020301000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001"
+    },
+    {
+      "id": "handshake-comline2/offer-newer-consumer-refuse-package",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "refuse",
+          "same_version_differs": "refuse",
+          "scope": "package"
+        },
+        "reply": {
+          "message": {
+            "refuse": {
+              "protocol": 0,
+              "reason": "newer_consumer",
+              "side": "responder"
+            }
+          },
+          "type": "answer"
+        },
+        "result": {
+          "refused": {
+            "protocol": 0,
+            "reason": "newer_consumer",
+            "side": "responder"
+          }
+        },
+        "step": "answer_offer"
+      },
+      "bytes": "434f0201000123456789abcdef0123456789abcdef00040000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000200a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1040001020301000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001"
+    },
+    {
+      "id": "handshake-comline2/offer-older-consumer",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "accept": {
+              "protocols": [
+                {
+                  "number": 0,
+                  "status": {
+                    "accepted": {
+                      "missing": [],
+                      "shape_differs": true
+                    }
+                  }
+                },
+                {
+                  "number": 1,
+                  "status": {
+                    "accepted": {
+                      "missing": [],
+                      "shape_differs": false
+                    }
+                  }
+                }
+              ],
+              "version": {
+                "major": 0,
+                "minor": 3,
+                "patch": 0
+              }
+            }
+          },
+          "type": "answer"
+        },
+        "result": {
+          "accepted": {
+            "peer_version": {
+              "major": 0,
+              "minor": 2,
+              "patch": 5
+            },
+            "protocols": [
+              {
+                "number": 0,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": [
+                      2
+                    ]
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "step": "answer_offer"
+      },
+      "bytes": "434f0201000123456789abcdef0123456789abcdef00020500030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000200a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a202000101000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001"
+    },
+    {
+      "id": "handshake-comline2/offer-line-mismatch",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "accept": {
+              "protocols": [
+                {
+                  "number": 0,
+                  "status": {
+                    "refused": {
+                      "reason": "line_mismatch"
+                    }
+                  }
+                },
+                {
+                  "number": 1,
+                  "status": {
+                    "accepted": {
+                      "missing": [],
+                      "shape_differs": false
+                    }
+                  }
+                }
+              ],
+              "version": {
+                "major": 0,
+                "minor": 3,
+                "patch": 0
+              }
+            }
+          },
+          "type": "answer"
+        },
+        "result": {
+          "accepted": {
+            "peer_version": {
+              "major": 0,
+              "minor": 4,
+              "patch": 0
+            },
+            "protocols": [
+              {
+                "number": 0,
+                "state": {
+                  "refused": {
+                    "reason": "line_mismatch"
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "step": "answer_offer"
+      },
+      "bytes": "434f0201000123456789abcdef0123456789abcdef00040000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000400a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a00300010201000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001"
+    },
+    {
+      "id": "handshake-comline2/offer-line-mismatch-package",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "package"
+        },
+        "reply": {
+          "message": {
+            "refuse": {
+              "protocol": 0,
+              "reason": "line_mismatch",
+              "side": "responder"
+            }
+          },
+          "type": "answer"
+        },
+        "result": {
+          "refused": {
+            "protocol": 0,
+            "reason": "line_mismatch",
+            "side": "responder"
+          }
+        },
+        "step": "answer_offer"
+      },
+      "bytes": "434f0201000123456789abcdef0123456789abcdef00040000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000400a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a00300010201000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001"
+    },
+    {
+      "id": "handshake-comline2/offer-same-version-differs-refuse",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "accept": {
+              "protocols": [
+                {
+                  "number": 0,
+                  "status": {
+                    "refused": {
+                      "reason": "same_version_differs"
+                    }
+                  }
+                },
+                {
+                  "number": 1,
+                  "status": {
+                    "accepted": {
+                      "missing": [],
+                      "shape_differs": false
+                    }
+                  }
+                }
+              ],
+              "version": {
+                "major": 0,
+                "minor": 3,
+                "patch": 0
+              }
+            }
+          },
+          "type": "answer"
+        },
+        "result": {
+          "accepted": {
+            "peer_version": {
+              "major": 0,
+              "minor": 3,
+              "patch": 0
+            },
+            "protocols": [
+              {
+                "number": 0,
+                "state": {
+                  "refused": {
+                    "reason": "same_version_differs"
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "step": "answer_offer"
+      },
+      "bytes": "434f0201000123456789abcdef0123456789abcdef00030000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000200a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a90300010201000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001"
+    },
+    {
+      "id": "handshake-comline2/offer-same-version-differs-warn",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "degrade",
+          "same_version_differs": "warn",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "accept": {
+              "protocols": [
+                {
+                  "number": 0,
+                  "status": {
+                    "accepted": {
+                      "missing": [],
+                      "shape_differs": true
+                    }
+                  }
+                },
+                {
+                  "number": 1,
+                  "status": {
+                    "accepted": {
+                      "missing": [],
+                      "shape_differs": false
+                    }
+                  }
+                }
+              ],
+              "version": {
+                "major": 0,
+                "minor": 3,
+                "patch": 0
+              }
+            }
+          },
+          "type": "answer"
+        },
+        "result": {
+          "accepted": {
+            "peer_version": {
+              "major": 0,
+              "minor": 3,
+              "patch": 0
+            },
+            "protocols": [
+              {
+                "number": 0,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              }
+            ],
+            "warnings": [
+              0
+            ]
+          }
+        },
+        "step": "answer_offer"
+      },
+      "bytes": "434f0201000123456789abcdef0123456789abcdef00030000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000200a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a90300010201000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001"
+    },
+    {
+      "id": "handshake-comline2/offer-unknown-protocol",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "package"
+        },
+        "reply": {
+          "message": {
+            "accept": {
+              "protocols": [
+                {
+                  "number": 0,
+                  "status": {
+                    "accepted": {
+                      "missing": [],
+                      "shape_differs": false
+                    }
+                  }
+                },
+                {
+                  "number": 1,
+                  "status": {
+                    "accepted": {
+                      "missing": [],
+                      "shape_differs": false
+                    }
+                  }
+                },
+                {
+                  "number": 7,
+                  "status": {
+                    "refused": {
+                      "reason": "unknown_protocol"
+                    }
+                  }
+                }
+              ],
+              "version": {
+                "major": 0,
+                "minor": 3,
+                "patch": 0
+              }
+            }
+          },
+          "type": "answer"
+        },
+        "result": {
+          "accepted": {
+            "peer_version": {
+              "major": 0,
+              "minor": 3,
+              "patch": 0
+            },
+            "protocols": [
+              {
+                "number": 0,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "step": "answer_offer"
+      },
+      "bytes": "434f0201000123456789abcdef0123456789abcdef00030000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330300000200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a00300010201000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b002000107000300c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c00100"
+    },
+    {
+      "id": "handshake-comline2/offer-only-unknown-protocols",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "refuse": {
+              "protocol": 0,
+              "reason": "unknown_protocol",
+              "side": "responder"
+            }
+          },
+          "type": "answer"
+        },
+        "result": {
+          "refused": {
+            "protocol": 0,
+            "reason": "unknown_protocol",
+            "side": "responder"
+          }
+        },
+        "step": "answer_offer"
+      },
+      "bytes": "434f0201000123456789abcdef0123456789abcdef00030000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330107000300c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c00100"
+    },
+    {
+      "id": "handshake-comline2/offer-package-mismatch",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "refuse": {
+              "reason": "package_mismatch",
+              "side": "responder"
+            }
+          },
+          "type": "answer"
+        },
+        "result": {
+          "refused": {
+            "reason": "package_mismatch",
+            "side": "responder"
+          }
+        },
+        "step": "answer_offer"
+      },
+      "bytes": "434f020100eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee00030000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a00300010201000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001"
+    },
+    {
+      "id": "handshake-comline2/offer-encoding-mismatch",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "refuse": {
+              "reason": "encoding_mismatch",
+              "side": "responder"
+            }
+          },
+          "type": "answer"
+        },
+        "result": {
+          "refused": {
+            "reason": "encoding_mismatch",
+            "side": "responder"
+          }
+        },
+        "step": "answer_offer"
+      },
+      "bytes": "434f0201000123456789abcdef0123456789abcdef00030000030012121212121212121212121212121212012222222222222222222222222222222202333333333333333333333333333333330200000200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a00300010201000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001"
+    },
+    {
+      "id": "handshake-comline2/offer-exchange-mismatch",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "refuse": {
+              "reason": "exchange_mismatch",
+              "side": "responder"
+            }
+          },
+          "type": "answer"
+        },
+        "result": {
+          "refused": {
+            "reason": "exchange_mismatch",
+            "side": "responder"
+          }
+        },
+        "step": "answer_offer"
+      },
+      "bytes": "434f0201010123456789abcdef0123456789abcdef00030000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a00300010201000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001"
+    },
+    {
+      "id": "handshake-comline2/offer-malformed",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "refuse": {
+              "reason": "malformed",
+              "side": "responder"
+            }
+          },
+          "type": "answer"
+        },
+        "result": {
+          "refused": {
+            "reason": "malformed",
+            "side": "responder"
+          }
+        },
+        "step": "answer_offer"
+      },
+      "bytes": "68656c6c6f"
+    },
+    {
+      "id": "handshake-comline2/offer-handshake-version",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "refuse": {
+              "reason": "handshake_version",
+              "side": "responder"
+            }
+          },
+          "type": "answer"
+        },
+        "result": {
+          "refused": {
+            "reason": "handshake_version",
+            "side": "responder"
+          }
+        },
+        "step": "answer_offer"
+      },
+      "bytes": "434f010100000000000000e6960a06851063366b50a199ba43a44400000000"
+    },
+    {
+      "id": "handshake-comline2/conclude-accept",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "accept": {
+              "refused": []
+            }
+          },
+          "type": "verdict"
+        },
+        "result": {
+          "accepted": {
+            "peer_version": {
+              "major": 0,
+              "minor": 3,
+              "patch": 0
+            },
+            "protocols": [
+              {
+                "number": 0,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "step": "conclude_answer"
+      },
+      "bytes": "434f0202000003000002000000010000"
+    },
+    {
+      "id": "handshake-comline2/conclude-degrade",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "accept": {
+              "refused": []
+            }
+          },
+          "type": "verdict"
+        },
+        "result": {
+          "accepted": {
+            "peer_version": {
+              "major": 0,
+              "minor": 2,
+              "patch": 1
+            },
+            "protocols": [
+              {
+                "number": 0,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": [
+                      2
+                    ]
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "step": "conclude_answer"
+      },
+      "bytes": "434f020200000201000200010102010000"
+    },
+    {
+      "id": "handshake-comline2/conclude-newer-consumer-refuse",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "refuse",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "accept": {
+              "refused": [
+                {
+                  "number": 0,
+                  "reason": "newer_consumer"
+                }
+              ]
+            }
+          },
+          "type": "verdict"
+        },
+        "result": {
+          "accepted": {
+            "peer_version": {
+              "major": 0,
+              "minor": 2,
+              "patch": 1
+            },
+            "protocols": [
+              {
+                "number": 0,
+                "state": {
+                  "refused": {
+                    "reason": "newer_consumer"
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "step": "conclude_answer"
+      },
+      "bytes": "434f020200000201000200010102010000"
+    },
+    {
+      "id": "handshake-comline2/conclude-newer-consumer-refuse-package",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "refuse",
+          "same_version_differs": "refuse",
+          "scope": "package"
+        },
+        "reply": {
+          "message": {
+            "refuse": {
+              "protocol": 0,
+              "reason": "newer_consumer",
+              "side": "initiator"
+            }
+          },
+          "type": "verdict"
+        },
+        "result": {
+          "refused": {
+            "protocol": 0,
+            "reason": "newer_consumer",
+            "side": "initiator"
+          }
+        },
+        "step": "conclude_answer"
+      },
+      "bytes": "434f020200000201000200010102010000"
+    },
+    {
+      "id": "handshake-comline2/conclude-same-version-differs-refuse",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "accept": {
+              "refused": [
+                {
+                  "number": 0,
+                  "reason": "same_version_differs"
+                }
+              ]
+            }
+          },
+          "type": "verdict"
+        },
+        "result": {
+          "accepted": {
+            "peer_version": {
+              "major": 0,
+              "minor": 3,
+              "patch": 0
+            },
+            "protocols": [
+              {
+                "number": 0,
+                "state": {
+                  "refused": {
+                    "reason": "same_version_differs"
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "step": "conclude_answer"
+      },
+      "bytes": "434f0202000003000002000100010000"
+    },
+    {
+      "id": "handshake-comline2/conclude-same-version-differs-warn",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "degrade",
+          "same_version_differs": "warn",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "accept": {
+              "refused": []
+            }
+          },
+          "type": "verdict"
+        },
+        "result": {
+          "accepted": {
+            "peer_version": {
+              "major": 0,
+              "minor": 3,
+              "patch": 0
+            },
+            "protocols": [
+              {
+                "number": 0,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              }
+            ],
+            "warnings": [
+              0
+            ]
+          }
+        },
+        "step": "conclude_answer"
+      },
+      "bytes": "434f0202000003000002000100010000"
+    },
+    {
+      "id": "handshake-comline2/conclude-protocol-refused",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "accept": {
+              "refused": []
+            }
+          },
+          "type": "verdict"
+        },
+        "result": {
+          "accepted": {
+            "peer_version": {
+              "major": 0,
+              "minor": 4,
+              "patch": 0
+            },
+            "protocols": [
+              {
+                "number": 0,
+                "state": {
+                  "refused": {
+                    "reason": "line_mismatch"
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "step": "conclude_answer"
+      },
+      "bytes": "434f0202000004000002000206010000"
+    },
+    {
+      "id": "handshake-comline2/conclude-refused",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": null,
+        "result": {
+          "refused": {
+            "reason": "encoding_mismatch",
+            "side": "responder"
+          }
+        },
+        "step": "conclude_answer"
+      },
+      "bytes": "434f0202010501"
+    },
+    {
+      "id": "handshake-comline2/conclude-malformed",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "refuse": {
+              "reason": "malformed",
+              "side": "initiator"
+            }
+          },
+          "type": "verdict"
+        },
+        "result": {
+          "refused": {
+            "reason": "malformed",
+            "side": "initiator"
+          }
+        },
+        "step": "conclude_answer"
+      },
+      "bytes": "434f02"
+    },
+    {
+      "id": "handshake-comline2/conclude-exchange-mismatch",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "offer",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "offer",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "refuse": {
+              "reason": "exchange_mismatch",
+              "side": "initiator"
+            }
+          },
+          "type": "verdict"
+        },
+        "result": {
+          "refused": {
+            "reason": "exchange_mismatch",
+            "side": "initiator"
+          }
+        },
+        "step": "conclude_answer"
+      },
+      "bytes": "434f0201010123456789abcdef0123456789abcdef00030000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a00300010201000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001"
+    },
+    {
+      "id": "handshake-comline2/symmetric-accept",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "symmetric",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "symmetric",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "accept": {
+              "refused": []
+            }
+          },
+          "type": "verdict"
+        },
+        "result": {
+          "accepted": {
+            "peer_version": {
+              "major": 0,
+              "minor": 3,
+              "patch": 0
+            },
+            "protocols": [
+              {
+                "number": 0,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "side": "initiator",
+        "step": "judge_hello"
+      },
+      "bytes": "434f0201010123456789abcdef0123456789abcdef00030000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a00300010201000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001"
+    },
+    {
+      "id": "handshake-comline2/symmetric-initiator-degrade",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "symmetric",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "symmetric",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "accept": {
+              "refused": []
+            }
+          },
+          "type": "verdict"
+        },
+        "result": {
+          "accepted": {
+            "peer_version": {
+              "major": 0,
+              "minor": 2,
+              "patch": 9
+            },
+            "protocols": [
+              {
+                "number": 0,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": [
+                      1
+                    ]
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "side": "initiator",
+        "step": "judge_hello"
+      },
+      "bytes": "434f0201010123456789abcdef0123456789abcdef00020900030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000200a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a302000201000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001"
+    },
+    {
+      "id": "handshake-comline2/symmetric-responder-newer-consumer-refuse",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "symmetric",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "symmetric",
+          "newer_consumer": "refuse",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "accept": {
+              "refused": [
+                {
+                  "number": 0,
+                  "reason": "newer_consumer"
+                }
+              ]
+            }
+          },
+          "type": "verdict"
+        },
+        "result": {
+          "accepted": {
+            "peer_version": {
+              "major": 0,
+              "minor": 4,
+              "patch": 0
+            },
+            "protocols": [
+              {
+                "number": 0,
+                "state": {
+                  "refused": {
+                    "reason": "newer_consumer"
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "side": "responder",
+        "step": "judge_hello"
+      },
+      "bytes": "434f0201010123456789abcdef0123456789abcdef00040000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000200a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1040001020301000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001"
+    },
+    {
+      "id": "handshake-comline2/symmetric-line-mismatch",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "symmetric",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "symmetric",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "accept": {
+              "refused": [
+                {
+                  "number": 0,
+                  "reason": "line_mismatch"
+                }
+              ]
+            }
+          },
+          "type": "verdict"
+        },
+        "result": {
+          "accepted": {
+            "peer_version": {
+              "major": 0,
+              "minor": 4,
+              "patch": 0
+            },
+            "protocols": [
+              {
+                "number": 0,
+                "state": {
+                  "refused": {
+                    "reason": "line_mismatch"
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "side": "responder",
+        "step": "judge_hello"
+      },
+      "bytes": "434f0201010123456789abcdef0123456789abcdef00040000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000400a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a00300010201000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001"
+    },
+    {
+      "id": "handshake-comline2/symmetric-unknown-protocol",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "symmetric",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "symmetric",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "accept": {
+              "refused": [
+                {
+                  "number": 1,
+                  "reason": "unknown_protocol"
+                }
+              ]
+            }
+          },
+          "type": "verdict"
+        },
+        "result": {
+          "accepted": {
+            "peer_version": {
+              "major": 0,
+              "minor": 3,
+              "patch": 0
+            },
+            "protocols": [
+              {
+                "number": 0,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "state": {
+                  "refused": {
+                    "reason": "unknown_protocol"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "side": "initiator",
+        "step": "judge_hello"
+      },
+      "bytes": "434f0201010123456789abcdef0123456789abcdef00030000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330100000200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a003000102"
+    },
+    {
+      "id": "handshake-comline2/symmetric-same-version-differs-warn",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "symmetric",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "symmetric",
+          "newer_consumer": "degrade",
+          "same_version_differs": "warn",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "accept": {
+              "refused": []
+            }
+          },
+          "type": "verdict"
+        },
+        "result": {
+          "accepted": {
+            "peer_version": {
+              "major": 0,
+              "minor": 3,
+              "patch": 0
+            },
+            "protocols": [
+              {
+                "number": 0,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              }
+            ],
+            "warnings": [
+              0
+            ]
+          }
+        },
+        "side": "responder",
+        "step": "judge_hello"
+      },
+      "bytes": "434f0201010123456789abcdef0123456789abcdef00030000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000200a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a90300010201000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001"
+    },
+    {
+      "id": "handshake-comline2/symmetric-exchange-mismatch",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "symmetric",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "symmetric",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": {
+          "message": {
+            "refuse": {
+              "reason": "exchange_mismatch",
+              "side": "responder"
+            }
+          },
+          "type": "verdict"
+        },
+        "result": {
+          "refused": {
+            "reason": "exchange_mismatch",
+            "side": "responder"
+          }
+        },
+        "side": "responder",
+        "step": "judge_hello"
+      },
+      "bytes": "434f0201000123456789abcdef0123456789abcdef00030000030011111111111111111111111111111111012222222222222222222222222222222202333333333333333333333333333333330200000200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a00300010201000100b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0020001"
+    },
+    {
+      "id": "handshake-comline2/symmetric-peer-refused",
+      "op": "comline2_negotiate",
+      "input": {
+        "local": {
+          "encodings": [
+            {
+              "kind": "format",
+              "param_hash": "11111111111111111111111111111111"
+            },
+            {
+              "kind": "framing",
+              "param_hash": "22222222222222222222222222222222"
+            },
+            {
+              "kind": "handshake",
+              "param_hash": "33333333333333333333333333333333"
+            }
+          ],
+          "exchange": "symmetric",
+          "package_id": "0123456789abcdef0123456789abcdef",
+          "protocols": [
+            {
+              "functions": [
+                0,
+                1,
+                2
+              ],
+              "line": {
+                "major": 0,
+                "minor": 2,
+                "patch": 0
+              },
+              "number": 0,
+              "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
+            },
+            {
+              "functions": [
+                0,
+                1
+              ],
+              "line": {
+                "major": 0,
+                "minor": 1,
+                "patch": 0
+              },
+              "number": 1,
+              "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+            }
+          ],
+          "version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          }
+        },
+        "params": {
+          "exchange": "symmetric",
+          "newer_consumer": "degrade",
+          "same_version_differs": "refuse",
+          "scope": "protocol"
+        },
+        "reply": null,
+        "result": {
+          "refused": {
+            "reason": "exchange_mismatch",
+            "side": "responder"
+          }
+        },
+        "side": "initiator",
+        "step": "judge_hello"
+      },
+      "bytes": "434f0202010301"
+    },
+    {
+      "id": "handshake-comline2/finish-accept",
+      "op": "comline2_negotiate",
+      "input": {
+        "pending": {
+          "peer_version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          },
+          "protocols": [
+            {
+              "number": 0,
+              "state": {
+                "accepted": {
+                  "peer_lacks": [
+                    2
+                  ]
+                }
+              }
+            },
+            {
+              "number": 1,
+              "state": {
+                "accepted": {
+                  "peer_lacks": []
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "accepted": {
+            "peer_version": {
+              "major": 0,
+              "minor": 3,
+              "patch": 0
+            },
+            "protocols": [
+              {
+                "number": 0,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": [
+                      2
+                    ]
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "side": "responder",
+        "step": "finish"
+      },
+      "bytes": "434f02030000"
+    },
+    {
+      "id": "handshake-comline2/finish-accept-refusing",
+      "op": "comline2_negotiate",
+      "input": {
+        "pending": {
+          "peer_version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          },
+          "protocols": [
+            {
+              "number": 0,
+              "state": {
+                "accepted": {
+                  "peer_lacks": [
+                    2
+                  ]
+                }
+              }
+            },
+            {
+              "number": 1,
+              "state": {
+                "accepted": {
+                  "peer_lacks": []
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "accepted": {
+            "peer_version": {
+              "major": 0,
+              "minor": 3,
+              "patch": 0
+            },
+            "protocols": [
+              {
+                "number": 0,
+                "state": {
+                  "refused": {
+                    "reason": "newer_consumer"
+                  }
+                }
+              },
+              {
+                "number": 1,
+                "state": {
+                  "accepted": {
+                    "peer_lacks": []
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "side": "responder",
+        "step": "finish"
+      },
+      "bytes": "434f020300010008"
+    },
+    {
+      "id": "handshake-comline2/finish-refused",
+      "op": "comline2_negotiate",
+      "input": {
+        "pending": {
+          "peer_version": {
+            "major": 0,
+            "minor": 3,
+            "patch": 0
+          },
+          "protocols": [
+            {
+              "number": 0,
+              "state": {
+                "accepted": {
+                  "peer_lacks": [
+                    2
+                  ]
+                }
+              }
+            },
+            {
+              "number": 1,
+              "state": {
+                "accepted": {
+                  "peer_lacks": []
+                }
+              }
+            }
+          ]
+        },
+        "result": {
+          "refused": {
+            "protocol": 0,
+            "reason": "same_version_differs",
+            "side": "responder"
+          }
+        },
+        "side": "initiator",
+        "step": "finish"
+      },
+      "bytes": "434f020301070100"
+    }
+  ]
+}

@@ -17,6 +17,7 @@ export type RuntimeErrorKind =
   | "transport" // the transport failed to send or receive
   | "serialization" // a payload would not encode / decode against its type
   | "framing" // the call frame was malformed
+  | "peerRefused" // the peer says it couldn't read a request, and not which (JSON-RPC's `null` id)
   | "timeout" // no response within the call's window
   | "unknownCall" // the peer addressed a call this side does not have
   | "remote" // the peer raised a schema error this side's code does not know
@@ -60,6 +61,9 @@ export class RuntimeError extends Error {
   }
   static framing(): RuntimeError {
     return new RuntimeError("framing");
+  }
+  static peerRefused(): RuntimeError {
+    return new RuntimeError("peerRefused");
   }
   static timeout(): RuntimeError {
     return new RuntimeError("timeout");
@@ -327,6 +331,11 @@ export interface ConnectionFraming {
   ): Uint8Array;
   encodeReply(protocol: number, requestId: bigint, reply: Envelope): Uint8Array;
   decode(frame: Uint8Array): Frame | undefined;
+  /**
+   * Whether `frame`, which {@link ConnectionFraming.decode} refused, is the peer
+   * saying it couldn't read a request, without saying which.
+   */
+  isPeerRefusal?(frame: Uint8Array): boolean;
 }
 
 /** A decoded response frame: the correlation id and its {@link Envelope}. */
@@ -360,4 +369,9 @@ export interface Framing {
    */
   encodeResponseFault(requestId: bigint): Uint8Array;
   decodeResponse(frame: Uint8Array): DecodedResponse | undefined;
+  /**
+   * Whether `frame`, which {@link Framing.decodeResponse} refused, is the peer
+   * saying it couldn't read a request, without saying which.
+   */
+  isPeerRefusal?(frame: Uint8Array): boolean;
 }

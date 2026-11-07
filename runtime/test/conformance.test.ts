@@ -59,7 +59,9 @@ function run(c: Case): Outcome {
         ? { pass: true }
         : { fail: `accepted bytes it must reject, as ${canon(got)}` };
     }
-    if (c.op !== "decode" && c.op !== "handshake_check") {
+    // `"expect": "accept"` (spec 0.7) asks only to decode: a frame this runtime
+    // must read and has no reason to write.
+    if (c.op !== "decode" && c.op !== "handshake_check" && c.op !== "peer_refusal" && c.expect !== "accept") {
       const encoded = encode(c);
       if (!matches(c, encoded, c.bytes)) {
         return { fail: `encodes to ${show(encoded)}, expected ${show(bytes)}` };

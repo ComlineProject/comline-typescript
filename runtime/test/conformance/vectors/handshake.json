@@ -1,4 +1,5 @@
 {
+  "$schema": "../specs/gen/vectors.schema.json",
   "feature": "handshake",
   "cases": [
     {
@@ -44,6 +45,17 @@
         "wire_format": "packed@1"
       },
       "bytes": "434f010807060504030201e6960a0685106336b84ea199ba42a44400000000"
+    },
+    {
+      "id": "handshake/packed-datagram3",
+      "op": "handshake",
+      "input": {
+        "capabilities": 0,
+        "framing": "datagram@3",
+        "ir_hash": "72623859790382856",
+        "wire_format": "packed@1"
+      },
+      "bytes": "434f010807060504030201e6960a06851063366b50a199ba43a44400000000"
     },
     {
       "id": "handshake/json-jsonrpc",

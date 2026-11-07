@@ -28,6 +28,8 @@ export function statusError(status: number, kind: RuntimeErrorKind): RuntimeErro
     case Status.ERR_FRAMING:
     case Status.ERR_UNKNOWN_FRAMING:
       return RuntimeError.framing();
+    case Status.ERR_PEER_REFUSED:
+      return RuntimeError.peerRefused();
     case Status.ERR_HANDSHAKE:
       return RuntimeError.handshake();
     case Status.ERR_FRAME_TOO_LARGE:

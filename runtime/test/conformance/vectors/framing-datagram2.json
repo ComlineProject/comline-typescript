@@ -1,4 +1,5 @@
 {
+  "$schema": "../specs/gen/vectors.schema.json",
   "feature": "framing-datagram2",
   "cases": [
     {
@@ -55,6 +56,52 @@
         "request_id": "18446744073709551615"
       },
       "bytes": "00ffff03ffffffffffffffffffff5b5d"
+    },
+    {
+      "id": "framing-datagram2/request-params-msgpack",
+      "op": "request",
+      "input": {
+        "call_id": 3,
+        "format": "msgpack@1",
+        "framing": "datagram@2",
+        "method": "greet",
+        "params": {
+          "array": [
+            {
+              "u32": 7
+            },
+            {
+              "string": "x"
+            }
+          ]
+        },
+        "protocol": 0,
+        "request_id": "42"
+      },
+      "bytes": "000003002a000000000000009207a178"
+    },
+    {
+      "id": "framing-datagram2/request-params-packed",
+      "op": "request",
+      "input": {
+        "call_id": 3,
+        "format": "packed@1",
+        "framing": "datagram@2",
+        "method": "greet",
+        "params": {
+          "array": [
+            {
+              "u32": 7
+            },
+            {
+              "string": "x"
+            }
+          ]
+        },
+        "protocol": 0,
+        "request_id": "42"
+      },
+      "bytes": "000003002a0000000000000002070000000178"
     },
     {
       "id": "framing-datagram2/response-ok",

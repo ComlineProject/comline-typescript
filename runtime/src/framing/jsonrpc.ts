@@ -73,6 +73,24 @@ function u64(node: JsonNode | undefined): bigint | undefined {
 }
 
 /**
+ * A JSON-RPC 2.0 error whose `id` is `null`, which is how the specification has
+ * a peer answer a request it couldn't read. No other frame has a `null` id: a
+ * request's is refused, and so is a `result`'s. Matches
+ * `comline_runtime`'s `is_peer_refusal`.
+ */
+function isPeerRefusal(frame: Uint8Array): boolean {
+  const r = members(frame);
+  if (r?.members.get("id")?.kind !== "null") return false;
+  const result = r.members.get("result");
+  if (result && result.kind !== "null") return false;
+  const error = r.members.get("error");
+  if (error?.kind !== "object" || repeats(error.repeated, ERROR_MEMBERS)) return false;
+  if (error.members.get("message")?.kind !== "string") return false;
+  const code = jsonInteger(error.members.get("code"));
+  return code !== undefined && code >= I64_MIN && code <= I64_MAX;
+}
+
+/**
  * [JSON-RPC 2.0](https://www.jsonrpc.org/specification) framing — name-oriented,
  * human-readable. Pair with {@link JsonCodec}. Matches
  * `comline_runtime::framing::JsonRpcFraming`:
@@ -159,6 +177,10 @@ export class JsonRpcFraming implements Framing {
     }
     return { requestId, envelope: { ok: raw(r.text, r.members.get("result")) } };
   }
+
+  isPeerRefusal(frame: Uint8Array): boolean {
+    return isPeerRefusal(frame);
+  }
 }
 
 /**
@@ -204,5 +226,9 @@ export class JsonRpcConnectionFraming implements ConnectionFraming {
     }
     const response = this.frames.decodeResponse(frame);
     return response && { kind: "reply", protocol: undefined, ...response };
+  }
+
+  isPeerRefusal(frame: Uint8Array): boolean {
+    return isPeerRefusal(frame);
   }
 }

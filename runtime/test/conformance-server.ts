@@ -31,6 +31,7 @@ const CORPUS_OPS = [
   "envelope",
   "request",
   "response",
+  "peer_refusal",
   "encode",
   "decode",
   "stream_prefix",
@@ -38,7 +39,7 @@ const CORPUS_OPS = [
 ] as const;
 
 const ENCODE_ONLY = new Set(["name_hash", "encode"]);
-const DECODE_ONLY = new Set(["decode", "handshake_check"]);
+const DECODE_ONLY = new Set(["decode", "handshake_check", "peer_refusal"]);
 
 export const FORMATS = [FORMAT_JSON, FORMAT_PACKED];
 export const FRAMINGS = [FRAMING_DATAGRAM, FRAMING_DATAGRAM2, FRAMING_JSONRPC];

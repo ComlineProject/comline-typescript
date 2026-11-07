@@ -1,4 +1,5 @@
 {
+  "$schema": "../specs/gen/profile.schema.json",
   "name": "datagram@2",
   "kind": "framing",
   "facts": {
@@ -13,6 +14,13 @@
       "value": "by_ordinal",
       "proven_by": [
         "framing-datagram2/response-err"
+      ]
+    },
+    "payload": {
+      "value": "opaque",
+      "proven_by": [
+        "framing-datagram2/request-params-msgpack",
+        "framing-datagram2/request-params-packed"
       ]
     }
   }

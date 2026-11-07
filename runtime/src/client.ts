@@ -60,8 +60,9 @@ export class Client {
     await this.transport.send(
       this.framing.encodeRequest(call, requestId, this.codec.encode(params, options?.layout)),
     );
-    const res = this.framing.decodeResponse(await this.transport.recv());
-    if (!res) throw RuntimeError.framing();
+    const frame = await this.transport.recv();
+    const res = this.framing.decodeResponse(frame);
+    if (!res) throw this.framing.isPeerRefusal?.(frame) ? RuntimeError.peerRefused() : RuntimeError.framing();
     if (res.requestId !== requestId) throw RuntimeError.framing();
     return res.envelope;
   }

@@ -163,6 +163,40 @@ test("JSON-RPC leaves params out when there are none, and still reads null as no
   }
 });
 
+test("JSON-RPC reads an error with a null id as the peer refusing, and nothing else", () => {
+  const f = new JsonRpcFraming();
+  const conn = new JsonRpcConnectionFraming();
+  for (const frame of [
+    `{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":null}`,
+    `{"id":null,"error":{"code":-32600,"message":"x","data":[1]},"jsonrpc":"2.0"}`,
+    `{"jsonrpc":"2.0","error":{"code":-32700,"message":"x"},"x":1,"id":null}`,
+    `{"jsonrpc":"2.0","result":null,"error":{"code":-32700,"message":"x"},"id":null}`,
+  ]) {
+    const bytes = enc.encode(frame);
+    assert.equal(f.decodeResponse(bytes), undefined, frame);
+    assert.equal(conn.decode(bytes), undefined, frame);
+    assert.ok(f.isPeerRefusal(bytes), frame);
+    assert.ok(conn.isPeerRefusal(bytes), frame);
+  }
+  for (const frame of [
+    `{"jsonrpc":"2.0","error":{"code":-32700,"message":"x"},"id":1}`,
+    `{"jsonrpc":"2.0","error":{"code":-32700,"message":"x"}}`,
+    `{"jsonrpc":"2.0","result":1,"id":null}`,
+    `{"jsonrpc":"2.0","error":null,"id":null}`,
+    `{"jsonrpc":"2.0","id":null}`,
+    `{"jsonrpc":"2.0","result":1,"error":{"code":1,"message":"x"},"id":null}`,
+    `{"jsonrpc":"2.0","error":{"code":-32700},"id":null}`,
+    `{"jsonrpc":"1.0","error":{"code":-32700,"message":"x"},"id":null}`,
+    `{"error":{"code":-32700,"message":"x"},"id":null}`,
+    `{"jsonrpc":"2.0","error":{"code":1,"message":"x"},"id":null,"id":null}`,
+    `{"jsonrpc":"2.0","method":"m","params":[],"id":null}`,
+    "",
+    "{",
+  ]) {
+    assert.ok(!f.isPeerRefusal(enc.encode(frame)), frame);
+  }
+});
+
 test("JSON-RPC ok / err responses carry result / code+data", () => {
   const f = new JsonRpcFraming();
 

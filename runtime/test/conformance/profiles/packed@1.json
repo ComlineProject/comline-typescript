@@ -1,4 +1,5 @@
 {
+  "$schema": "../specs/gen/profile.schema.json",
   "name": "packed@1",
   "kind": "format",
   "facts": {
@@ -37,6 +38,13 @@
       "proven_by": [
         "format-packed/decode-wider-integer",
         "format-packed/decode-wider-integer-overflow"
+      ]
+    },
+    "output": {
+      "value": "bytes",
+      "proven_by": [
+        "format-packed/u8-max",
+        "format-packed/struct"
       ]
     }
   }
