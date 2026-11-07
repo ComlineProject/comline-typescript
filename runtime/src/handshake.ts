@@ -30,6 +30,8 @@ const FNV_PRIME = 0x00000100000001b3n;
 export const FRAMING_DATAGRAM = "datagram@1";
 /** Name of the datagram framing with a request/reply kind and a protocol number ({@link Datagram2Framing}). */
 export const FRAMING_DATAGRAM2 = "datagram@2";
+/** Name of the datagram framing that addresses calls by wire numbers ({@link Datagram3Framing}). */
+export const FRAMING_DATAGRAM3 = "datagram@3";
 
 /** Name of the JSON-RPC 2.0 framing ({@link JsonRpcFraming}). */
 export const FRAMING_JSONRPC = "jsonrpc@1";
@@ -40,6 +42,8 @@ export const FORMAT_PACKED = "packed@1";
 
 /** Name of Comline's own handshake ({@link ComlineHandshake}). */
 export const HANDSHAKE_COMLINE = "comline@1";
+/** Name of the handshake that checks compatibility by each version's facts (`Comline2Handshake`). */
+export const HANDSHAKE_COMLINE2 = "comline@2";
 /** Name of the official "no handshake" choice ({@link NoHandshake}). Unversioned. */
 export const HANDSHAKE_NONE = "none";
 

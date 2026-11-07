@@ -21,7 +21,7 @@ import {
 } from "#core/comline.mjs";
 
 import type { Call, Envelope, Frame, RequestCall } from "../contract.js";
-import { FRAMING_DATAGRAM2, FRAMING_JSONRPC } from "../handshake.js";
+import { FRAMING_DATAGRAM2, FRAMING_DATAGRAM3, FRAMING_JSONRPC } from "../handshake.js";
 import type { Core } from "./core.js";
 
 /**
@@ -66,8 +66,10 @@ export function release(pooled: Uint8Array | undefined): void {
 }
 
 /** Whether the core carries `framing` (the built-in framings the ABI has). */
-export function coreFraming(name: string): name is typeof FRAMING_DATAGRAM2 | typeof FRAMING_JSONRPC {
-  return name === FRAMING_DATAGRAM2 || name === FRAMING_JSONRPC;
+export function coreFraming(
+  name: string,
+): name is typeof FRAMING_DATAGRAM2 | typeof FRAMING_DATAGRAM3 | typeof FRAMING_JSONRPC {
+  return name === FRAMING_DATAGRAM2 || name === FRAMING_DATAGRAM3 || name === FRAMING_JSONRPC;
 }
 
 /**
@@ -83,7 +85,7 @@ export class Wire {
   constructor(
     private readonly core: Core,
     private readonly conn: AbiConnection,
-    private readonly framing: typeof FRAMING_DATAGRAM2 | typeof FRAMING_JSONRPC,
+    private readonly framing: typeof FRAMING_DATAGRAM2 | typeof FRAMING_DATAGRAM3 | typeof FRAMING_JSONRPC,
   ) {}
 
   static open(core: Core, framing: string): Wire | undefined {

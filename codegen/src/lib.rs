@@ -61,6 +61,8 @@ pub const SUPPORT: SupportTable = &[
     (Feature::ExternalStd, Support::supported()),
     (Feature::FramingJsonRpc, Support::supported()),
     (Feature::HandshakeNone, Support::supported()),
+    (Feature::FramingDatagram3, Support::supported()),
+    (Feature::HandshakeComline2, Support::supported()),
     (Feature::Connections, Support::supported()),
     // Conformance's word for "the same output without it" - here because
     // the output is async already.

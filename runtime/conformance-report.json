@@ -278,9 +278,27 @@
       ]
     },
     "framing-datagram3": {
-      "state": "unsupported",
-      "note": "datagram@2 is the connection framing here",
-      "proven_by": []
+      "state": "supported",
+      "proven_by": [
+        "framing-datagram3/request",
+        "framing-datagram3/request-two-byte-numbers",
+        "framing-datagram3/request-large-ids",
+        "framing-datagram3/request-params-msgpack",
+        "framing-datagram3/request-params-packed",
+        "framing-datagram3/response-ok",
+        "framing-datagram3/response-err",
+        "framing-datagram3/response-fault",
+        "framing-datagram3/reject-unknown-kind",
+        "framing-datagram3/reject-overlong-protocol",
+        "framing-datagram3/reject-overlong-function",
+        "framing-datagram3/reject-function-past-u16",
+        "framing-datagram3/reject-reply-as-request",
+        "framing-datagram3/reject-request-as-reply",
+        "framing-datagram3/reject-short-request",
+        "framing-datagram3/reject-reply-without-envelope",
+        "framing-datagram3/reject-response-as-request",
+        "framing-datagram3/reject-request-as-response"
+      ]
     },
     "framing-jsonrpc": {
       "state": "supported",
@@ -370,7 +388,7 @@
     },
     "handshake-comline2": {
       "state": "unsupported",
-      "note": "comline@1 is the handshake here",
+      "note": "Comline2Handshake runs on the Comline core (ABI 0.2), whose C and Node replays in the runtime repo prove these vectors; this harness doesn't drive the core's steps itself yet",
       "proven_by": []
     },
     "name-hash": {

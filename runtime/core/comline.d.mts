@@ -15,7 +15,7 @@
 // false. See `comline.mjs`.
 
 export declare const ABI_MAJOR: 0;
-export declare const ABI_MINOR: 1;
+export declare const ABI_MINOR: 2;
 
 /** `comline_status`. Below 16 is an outcome, 16 and up an error; a number
  * not listed is a code from a newer library. */
@@ -32,17 +32,43 @@ export declare const Status: Readonly<{
   ERR_POISONED: 22;
   ERR_BUSY: 23;
   ERR_PEER_REFUSED: 24;
+  ERR_REFUSED: 25;
+  ERR_UNAVAILABLE: 26;
 }>;
 export type Status = number;
 
-export declare const Handshake: Readonly<{ COMLINE: 0; NONE: 1 }>;
-export declare const EventKind: Readonly<{ HANDSHAKE_OK: 0; REQUEST: 1; REPLY: 2; STALE: 3 }>;
+export declare const Handshake: Readonly<{ COMLINE: 0; NONE: 1; COMLINE2: 2 }>;
+export declare const Side: Readonly<{ INITIATOR: 0; RESPONDER: 1 }>;
+export declare const Scope: Readonly<{ PROTOCOL: 0; PACKAGE: 1 }>;
+export declare const NewerConsumer: Readonly<{ DEGRADE: 0; REFUSE: 1 }>;
+export declare const SameVersionDiffers: Readonly<{ REFUSE: 0; WARN: 1 }>;
+export declare const Exchange: Readonly<{ OFFER: 0; SYMMETRIC: 1 }>;
+export declare const Reason: Readonly<{
+  MALFORMED: 1;
+  HANDSHAKE_VERSION: 2;
+  EXCHANGE_MISMATCH: 3;
+  PACKAGE_MISMATCH: 4;
+  ENCODING_MISMATCH: 5;
+  LINE_MISMATCH: 6;
+  SAME_VERSION_DIFFERS: 7;
+  NEWER_CONSUMER: 8;
+  UNKNOWN_PROTOCOL: 9;
+}>;
+export declare const Comline2Message: Readonly<{ HELLO: 1; ANSWER: 2; VERDICT: 3 }>;
+export declare const EventKind: Readonly<{
+  HANDSHAKE_OK: 0;
+  REQUEST: 1;
+  REPLY: 2;
+  STALE: 3;
+  HANDSHAKE_CONTINUE: 4;
+}>;
 export declare const EventFlag: Readonly<{
   HAS_PROTOCOL: 1;
   ONE_WAY: 2;
   CALL_BY_NAME: 4;
   BODY_ABSENT: 8;
   NAME_ESCAPED: 16;
+  SEND: 32;
 }>;
 export declare const Envelope: Readonly<{ OK: 0; ERR: 1; FAULT: 2 }>;
 
@@ -62,10 +88,32 @@ export interface Config {
   maxFrame?: bigint | number;
   capabilities?: number;
   maxWaiting?: number;
-  /** `Handshake.COMLINE` (0, the default) or `Handshake.NONE`. */
+  /** `Handshake.COMLINE` (0, the default), `Handshake.NONE`, or
+   * `Handshake.COMLINE2` with `comline2`. */
   handshake?: number;
   stream?: boolean;
   unordered?: boolean;
+  /** `comline_comline2_config`: with `Handshake.COMLINE2`, and only then. */
+  comline2?: Comline2Config;
+}
+
+/** `comline_comline2_config`. A field left out is 0, its default. */
+export interface Comline2Config {
+  /** This end's facts, as an encoded hello message. */
+  hello: Uint8Array;
+  side?: number;
+  scope?: number;
+  newerConsumer?: number;
+  sameVersionDiffers?: number;
+  exchange?: number;
+}
+
+/** `comline_refusal`. */
+export interface Refusal {
+  reason: number;
+  side: number;
+  /** When the refusal is about one protocol. */
+  protocol?: number;
 }
 
 /** `comline_span`: a part of the input fed. */
@@ -131,16 +179,19 @@ export declare function instantiateStreaming(
 /** What `encodeBound` sizes. Leaving out a field it can use gives a looser
  * bound, never a smaller one. */
 export type EncodeBoundArgs = {
-  framing: "datagram@2" | "jsonrpc@1";
+  framing: "datagram@2" | "datagram@3" | "jsonrpc@1";
   /** The connection's `stream`: a 4-byte prefix is counted. */
   stream?: boolean;
   /** The body's length, as given to the encode. */
   bodyLen: number;
-  /** `datagram@2`: exact with it, the varint's most (3 bytes) without. */
+  /** `datagram@2` and `datagram@3`: exact with it, the varint's most (3
+   * bytes) without. */
   protocol?: number;
 } & (
   | {
       kind: "request";
+      /** `datagram@3`: exact with it, the varint's most (3 bytes) without. */
+      callId?: number;
       /** `jsonrpc@1`: the method name, counted escaped exactly. */
       name?: Bytes;
       /** `jsonrpc@1`, without `name`: its UTF-8 length, counted at 6 bytes
@@ -188,6 +239,7 @@ export declare class Comline {
   handshakeCheck(ours: Uint8Array, peer: Uint8Array): { status: Status; peer: Peer | null };
   methodNameUnescape(spelled: Uint8Array, cap: number): Written;
   connectionNew(config: Config): { status: Status; connection: Connection | null };
+  comline2MessageCheck(message: Uint8Array): { status: Status; kind: number; reason: number };
 }
 
 /** A `comline_connection *`. Free it with `free()`; nothing frees it for
@@ -195,6 +247,22 @@ export declare class Comline {
  * and `free()` does nothing. */
 export declare class Connection {
   private constructor();
+  checkCall(protocol: number, callId: number): Status;
+  /** It works on the closed connection a refusal leaves. */
+  refusal(): { status: Status; refusal?: Refusal };
+  warnings(cap: number): { status: Status; written: number; numbers?: number[] };
+  protocols(cap: number): {
+    status: Status;
+    written: number;
+    protocols?: { number: number; reason: number }[];
+  };
+  peerLacks(protocol: number, cap: number): { status: Status; written: number; numbers?: number[] };
+  peerVersion(cap: number): {
+    status: Status;
+    written: number;
+    version?: { major: number; minor: number; patch: number };
+    pre?: string;
+  };
   start(cap: number): Written;
   feed(input: Uint8Array): Fed;
   encodeRequest(

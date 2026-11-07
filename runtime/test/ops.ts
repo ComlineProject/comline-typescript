@@ -12,7 +12,9 @@
 import {
   DatagramFraming,
   Datagram2Framing,
+  Datagram3Framing,
   FRAMING_DATAGRAM2,
+  FRAMING_DATAGRAM3,
   FORMAT_JSON,
   FORMAT_PACKED,
   FRAMING_DATAGRAM,
@@ -145,6 +147,11 @@ function requestParams(format: string, value: Json): Uint8Array {
   return encodeValue(format, value);
 }
 
+/** A framing whose frames carry a protocol number. */
+function connectionFraming(name: string): Datagram2Framing | Datagram3Framing {
+  return name === FRAMING_DATAGRAM3 ? new Datagram3Framing() : new Datagram2Framing();
+}
+
 function framingOf(name: string): Framing {
   switch (name) {
     case FRAMING_DATAGRAM:
@@ -198,8 +205,8 @@ export function encode(c: Case): Uint8Array {
     case "envelope":
       return encodeReply(i as unknown as Reply);
     case "request":
-      if (i.framing === FRAMING_DATAGRAM2) {
-        return new Datagram2Framing().encodeRequest(
+      if (i.framing === FRAMING_DATAGRAM2 || i.framing === FRAMING_DATAGRAM3) {
+        return connectionFraming(i.framing).encodeRequest(
           i.protocol as number,
           call(i.call_id as number, i.method as string),
           BigInt(i.request_id as string),
@@ -224,8 +231,8 @@ export function encode(c: Case): Uint8Array {
     case "response": {
       const id = BigInt(i.request_id as string);
       const reply = i as unknown as Reply;
-      if (i.framing === FRAMING_DATAGRAM2) {
-        return new Datagram2Framing().encodeReply(
+      if (i.framing === FRAMING_DATAGRAM2 || i.framing === FRAMING_DATAGRAM3) {
+        return connectionFraming(i.framing).encodeReply(
           i.protocol as number,
           id,
           decodeEnvelope(encodeReply(reply))!,
@@ -297,8 +304,8 @@ export function decode(c: Case, bytes: Uint8Array): unknown {
       return e && replyOf(e);
     }
     case "request": {
-      if (i.framing === FRAMING_DATAGRAM2) {
-        const frame = new Datagram2Framing().decode(bytes);
+      if (i.framing === FRAMING_DATAGRAM2 || i.framing === FRAMING_DATAGRAM3) {
+        const frame = connectionFraming(i.framing).decode(bytes);
         if (frame?.kind !== "request") return undefined;
         if (c.expect === "reject") return frame;
         const r = frame.request;
@@ -343,8 +350,8 @@ export function decode(c: Case, bytes: Uint8Array): unknown {
     case "response": {
       let r: { requestId: bigint; envelope: Envelope } | undefined;
       let protocol: number | undefined;
-      if (i.framing === FRAMING_DATAGRAM2) {
-        const frame = new Datagram2Framing().decode(bytes);
+      if (i.framing === FRAMING_DATAGRAM2 || i.framing === FRAMING_DATAGRAM3) {
+        const frame = connectionFraming(i.framing).decode(bytes);
         if (frame?.kind === "reply") {
           r = frame;
           protocol = frame.protocol;

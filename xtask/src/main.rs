@@ -64,7 +64,10 @@ fn main() -> eyre::Result<()> {
         },
         // The one generator this repo registers, so the version it registers
         // under is the one `@comline/std`'s own manifest states.
-        target: TargetLanguage { language: "typescript".into(), version: comline_codegen_typescript::LANG_VERSION.to_string() },
+        target: TargetLanguage {
+            language: "typescript".into(),
+            version: comline_codegen_typescript::LANG_VERSION.to_string(),
+        },
         wire_format: "packed@1".into(),
         // `@comline/std` *is* std, generated as an ordinary standalone
         // package - `external_std` only matters to a consumer referencing
@@ -73,6 +76,7 @@ fn main() -> eyre::Result<()> {
         validate_on_decode: Default::default(),
         async_api: false,
         encodings: comline_codegen::encodings::official_for("typescript"),
+        facts: None,
     };
 
     let files = generate_typescript(&req)?;

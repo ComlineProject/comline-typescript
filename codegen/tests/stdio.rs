@@ -36,6 +36,7 @@ fn request(fx: &Fixture, version: &str) -> GenerateRequest {
         validate_on_decode: fx.validate_on_decode,
         async_api: fx.async_api,
         encodings: comline_codegen::encodings::official_for("typescript"),
+        facts: None,
     }
 }
 

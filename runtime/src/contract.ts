@@ -26,7 +26,38 @@ export type RuntimeErrorKind =
   | "frameTooLarge" // a frame is over the connection's size limit
   | "busy" // the connection is in use by another call
   | "boundExceeded" // a value is over its type's bound (core#98); `measure` says which
-  | "poisoned"; // the core trapped; it's discarded and the next connection loads a fresh one
+  | "poisoned" // the core trapped; it's discarded and the next connection loads a fresh one
+  | "refused" // the `comline@2` handshake refused the connection; `refusal` says why and who
+  | "unavailable"; // the call wasn't sent: `comline@2` found the peer can't take it; `unavailable` says which
+
+/** Why the `comline@2` handshake refused, and which end did (its reason codes, by name). */
+export interface Refusal {
+  readonly reason: RefusalReason;
+  readonly side: "initiator" | "responder";
+  /** The protocol's wire number, when the reason is about one. */
+  readonly protocol?: number;
+}
+
+/** `comline@2`'s reason codes, by name: stable, never renumbered. */
+export type RefusalReason =
+  | "malformed"
+  | "handshake_version"
+  | "exchange_mismatch"
+  | "package_mismatch"
+  | "encoding_mismatch"
+  | "line_mismatch"
+  | "same_version_differs"
+  | "newer_consumer"
+  | "unknown_protocol";
+
+/** A call `comline@2` stopped before it was sent: which, and why. */
+export interface Unavailable {
+  /** `namespace::Protocol`. */
+  readonly protocol: string;
+  readonly function: string;
+  /** Why the connection refused the protocol; absent when the peer lacks the function. */
+  readonly refused?: RefusalReason;
+}
 
 export class RuntimeError extends Error {
   override readonly name = "RuntimeError";
@@ -39,6 +70,10 @@ export class RuntimeError extends Error {
    * `RuntimeError::BoundExceeded { measure }`.
    */
   readonly measure?: Measure;
+  /** Why and by whom, set only when `kind === "refused"`. */
+  readonly refusal?: Refusal;
+  /** Which call, and why, set only when `kind === "unavailable"`. */
+  readonly unavailable?: Unavailable;
 
   constructor(kind: RuntimeErrorKind, remoteId?: number, measure?: Measure) {
     super(
@@ -95,6 +130,22 @@ export class RuntimeError extends Error {
   }
   static poisoned(): RuntimeError {
     return new RuntimeError("poisoned");
+  }
+  /** The `comline@2` handshake refused: raised on both ends. */
+  static refused(refusal: Refusal): RuntimeError {
+    const e = new RuntimeError("refused");
+    e.message = `the ${refusal.side} refused the connection: ${refusal.reason}`;
+    return Object.assign(e, { refusal });
+  }
+  /** A call that wasn't sent because the peer can't take it. */
+  static unavailable(unavailable: Unavailable): RuntimeError {
+    const e = new RuntimeError("unavailable");
+    const call = `\`${unavailable.protocol}.${unavailable.function}\``;
+    e.message =
+      unavailable.refused === undefined
+        ? `${call} wasn't called: the peer lacks it`
+        : `${call} wasn't called: the connection refused protocol \`${unavailable.protocol}\` (${unavailable.refused})`;
+    return Object.assign(e, { unavailable });
   }
 
   is(kind: RuntimeErrorKind): boolean {

@@ -92,6 +92,9 @@ pub fn generate_typescript(req: &GenerateRequest) -> Result<Vec<GeneratedFile>> 
     // MessagePack has no TypeScript mapping, but the support table has
     // already refused it.
     comline_codegen::encodings::check(req)?;
+    // A protocol addressed by wire numbers, or running `comline@2`, has the
+    // facts it needs; nothing is ever numbered by position instead.
+    comline_codegen::facts::check(req)?;
     let codec = type_of(&req.encodings, &req.wire_format);
     // JSON-RPC protocols sharing a connection whose bare method names one
     // side couldn't tell apart.
@@ -547,8 +550,20 @@ fn schema_source(
                 parameters,
                 ..
             } => {
-                let number = connections::on_connection(schemas, parameters)
-                    .then(|| connections::protocol_number(schemas, namespace, name))
+                // `facts::check` has vouched for every protocol that needs facts.
+                let addressing = connections::on_connection(schemas, parameters)
+                    .then(|| {
+                        comline_codegen::facts::addressing(
+                            req.facts.as_ref(),
+                            schemas,
+                            encodings,
+                            namespace,
+                            name,
+                            parameters,
+                            functions,
+                        )
+                        .ok()
+                    })
                     .flatten();
                 // A framing that names its calls does so bare, or qualified by
                 // protocol.
@@ -560,7 +575,7 @@ fn schema_source(
                     parameters,
                     &framing_choice(parameters, encodings, &types),
                     method_names,
-                    number,
+                    addressing,
                     &errors,
                     &types,
                 ));
@@ -606,6 +621,13 @@ fn schema_source(
             values.extend(["Client", "Server"]);
         }
         values.extend(["RuntimeError", "resolveKind"]);
+        if units.iter().any(|u| {
+            matches!(u, FrozenUnit::Protocol { parameters, .. }
+                if on_connection(parameters)
+                    && connections::handshake_name(parameters) == comline_codegen::facts::HANDSHAKE_COMLINE2)
+        }) {
+            values.push("checkCall");
+        }
         values.extend(types.checks());
         // Each lockstep framing's class, then the package's codec, and JSON
         // for a lockstep JSON-RPC protocol: the runtime's from the runtime
@@ -1083,7 +1105,9 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
         return None;
     }
     let jsonrpc = package.framing == FRAMING_JSONRPC;
+    let datagram3 = package.framing == comline_codegen::facts::FRAMING_DATAGRAM3;
     let unverified = package.handshake == HANDSHAKE_NONE;
+    let comline2 = package.handshake == comline_codegen::facts::HANDSHAKE_COMLINE2;
     // Each schema the module reaches, under a name of its own.
     let module = |namespace: &str| format!("ns_{}", namespace.replace(['/', ':', '-', '.'], "_"));
 
@@ -1100,21 +1124,32 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
     if jsonrpc {
         values.push("JsonRpcConnectionFraming");
     }
+    if datagram3 {
+        import_class(encodings, &package.framing, &mut values, &mut external);
+    }
     import_class(encodings, &req.wire_format, &mut values, &mut external);
     if unverified {
         values.push("NoHandshake");
     }
     // A handshake that's neither `comline@1` nor `none` is passed in; those
     // two keep the arguments they always had.
-    let custom = (package.handshake != DEFAULT_HANDSHAKE && !unverified).then(|| type_of(encodings, &package.handshake));
-    if custom.is_some() {
+    let custom = (package.handshake != DEFAULT_HANDSHAKE && !unverified && !comline2)
+        .then(|| type_of(encodings, &package.handshake));
+    if custom.is_some() || comline2 {
         import_class(encodings, &package.handshake, &mut values, &mut external);
+    }
+    if comline2 {
+        values.push("Negotiated");
     }
     let mut s = format!("{header}\nimport {{\n");
     for v in &values {
         s.push_str(&format!("    {v},\n"));
     }
-    s.push_str("    type Codec,\n    type Transport,\n} from \"@comline/runtime\";\n");
+    s.push_str("    type Codec,\n");
+    if comline2 {
+        s.push_str("    type Peer,\n");
+    }
+    s.push_str("    type Transport,\n} from \"@comline/runtime\";\n");
     s.push_str(external_imports(&external, str::to_string).trim_end_matches('\n'));
     if !external.is_empty() {
         s.push('\n');
@@ -1135,6 +1170,11 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
          export const CONNECTION_IR_HASH = {:#018x}n;\n\n",
         connections::connection_ir_hash(&req.schemas)
     ));
+    if comline2 {
+        // `facts::check` has vouched for the facts.
+        let items = comline2_items(req, &package, type_of(encodings, &package.handshake)).ok()?;
+        s.push_str(&items);
+    }
 
     let mut side = |ty: &str, provide: &str, provided: &[connections::Provided], who: &str| {
         if provided.is_empty() {
@@ -1166,16 +1206,34 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
     let has_server = side("Services", "provideServices", &server, "the accepting side");
     let has_client = side("ClientServices", "provideClientServices", &client, "the dialling side");
 
-    let framing_arg =
-        if jsonrpc { ", new JsonRpcConnectionFraming()" } else if unverified || custom.is_some() { ", undefined" } else { "" };
+    let datagram3_framing = format!(", new {}()", type_of(encodings, &package.framing));
+    let framing_arg = if jsonrpc {
+        ", new JsonRpcConnectionFraming()"
+    } else if datagram3 {
+        datagram3_framing.as_str()
+    } else if unverified || custom.is_some() || comline2 {
+        ", undefined"
+    } else {
+        ""
+    };
     let handshake_arg = match custom {
         Some(class) => format!(", new {class}()"),
         None if unverified => ", new NoHandshake()".to_string(),
+        None if comline2 => ", agreed".to_string(),
         None => String::new(),
     };
     let open = |side: &str| {
-        format!("await Connection.{side}(transport, {connection_codec}, CONNECTION_IR_HASH{framing_arg}{handshake_arg})")
+        let open =
+            format!("await Connection.{side}(transport, {connection_codec}, CONNECTION_IR_HASH{framing_arg}{handshake_arg})");
+        if comline2 {
+            // What the handshake agreed goes with the connection, where
+            // senders check each call against it.
+            format!("{open};\n    conn.extensions.set(agreed.negotiated!)")
+        } else {
+            open
+        }
     };
+    let opening = if comline2 { "    const agreed = handshake();\n" } else { "" };
     let (server_params, server_provide) = if has_server {
         ("transport: Transport, services: Services", "    provideServices(conn, services);\n")
     } else {
@@ -1194,6 +1252,7 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
          * so the server can call the client through it.\n\
          */\n\
          export async function accept({server_params}): Promise<Connection> {{\n\
+         {opening}\
          \x20   const conn = {};\n\
          {server_provide}\
          \x20   return conn;\n\
@@ -1208,6 +1267,7 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
          * their senders.\n\
          */\n\
          export async function connect({client_params}): Promise<Connection> {{\n\
+         {opening}\
          \x20   const conn = {};\n\
          {client_provide}\
          \x20   return conn;\n\
@@ -1216,6 +1276,82 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
         open("connect"),
     ));
     Some(s)
+}
+
+/// The package module's `comline@2` items: this end's Hello (the facts it was
+/// generated from), `handshake()` with the parameters the package states, and
+/// `negotiated` / `warnings` for what a connection agreed.
+fn comline2_items(
+    req: &GenerateRequest,
+    package: &connections::PackageConnection,
+    class: &str,
+) -> Result<String> {
+    let (hello, protocols) = comline_codegen::facts::hello(req, package)?;
+    let params = comline_codegen::facts::Comline2Params::of(&package.handshake_value);
+    let facts = req.facts.as_ref().expect("hello() had facts");
+    let mut s = format!(
+        "/**\n * This end's `comline@2` Hello: version {} of package `{}`, as its history\n * records it. Its protocols, by wire number:\n *\n",
+        facts.version,
+        facts.id.as_deref().unwrap_or_default()
+    );
+    for p in &protocols {
+        let functions: Vec<String> = p
+            .functions
+            .iter()
+            .map(|(f, n)| format!("`{f}` {n}"))
+            .collect();
+        s.push_str(&format!(
+            " * - {} `{}::{}`, line {}: {}\n",
+            p.number,
+            p.namespace,
+            p.name,
+            p.line,
+            functions.join(", ")
+        ));
+    }
+    s.push_str(" */\nexport const HELLO = new Uint8Array([\n");
+    for chunk in hello.chunks(12) {
+        let bytes: Vec<String> = chunk.iter().map(|b| format!("{b:#04x}")).collect();
+        s.push_str(&format!("    {},\n", bytes.join(", ")));
+    }
+    s.push_str("]);\n\n");
+    let camel_value = |v: &str| v.to_string();
+    s.push_str(&format!(
+        "/** The `comline@2` handshake, with {{@link HELLO}} and the parameters the package states. */\n\
+         export function handshake(): {class} {{\n\
+         \x20   return new {class}(HELLO, {{\n\
+         \x20       scope: \"{}\",\n\
+         \x20       newerConsumer: \"{}\",\n\
+         \x20       sameVersionDiffers: \"{}\",\n\
+         \x20       exchange: \"{}\",\n\
+         \x20   }});\n\
+         }}\n\n",
+        camel_value(&params.scope),
+        camel_value(&params.newer_consumer),
+        camel_value(&params.same_version_differs),
+        camel_value(&params.exchange),
+    ));
+    let paths: Vec<String> = protocols
+        .iter()
+        .map(|p| format!("[{}, \"{}::{}\"]", p.number, p.namespace, p.name))
+        .collect();
+    s.push_str(&format!(
+        "/** The package's protocols on the connection, by wire number. */\n\
+         const PROTOCOLS = new Map<number, string>([{}]);\n\n\
+         /** What the connection's `comline@2` handshake agreed, if `accept` / `connect` opened it. */\n\
+         export function negotiated(conn: Peer): Negotiated | undefined {{\n\
+         \x20   return conn.extensions.get(Negotiated);\n\
+         }}\n\n\
+         /**\n\
+         \x20* The protocols that connected although their wire shape differs from the\n\
+         \x20* peer's at the same version (`same_version_differs = warn`), by path.\n\
+         \x20*/\n\
+         export function warnings(conn: Peer): string[] {{\n\
+         \x20   return (negotiated(conn)?.warnings ?? []).map((n) => PROTOCOLS.get(n) ?? `#${{n}}`);\n\
+         }}\n\n",
+        paths.join(", ")
+    ));
+    Ok(s)
 }
 
 // ── protocol ───────────────────────────────────────────────────────────────
@@ -1279,10 +1415,12 @@ fn protocol(
     parameters: &[FrozenUnit],
     framing: &FramingChoice,
     method_names: MethodNames,
-    number: Option<u16>,
+    addressing: Option<comline_codegen::facts::Addressing>,
     errors: &HashMap<u16, String>,
     types: &TypeMapper,
 ) -> String {
+    let number = addressing.as_ref().map(|a| a.protocol);
+    let by_id = addressing.as_ref().is_some_and(|a| a.by_id);
     // The provider interface's identifier; the classes and helpers named
     // after the protocol (`<Proto>Client`) never need escaping.
     let proto_ty = ident(proto);
@@ -1291,8 +1429,8 @@ fn protocol(
     let [kind_t, codec_t, reply_t, peer_t, dispatch_t, connection_t, transport_t, framing_t, client_t, server_t] =
         ["Kind", "Codec", "Reply", "Peer", "Dispatch", "Connection", "Transport", "Framing", "Client", "Server"]
             .map(|name| types.rt(name));
-    let [runtime_error, resolve_kind, no_handshake_t] =
-        ["RuntimeError", "resolveKind", "NoHandshake"].map(|name| types.rt(name));
+    let [runtime_error, resolve_kind, no_handshake_t, check_call] =
+        ["RuntimeError", "resolveKind", "NoHandshake", "checkCall"].map(|name| types.rt(name));
     let [promise, bytes] = ["Promise", "Uint8Array"].map(|name| types.global(name));
     let fns: Vec<FnInfo> = functions
         .iter()
@@ -1447,10 +1585,21 @@ fn protocol(
             "    async dispatch(call: {kind_t}, params: {bytes}, codec: {codec_t}, reply: {reply_t}): {promise}<void> {{\n",
         ));
     }
-    s.push_str(&format!("        switch ({resolve_kind}(call, {calls_const})) {{\n"));
+    if by_id {
+        // A call carries its function's wire number, which isn't its
+        // position: matched as it is.
+        s.push_str("        switch (\"id\" in call ? call.id : -1) {\n");
+    } else {
+        s.push_str(&format!("        switch ({resolve_kind}(call, {calls_const})) {{\n"));
+    }
     let peer_arg = if number.is_some() { Some("peer") } else { None };
+    let calls: Vec<u16> = match &addressing {
+        Some(a) => a.calls.clone(),
+        None => (0..fns.len() as u16).collect(),
+    };
     for (i, f) in fns.iter().enumerate() {
-        s.push_str(&format!("            case {i}: {{\n"));
+        let case = if by_id { calls[i] } else { i as u16 };
+        s.push_str(&format!("            case {case}: {{\n"));
         // Emitted *inside* the `try` below, so params that will not decode are
         // handled with the same arity awareness as a handler that throws.
         let decode_line = match &f.params_ty {
@@ -1546,6 +1695,11 @@ fn protocol(
         } else {
             open
         };
+        let open = if addressing.as_ref().is_some_and(|a| a.checks.is_some()) {
+            "the package's `accept` / `connect`, which run `comline@2` with this package's facts".to_string()
+        } else {
+            open
+        };
         s.push_str(&format!(
             "\n    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with {open}, or let the package's `serve` / `connect` do it. */\n\
             \x20   provideOn(conn: {connection_t}): void {{\n\
@@ -1588,7 +1742,25 @@ fn protocol(
             ("client", String::new())
         }
     };
+    let checks = addressing.as_ref().and_then(|a| a.checks.clone());
+    let fn_names: Vec<&str> = functions
+        .iter()
+        .filter_map(|f| match f {
+            FrozenUnit::Function { name, .. } => Some(name.as_str()),
+            _ => None,
+        })
+        .collect();
     for (i, f) in fns.iter().enumerate() {
+        let id = calls[i];
+        // Under `comline@2`, checked against what the connection agreed
+        // before it's written.
+        let check = match &checks {
+            Some(c) => format!(
+                "        {check_call}(this.peer, {proto}Sender.PROTOCOL, {}, \"{namespace}::{proto}\", \"{}\");\n",
+                c[i], fn_names[i]
+            ),
+            None => String::new(),
+        };
         let sig_params = f
             .params_ty
             .as_ref()
@@ -1603,7 +1775,8 @@ fn protocol(
         if f.one_way {
             s.push_str(&format!(
                 "    async {}({sig_params}): {promise}<void> {{\n\
-                 \x20       await this.{field}.notify({call_prefix}{{ id: {i}, name: \"{}\" }}, {arg}, {{ layout: {layout} }});\n\
+                 {check}\
+                 \x20       await this.{field}.notify({call_prefix}{{ id: {id}, name: \"{}\" }}, {arg}, {{ layout: {layout} }});\n\
                  \x20   }}\n",
                 f.name, f.method
             ));
@@ -1611,7 +1784,8 @@ fn protocol(
         }
         s.push_str(&format!(
             "    async {}({sig_params}): {promise}<{}> {{\n\
-             \x20       const env = await this.{field}.call({call_prefix}{{ id: {i}, name: \"{}\" }}, {arg}, {{ layout: {layout} }});\n",
+             {check}\
+             \x20       const env = await this.{field}.call({call_prefix}{{ id: {id}, name: \"{}\" }}, {arg}, {{ layout: {layout} }});\n",
             f.name, f.ret, f.method
         ));
         if f.ret == "void" {
