@@ -252,7 +252,8 @@
         "framing-datagram/request-params-packed",
         "framing-datagram/reject-short-request",
         "framing-datagram/reject-short-response",
-        "framing-datagram/reject-response-without-envelope"
+        "framing-datagram/reject-response-without-envelope",
+        "framing-datagram/accept-request-as-response"
       ]
     },
     "framing-datagram2": {
@@ -271,7 +272,9 @@
         "framing-datagram2/reject-reply-as-request",
         "framing-datagram2/reject-request-as-reply",
         "framing-datagram2/reject-short-request",
-        "framing-datagram2/reject-reply-without-envelope"
+        "framing-datagram2/reject-reply-without-envelope",
+        "framing-datagram2/reject-response-as-request",
+        "framing-datagram2/reject-request-as-response"
       ]
     },
     "framing-datagram3": {
@@ -318,6 +321,7 @@
         "framing-jsonrpc/found-reject-request-invalid-utf8-in-jsonrpc",
         "framing-jsonrpc/found-reject-request-invalid-utf8-in-unknown-member",
         "framing-jsonrpc/found-reject-response-invalid-utf8-in-jsonrpc",
+        "framing-jsonrpc/reject-response-no-outcome",
         "framing-jsonrpc/found-reject-response-invalid-utf8-in-unknown-member",
         "framing-jsonrpc/found-reject-response-invalid-utf8-in-error-message",
         "framing-jsonrpc/reject-request-params-msgpack",
@@ -326,6 +330,8 @@
         "framing-jsonrpc/reject-request-params-packed",
         "framing-jsonrpc/reject-response-result-packed",
         "framing-jsonrpc/reject-response-error-data-packed",
+        "framing-jsonrpc/reject-response-as-request",
+        "framing-jsonrpc/reject-request-as-response",
         "framing-jsonrpc/found-request-method-escaped-slash",
         "framing-jsonrpc/found-request-method-unicode-escapes",
         "framing-jsonrpc/accept-request-unknown-member",

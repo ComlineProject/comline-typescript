@@ -153,6 +153,18 @@
       },
       "bytes": "0700000000000000",
       "expect": "reject"
+    },
+    {
+      "id": "framing-datagram/accept-request-as-response",
+      "op": "response",
+      "input": {
+        "framing": "datagram@1",
+        "kind": "ok",
+        "payload": "005b372c2278225d",
+        "request_id": "2752515"
+      },
+      "bytes": "03002a000000000000005b372c2278225d",
+      "expect": "accept"
     }
   ]
 }

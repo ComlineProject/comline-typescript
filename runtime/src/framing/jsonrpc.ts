@@ -175,7 +175,11 @@ export class JsonRpcFraming implements Framing {
         envelope: { err: { id: Number(code), body: raw(r.text, error.members.get("data")) } },
       };
     }
-    return { requestId, envelope: { ok: raw(r.text, r.members.get("result")) } };
+    // A response has its outcome: `null` is one, and nothing, as in a request's
+    // frame, isn't.
+    const result = r.members.get("result");
+    if (!result) return undefined;
+    return { requestId, envelope: { ok: raw(r.text, result) } };
   }
 
   isPeerRefusal(frame: Uint8Array): boolean {
