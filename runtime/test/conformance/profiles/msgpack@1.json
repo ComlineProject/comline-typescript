@@ -1,4 +1,5 @@
 {
+  "$schema": "../specs/gen/profile.schema.json",
   "name": "msgpack@1",
   "kind": "format",
   "facts": {
@@ -37,6 +38,13 @@
       "proven_by": [
         "format-msgpack/decode-wider-integer",
         "format-msgpack/decode-wider-integer-overflow"
+      ]
+    },
+    "output": {
+      "value": "bytes",
+      "proven_by": [
+        "format-msgpack/u8-max",
+        "format-msgpack/struct"
       ]
     }
   }

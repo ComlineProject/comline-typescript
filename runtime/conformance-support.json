@@ -6,7 +6,9 @@
     "envelope": { "state": "supported" },
     "framing-datagram": { "state": "supported" },
     "framing-datagram2": { "state": "supported" },
+    "framing-datagram3": { "state": "unsupported", "note": "datagram@2 is the connection framing here" },
     "framing-jsonrpc": { "state": "supported" },
+    "handshake-comline2": { "state": "unsupported", "note": "comline@1 is the handshake here" },
     "stream": {
       "state": "unsupported",
       "note": "no length-prefixed framing or frame limit yet: the transports are message-oriented",

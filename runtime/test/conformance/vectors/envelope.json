@@ -1,4 +1,5 @@
 {
+  "$schema": "../specs/gen/vectors.schema.json",
   "feature": "envelope",
   "cases": [
     {

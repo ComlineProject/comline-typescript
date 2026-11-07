@@ -1,4 +1,5 @@
 {
+  "$schema": "../specs/gen/vectors.schema.json",
   "feature": "framing-datagram",
   "cases": [
     {
@@ -81,6 +82,50 @@
         "request_id": "9"
       },
       "bytes": "090000000000000002"
+    },
+    {
+      "id": "framing-datagram/request-params-msgpack",
+      "op": "request",
+      "input": {
+        "call_id": 3,
+        "format": "msgpack@1",
+        "framing": "datagram@1",
+        "method": "greet",
+        "params": {
+          "array": [
+            {
+              "u32": 7
+            },
+            {
+              "string": "x"
+            }
+          ]
+        },
+        "request_id": "42"
+      },
+      "bytes": "03002a000000000000009207a178"
+    },
+    {
+      "id": "framing-datagram/request-params-packed",
+      "op": "request",
+      "input": {
+        "call_id": 3,
+        "format": "packed@1",
+        "framing": "datagram@1",
+        "method": "greet",
+        "params": {
+          "array": [
+            {
+              "u32": 7
+            },
+            {
+              "string": "x"
+            }
+          ]
+        },
+        "request_id": "42"
+      },
+      "bytes": "03002a0000000000000002070000000178"
     },
     {
       "id": "framing-datagram/reject-short-request",

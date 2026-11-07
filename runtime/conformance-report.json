@@ -248,6 +248,8 @@
         "framing-datagram/response-ok-exact-numbers",
         "framing-datagram/response-err",
         "framing-datagram/response-fault",
+        "framing-datagram/request-params-msgpack",
+        "framing-datagram/request-params-packed",
         "framing-datagram/reject-short-request",
         "framing-datagram/reject-short-response",
         "framing-datagram/reject-response-without-envelope"
@@ -259,6 +261,8 @@
         "framing-datagram2/request",
         "framing-datagram2/request-two-byte-protocol",
         "framing-datagram2/request-large-ids",
+        "framing-datagram2/request-params-msgpack",
+        "framing-datagram2/request-params-packed",
         "framing-datagram2/response-ok",
         "framing-datagram2/response-err",
         "framing-datagram2/response-fault",
@@ -269,6 +273,11 @@
         "framing-datagram2/reject-short-request",
         "framing-datagram2/reject-reply-without-envelope"
       ]
+    },
+    "framing-datagram3": {
+      "state": "unsupported",
+      "note": "datagram@2 is the connection framing here",
+      "proven_by": []
     },
     "framing-jsonrpc": {
       "state": "supported",
@@ -281,6 +290,8 @@
         "framing-jsonrpc/response-fault",
         "framing-jsonrpc/request-qualified-method",
         "framing-jsonrpc/notification",
+        "framing-jsonrpc/request-no-params",
+        "framing-jsonrpc/notification-no-params",
         "framing-jsonrpc/found-request-method-needs-escapes",
         "framing-jsonrpc/reject-request-not-json",
         "framing-jsonrpc/reject-request-without-method",
@@ -292,13 +303,44 @@
         "framing-jsonrpc/reject-response-result-and-error",
         "framing-jsonrpc/reject-response-error-without-message",
         "framing-jsonrpc/reject-response-without-version",
+        "framing-jsonrpc/accept-request-params-null",
+        "framing-jsonrpc/reject-request-repeated-jsonrpc",
+        "framing-jsonrpc/reject-request-repeated-method",
+        "framing-jsonrpc/reject-request-repeated-params",
+        "framing-jsonrpc/reject-request-repeated-id",
+        "framing-jsonrpc/reject-response-repeated-jsonrpc",
+        "framing-jsonrpc/reject-response-repeated-result",
+        "framing-jsonrpc/reject-response-repeated-id",
+        "framing-jsonrpc/reject-response-repeated-error",
+        "framing-jsonrpc/reject-response-repeated-error-code",
+        "framing-jsonrpc/reject-response-repeated-error-message",
+        "framing-jsonrpc/reject-response-repeated-error-data",
         "framing-jsonrpc/found-reject-request-invalid-utf8-in-jsonrpc",
         "framing-jsonrpc/found-reject-request-invalid-utf8-in-unknown-member",
         "framing-jsonrpc/found-reject-response-invalid-utf8-in-jsonrpc",
         "framing-jsonrpc/found-reject-response-invalid-utf8-in-unknown-member",
         "framing-jsonrpc/found-reject-response-invalid-utf8-in-error-message",
+        "framing-jsonrpc/reject-request-params-msgpack",
+        "framing-jsonrpc/reject-response-result-msgpack",
+        "framing-jsonrpc/reject-response-error-data-msgpack",
+        "framing-jsonrpc/reject-request-params-packed",
+        "framing-jsonrpc/reject-response-result-packed",
+        "framing-jsonrpc/reject-response-error-data-packed",
         "framing-jsonrpc/found-request-method-escaped-slash",
-        "framing-jsonrpc/found-request-method-unicode-escapes"
+        "framing-jsonrpc/found-request-method-unicode-escapes",
+        "framing-jsonrpc/accept-request-unknown-member",
+        "framing-jsonrpc/accept-response-unknown-member",
+        "framing-jsonrpc/accept-response-error-unknown-member",
+        "framing-jsonrpc/peer-refusal-parse-error",
+        "framing-jsonrpc/peer-refusal-invalid-request",
+        "framing-jsonrpc/reject-response-peer-refusal",
+        "framing-jsonrpc/reject-peer-refusal-of-a-call",
+        "framing-jsonrpc/reject-peer-refusal-without-id",
+        "framing-jsonrpc/reject-peer-refusal-result",
+        "framing-jsonrpc/reject-peer-refusal-result-and-error",
+        "framing-jsonrpc/reject-peer-refusal-without-message",
+        "framing-jsonrpc/reject-peer-refusal-other-version",
+        "framing-jsonrpc/reject-peer-refusal-repeated-id"
       ]
     },
     "handshake": {
@@ -308,6 +350,7 @@
         "handshake/msgpack-datagram",
         "handshake/msgpack-datagram2",
         "handshake/packed-datagram2",
+        "handshake/packed-datagram3",
         "handshake/json-jsonrpc",
         "handshake/reject-empty",
         "handshake/reject-truncated",
@@ -319,6 +362,11 @@
         "handshake/check-reject-framing"
       ]
     },
+    "handshake-comline2": {
+      "state": "unsupported",
+      "note": "comline@1 is the handshake here",
+      "proven_by": []
+    },
     "name-hash": {
       "state": "supported",
       "proven_by": [
@@ -328,6 +376,7 @@
         "name-hash/packed@1",
         "name-hash/datagram@1",
         "name-hash/datagram@2",
+        "name-hash/datagram@3",
         "name-hash/jsonrpc@1",
         "name-hash/com.acme.custom-format"
       ]

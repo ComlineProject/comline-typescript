@@ -56,6 +56,16 @@ function raw(text: string, node: JsonNode | undefined): Uint8Array {
   return node ? enc.encode(text.slice(node.start, node.end)) : NULL;
 }
 
+/**
+ * A request up to its id. JSON-RPC 2.0 has `params` omitted when there are
+ * none, not `null`, so params that are empty or `null` are left out.
+ */
+function requestHead(call: Call, params: Uint8Array): string {
+  const p = dec.decode(params);
+  const method = `{"jsonrpc":"2.0","method":${JSON.stringify(call.name)}`;
+  return p === "" || p === "null" ? method : `${method},"params":${p}`;
+}
+
 /** A `u64` id, or `undefined` if `node` isn't one. */
 function u64(node: JsonNode | undefined): bigint | undefined {
   const n = jsonInteger(node);
@@ -63,11 +73,30 @@ function u64(node: JsonNode | undefined): bigint | undefined {
 }
 
 /**
+ * A JSON-RPC 2.0 error whose `id` is `null`, which is how the specification has
+ * a peer answer a request it couldn't read. No other frame has a `null` id: a
+ * request's is refused, and so is a `result`'s. Matches
+ * `comline_runtime`'s `is_peer_refusal`.
+ */
+function isPeerRefusal(frame: Uint8Array): boolean {
+  const r = members(frame);
+  if (r?.members.get("id")?.kind !== "null") return false;
+  const result = r.members.get("result");
+  if (result && result.kind !== "null") return false;
+  const error = r.members.get("error");
+  if (error?.kind !== "object" || repeats(error.repeated, ERROR_MEMBERS)) return false;
+  if (error.members.get("message")?.kind !== "string") return false;
+  const code = jsonInteger(error.members.get("code"));
+  return code !== undefined && code >= I64_MIN && code <= I64_MAX;
+}
+
+/**
  * [JSON-RPC 2.0](https://www.jsonrpc.org/specification) framing — name-oriented,
  * human-readable. Pair with {@link JsonCodec}. Matches
  * `comline_runtime::framing::JsonRpcFraming`:
  *
- * - request: `{"jsonrpc":"2.0","method":<name>,"params":<params>,"id":<n>}`
+ * - request: `{"jsonrpc":"2.0","method":<name>,"params":<params>,"id":<n>}`,
+ *   without `params` when there are none
  * - ok:      `{"jsonrpc":"2.0","result":<r>,"id":<n>}`
  * - err:     `{"jsonrpc":"2.0","error":{"code":<ordinal>,"message":...,"data":<body>},"id":<n>}`
  *
@@ -79,18 +108,15 @@ export class JsonRpcFraming implements Framing {
   readonly name = FRAMING_JSONRPC;
 
   encodeRequest(call: Call, requestId: bigint, params: Uint8Array): Uint8Array {
-    const p = params.length === 0 ? "null" : dec.decode(params);
-    return enc.encode(
-      `{"jsonrpc":"2.0","method":${JSON.stringify(call.name)},"params":${p},"id":${requestId}}`,
-    );
+    return enc.encode(`${requestHead(call, params)},"id":${requestId}}`);
   }
 
   decodeRequest(frame: Uint8Array): DecodedRequest | undefined {
     const r = members(frame);
     const method = r?.members.get("method");
     if (!r || method?.kind !== "string") return undefined;
-    // Params are an array or an object, or the `null` this framing writes
-    // for none.
+    // Params are an array or an object. `null` isn't JSON-RPC 2.0's, and this
+    // framing no longer writes it, but it's read as none: peers send it.
     const params = r.members.get("params");
     if (params && !["array", "object", "null"].includes(params.kind)) return undefined;
     // A notification has no id; it's request 0. A null id is refused: it
@@ -151,6 +177,10 @@ export class JsonRpcFraming implements Framing {
     }
     return { requestId, envelope: { ok: raw(r.text, r.members.get("result")) } };
   }
+
+  isPeerRefusal(frame: Uint8Array): boolean {
+    return isPeerRefusal(frame);
+  }
 }
 
 /**
@@ -174,8 +204,7 @@ export class JsonRpcConnectionFraming implements ConnectionFraming {
     oneWay = false,
   ): Uint8Array {
     if (!oneWay) return this.frames.encodeRequest(call, requestId, params);
-    const p = params.length === 0 ? "null" : dec.decode(params);
-    return enc.encode(`{"jsonrpc":"2.0","method":${JSON.stringify(call.name)},"params":${p}}`);
+    return enc.encode(`${requestHead(call, params)}}`);
   }
 
   encodeReply(_protocol: number, requestId: bigint, reply: Envelope): Uint8Array {
@@ -197,5 +226,9 @@ export class JsonRpcConnectionFraming implements ConnectionFraming {
     }
     const response = this.frames.decodeResponse(frame);
     return response && { kind: "reply", protocol: undefined, ...response };
+  }
+
+  isPeerRefusal(frame: Uint8Array): boolean {
+    return isPeerRefusal(frame);
   }
 }

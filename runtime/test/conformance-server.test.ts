@@ -27,6 +27,7 @@ test("version lists what the runtime ships", () => {
         "envelope",
         "request",
         "response",
+        "peer_refusal",
         "encode",
         "decode",
         "stream_prefix",

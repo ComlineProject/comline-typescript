@@ -159,3 +159,13 @@ test("over JSON-RPC, a notification gets no reply", async () => {
   assert.equal(dec.decode(await raw.recv()), `{"jsonrpc":"2.0","result":0,"id":3}`);
   raw.close();
 });
+
+test("over JSON-RPC, a call fails as refused when the peer can't read it", async () => {
+  const refusal = enc.encode(`{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":null}`);
+  const [raw, side] = duplex();
+  const conn = Connection.unverified(side, new JsonCodec(), new JsonRpcConnectionFraming());
+  const waiting = conn.call(CHAT, call(1, "count"), null);
+  await raw.recv();
+  await raw.send(refusal);
+  await assert.rejects(waiting, (e: unknown) => e instanceof RuntimeError && e.is("peerRefused"));
+});

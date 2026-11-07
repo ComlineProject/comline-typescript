@@ -196,6 +196,7 @@ const isKind = (kind: RuntimeErrorKind) => (e: unknown) => e instanceof RuntimeE
 test("every status maps to success only when it's OK", () => {
   const mapped: [number, RuntimeErrorKind][] = [
     [Status.ERR_FRAMING, "framing"],
+    [Status.ERR_PEER_REFUSED, "peerRefused"],
     [Status.ERR_UNKNOWN_FRAMING, "framing"],
     [Status.ERR_HANDSHAKE, "handshake"],
     [Status.ERR_FRAME_TOO_LARGE, "frameTooLarge"],
@@ -209,7 +210,7 @@ test("every status maps to success only when it's OK", () => {
     // Unknown codes, from a newer library or none: errors, never success.
     [3, "transport"],
     [15, "transport"],
-    [24, "transport"],
+    [25, "transport"],
     [255, "transport"],
     [-1, "transport"],
   ];

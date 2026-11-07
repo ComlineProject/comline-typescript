@@ -87,6 +87,7 @@ export const Status = Object.freeze({
   ERR_STATE: 21,
   ERR_POISONED: 22,
   ERR_BUSY: 23,
+  ERR_PEER_REFUSED: 24,
 });
 
 /** `comline_config.handshake`. */
@@ -244,6 +245,7 @@ function isWasm(response) {
 // writes it.
 const JSONRPC_REQUEST_HEAD = '{"jsonrpc":"2.0","method":"'.length;
 const JSONRPC_REQUEST_PARAMS = '","params":'.length;
+const JSONRPC_NO_PARAMS = '"'.length;
 const JSONRPC_ID = ',"id":'.length;
 const JSONRPC_CLOSE = "}".length;
 const JSONRPC_NULL = "null".length;
@@ -329,7 +331,8 @@ const idDigits = (id) => (id == null ? U64_DIGITS : u64(id).toString().length);
  * instance.
  *
  * It is never smaller than what the ABI writes, and it is exactly that when
- * everything the frame holds is given:
+ * everything the frame holds is given (but for params that are `null`, which
+ * the framing leaves out and this counts):
  *
  * - `datagram@2`: `protocol`. Without it, the varint's most (3 bytes).
  * - `jsonrpc@1`: `name` (escaped exactly as the framing escapes it), a
@@ -371,7 +374,8 @@ export function encodeBound(args) {
   }
 
   if (framing === "jsonrpc@1") {
-    // An empty body is written as `null`.
+    // An empty body is written as `null`, but for a request's params, which
+    // are left out then (and when they are `null`, which this can't see).
     const body = bodyLen === 0 ? JSONRPC_NULL : bodyLen;
     if (kind === "request") {
       const name =
@@ -381,9 +385,8 @@ export function encodeBound(args) {
       // A one-way call is a notification, with no `id`.
       const oneWay = args.expectsReply === false || args.expectsReply === 0;
       const id = oneWay ? 0 : JSONRPC_ID + idDigits(args.requestId);
-      return (
-        prefix + JSONRPC_REQUEST_HEAD + name + JSONRPC_REQUEST_PARAMS + body + id + JSONRPC_CLOSE
-      );
+      const params = bodyLen === 0 ? JSONRPC_NO_PARAMS : JSONRPC_REQUEST_PARAMS + bodyLen;
+      return prefix + JSONRPC_REQUEST_HEAD + name + params + id + JSONRPC_CLOSE;
     }
     const id = idDigits(args.requestId);
     if (envelope === Envelope.OK) {

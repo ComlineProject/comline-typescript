@@ -137,6 +137,66 @@ test("JSON-RPC request matches the spec wording byte-for-byte", () => {
   assert.equal(dec.decode(req!.params), '[7,"x"]');
 });
 
+test("JSON-RPC leaves params out when there are none, and still reads null as none", () => {
+  const f = new JsonRpcFraming();
+  const conn = new JsonRpcConnectionFraming();
+  const ping = call(0, "ping");
+  for (const none of ["", "null"]) {
+    const params = enc.encode(none);
+    assert.equal(dec.decode(f.encodeRequest(ping, 8n, params)), `{"jsonrpc":"2.0","method":"ping","id":8}`);
+    assert.equal(dec.decode(conn.encodeRequest(0, ping, 8n, params)), `{"jsonrpc":"2.0","method":"ping","id":8}`);
+    assert.equal(dec.decode(conn.encodeRequest(0, ping, 8n, params, true)), `{"jsonrpc":"2.0","method":"ping"}`);
+  }
+  // Params that say something are kept, empty ones too.
+  for (const some of ["[]", "{}", "[null]"]) {
+    assert.equal(
+      dec.decode(f.encodeRequest(ping, 8n, enc.encode(some))),
+      `{"jsonrpc":"2.0","method":"ping","params":${some},"id":8}`,
+    );
+  }
+  for (const frame of [
+    `{"jsonrpc":"2.0","method":"ping","id":8}`,
+    `{"jsonrpc":"2.0","method":"ping","params":null,"id":8}`,
+  ]) {
+    const req = f.decodeRequest(enc.encode(frame));
+    assert.equal(req && dec.decode(req.params), "null");
+  }
+});
+
+test("JSON-RPC reads an error with a null id as the peer refusing, and nothing else", () => {
+  const f = new JsonRpcFraming();
+  const conn = new JsonRpcConnectionFraming();
+  for (const frame of [
+    `{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":null}`,
+    `{"id":null,"error":{"code":-32600,"message":"x","data":[1]},"jsonrpc":"2.0"}`,
+    `{"jsonrpc":"2.0","error":{"code":-32700,"message":"x"},"x":1,"id":null}`,
+    `{"jsonrpc":"2.0","result":null,"error":{"code":-32700,"message":"x"},"id":null}`,
+  ]) {
+    const bytes = enc.encode(frame);
+    assert.equal(f.decodeResponse(bytes), undefined, frame);
+    assert.equal(conn.decode(bytes), undefined, frame);
+    assert.ok(f.isPeerRefusal(bytes), frame);
+    assert.ok(conn.isPeerRefusal(bytes), frame);
+  }
+  for (const frame of [
+    `{"jsonrpc":"2.0","error":{"code":-32700,"message":"x"},"id":1}`,
+    `{"jsonrpc":"2.0","error":{"code":-32700,"message":"x"}}`,
+    `{"jsonrpc":"2.0","result":1,"id":null}`,
+    `{"jsonrpc":"2.0","error":null,"id":null}`,
+    `{"jsonrpc":"2.0","id":null}`,
+    `{"jsonrpc":"2.0","result":1,"error":{"code":1,"message":"x"},"id":null}`,
+    `{"jsonrpc":"2.0","error":{"code":-32700},"id":null}`,
+    `{"jsonrpc":"1.0","error":{"code":-32700,"message":"x"},"id":null}`,
+    `{"error":{"code":-32700,"message":"x"},"id":null}`,
+    `{"jsonrpc":"2.0","error":{"code":1,"message":"x"},"id":null,"id":null}`,
+    `{"jsonrpc":"2.0","method":"m","params":[],"id":null}`,
+    "",
+    "{",
+  ]) {
+    assert.ok(!f.isPeerRefusal(enc.encode(frame)), frame);
+  }
+});
+
 test("JSON-RPC ok / err responses carry result / code+data", () => {
   const f = new JsonRpcFraming();
 

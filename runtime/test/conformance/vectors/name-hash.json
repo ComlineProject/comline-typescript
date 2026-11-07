@@ -1,4 +1,5 @@
 {
+  "$schema": "../specs/gen/vectors.schema.json",
   "feature": "name-hash",
   "cases": [
     {
@@ -48,6 +49,14 @@
         "name": "datagram@2"
       },
       "bytes": "b84ea199ba42a444"
+    },
+    {
+      "id": "name-hash/datagram@3",
+      "op": "name_hash",
+      "input": {
+        "name": "datagram@3"
+      },
+      "bytes": "6b50a199ba43a444"
     },
     {
       "id": "name-hash/jsonrpc@1",

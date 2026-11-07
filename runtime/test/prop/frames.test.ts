@@ -73,13 +73,16 @@ const handshakeArb = fc.record({
   capabilities: fc.integer({ min: 0, max: 0xffff_ffff }),
 });
 
+/** What JSON-RPC 2.0 has params be, which the reference holds its input to. */
+const structuredParams = (value: Json) => /^(\[|\{|null$)/.test(new TextDecoder().decode(encodeValue("json@1", value)));
+
 const requestArb = fc.constantFrom(...FRAMINGS).chain((framing) =>
   fc
     .record({
       call_id: u16,
       method: fc.oneof(fc.constantFrom("greet", "chat.ChatClient/pushed"), stringArb),
       request_id: u64,
-      params: paramsArb,
+      params: framing === "jsonrpc@1" ? paramsArb.filter(structuredParams) : paramsArb,
       protocol: u16,
       one_way: fc.boolean(),
     })
@@ -213,7 +216,7 @@ withReference("frames: TypeScript frames what the reference frames", (reference)
    * valid frame, and `damaged` frame, alike.
    */
   async function agree(
-    op: Case["op"],
+    op: Exclude<Case["op"], "peer_refusal">,
     input: Input,
     damaged: ((valid: Uint8Array) => Uint8Array) | undefined,
   ): Promise<void> {

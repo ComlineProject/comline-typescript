@@ -266,7 +266,12 @@ export class Connection implements Peer {
         break;
       }
       if (decoded === "stale") continue; // a reply to a call that timed out
-      if (!decoded) break; // a malformed frame: the peer and this side disagree
+      if (!decoded) {
+        // The peer says it couldn't read a request, which fails the waiting
+        // calls as what it is. Otherwise a malformed frame: the two disagree.
+        if (this.framing.isPeerRefusal?.(frame)) this.shut(RuntimeError.peerRefused());
+        break;
+      }
       if (decoded.kind === "reply") {
         // A reply nobody waits on (its call timed out) is dropped.
         const waiting = this.waiting.get(decoded.requestId);
