@@ -95,7 +95,7 @@ pub fn generate_typescript(req: &GenerateRequest) -> Result<Vec<GeneratedFile>> 
     let codec = type_of(&req.encodings, &req.wire_format);
     // JSON-RPC protocols sharing a connection whose bare method names one
     // side couldn't tell apart.
-    connections::check(&req.schemas)?;
+    connections::check(&req.schemas, &req.encodings)?;
     let external_std = req.external_std;
 
     // With `external_std`, std's schemas aren't this package's to emit - it
@@ -123,7 +123,7 @@ pub fn generate_typescript(req: &GenerateRequest) -> Result<Vec<GeneratedFile>> 
     // collision in the last one does not arrive after the earlier files are
     // already written.
     for (namespace, units) in emitted {
-        collisions::check(namespace, units, derived_names(units, &req.schemas))?;
+        collisions::check(namespace, units, derived_names(units, &req.schemas, &req.encodings))?;
     }
     // Loose files or a `src/` tree, the package module has a file of its own,
     // which a schema of that name would be.
@@ -386,7 +386,7 @@ fn package_json(
 /// The shapes differ from Rust's - there is no per-function error type and no
 /// protocol-wide union here, but every `error` grows an `Error` suffix, which
 /// Rust has no equivalent of. Keep it in step with the emitters below.
-fn derived_names(units: &[FrozenUnit], schemas: &[(String, Vec<FrozenUnit>)]) -> Vec<Derived> {
+fn derived_names(units: &[FrozenUnit], schemas: &[(String, Vec<FrozenUnit>)], encodings: &Encodings) -> Vec<Derived> {
     let mut derived = Vec::new();
     let mut any_protocol = false;
     let mut any_connection = false;
@@ -424,7 +424,7 @@ fn derived_names(units: &[FrozenUnit], schemas: &[(String, Vec<FrozenUnit>)]) ->
                 ..
             } => {
                 any_protocol = true;
-                any_formatted |= connections::framing(parameters).name != FRAMING_JSONRPC;
+                any_formatted |= !writes_json(parameters, encodings);
                 derived.push(Derived::new(
                     format!("{proto}Dispatcher"),
                     format!("protocol `{proto}`'s dispatcher"),
@@ -550,13 +550,9 @@ fn schema_source(
                 let number = connections::on_connection(schemas, parameters)
                     .then(|| connections::protocol_number(schemas, namespace, name))
                     .flatten();
-                // JSON-RPC names a call by its method: bare, or qualified by
+                // A framing that names its calls does so bare, or qualified by
                 // protocol.
-                let framing = connections::framing(parameters);
-                let method_names = match framing.name {
-                    FRAMING_JSONRPC => framing.method_names,
-                    _ => Default::default(),
-                };
+                let method_names = MethodNames::of_protocol(parameters);
                 decls.push_str(&protocol(
                     name,
                     namespace,
@@ -593,10 +589,10 @@ fn schema_source(
     let has_connection = units.iter().any(
         |u| matches!(u, FrozenUnit::Protocol { parameters, .. } if on_connection(parameters)),
     );
-    // Whether a protocol here encodes with the package's codec: JSON-RPC
-    // carries JSON whatever it says.
+    // Whether a protocol here encodes with the package's codec: a framing that
+    // writes JSON carries it whatever it says.
     let formatted = units.iter().any(|u| {
-        matches!(u, FrozenUnit::Protocol { parameters, .. } if connections::framing(parameters).name != FRAMING_JSONRPC)
+        matches!(u, FrozenUnit::Protocol { parameters, .. } if !writes_json(parameters, encodings))
     });
 
     // The runtime import and the `IR_HASH` const, which only depend on the
@@ -620,7 +616,7 @@ fn schema_source(
         if formatted {
             import_class(encodings, &req.wire_format, &mut values, &mut external);
         }
-        if picks.iter().any(|p| p.jsonrpc) {
+        if picks.iter().any(|p| p.json) {
             import_class(encodings, FORMAT_JSON, &mut values, &mut external);
         }
         // A lockstep protocol's own handshake, which its helpers construct.
@@ -960,9 +956,10 @@ struct FramingChoice {
     /// The class it maps to: `DatagramFraming`, `JsonRpcFraming`.
     ctor: String,
     jsonrpc: bool,
-    /// What its helpers encode with when not told: JSON's codec for a
-    /// JSON-RPC protocol, which carries JSON whatever the package's format
-    /// is, the package's `Format` otherwise.
+    /// Whether it writes JSON, which it carries whatever the package's format is.
+    json: bool,
+    /// What its helpers encode with when not told: JSON's codec if it writes
+    /// JSON, the package's `Format` otherwise.
     codec: String,
     /// The protocol's handshake when it's neither `comline@1` nor `none`:
     /// its canonical name and the class it maps to. Those two keep their own
@@ -977,14 +974,22 @@ struct FramingChoice {
 fn framing_choice(parameters: &[FrozenUnit], encodings: &Encodings, types: &TypeMapper) -> FramingChoice {
     let name = connections::framing_name(parameters);
     let jsonrpc = name == FRAMING_JSONRPC;
+    let json = comline_codegen::encodings::writes_json(encodings, &name);
     FramingChoice {
         ctor: class_ref(encodings, &name, types),
-        codec: if jsonrpc { format!("new {}()", class_ref(encodings, FORMAT_JSON, types)) } else { "Format".to_string() },
+        codec: if json { format!("new {}()", class_ref(encodings, FORMAT_JSON, types)) } else { "Format".to_string() },
         jsonrpc,
+        json,
         handshake: custom_handshake(parameters, encodings)
             .map(|(handshake, _)| { let class = class_ref(encodings, &handshake, types); (handshake, class) }),
         name,
     }
+}
+
+/// Whether a protocol's framing writes JSON, which it carries whatever the
+/// package's format is.
+fn writes_json(parameters: &[FrozenUnit], encodings: &Encodings) -> bool {
+    comline_codegen::encodings::writes_json(encodings, &connections::framing_name(parameters))
 }
 
 /// The class encoding `name` maps to, as this file refers to it: under the
@@ -1085,11 +1090,14 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
     let encodings = &req.encodings;
     let mut values = vec!["Connection"];
     let mut external: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
-    // JSON-RPC carries JSON whatever the package's format is.
+    // A framing that writes JSON carries it whatever the package's format is.
+    let json = comline_codegen::encodings::writes_json(encodings, &package.framing);
     let connection_codec =
-        if jsonrpc { format!("new {}()", type_of(encodings, FORMAT_JSON)) } else { "Format".to_string() };
-    if jsonrpc {
+        if json { format!("new {}()", type_of(encodings, FORMAT_JSON)) } else { "Format".to_string() };
+    if json {
         import_class(encodings, FORMAT_JSON, &mut values, &mut external);
+    }
+    if jsonrpc {
         values.push("JsonRpcConnectionFraming");
     }
     import_class(encodings, &req.wire_format, &mut values, &mut external);
