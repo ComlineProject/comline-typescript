@@ -11,6 +11,15 @@
         "framing-datagram3/request-large-ids"
       ]
     },
+    "directions": {
+      "value": "both",
+      "proven_by": [
+        "framing-datagram3/request",
+        "framing-datagram3/response-ok",
+        "framing-datagram3/reject-response-as-request",
+        "framing-datagram3/reject-request-as-response"
+      ]
+    },
     "errors": {
       "value": "by_ordinal",
       "proven_by": [

@@ -10,6 +10,13 @@
         "framing-datagram/request-large-id"
       ]
     },
+    "directions": {
+      "value": "one",
+      "proven_by": [
+        "framing-datagram/request",
+        "framing-datagram/accept-request-as-response"
+      ]
+    },
     "errors": {
       "value": "by_ordinal",
       "proven_by": [

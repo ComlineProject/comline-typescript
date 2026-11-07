@@ -416,6 +416,15 @@
       "expect": "reject"
     },
     {
+      "id": "framing-jsonrpc/reject-response-no-outcome",
+      "op": "response",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226964223a317d",
+      "expect": "reject"
+    },
+    {
       "id": "framing-jsonrpc/found-reject-response-invalid-utf8-in-unknown-member",
       "op": "response",
       "input": {
@@ -485,6 +494,24 @@
         "framing": "jsonrpc@1"
       },
       "bytes": "7b226a736f6e727063223a22322e30222c226572726f72223a7b22636f6465223a322c226d657373616765223a226170706c69636174696f6e206572726f72222c2264617461223a020700000001787d2c226964223a377d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-response-as-request",
+      "op": "request",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c22726573756c74223a7b22626f6479223a226869227d2c226964223a377d",
+      "expect": "reject"
+    },
+    {
+      "id": "framing-jsonrpc/reject-request-as-response",
+      "op": "response",
+      "input": {
+        "framing": "jsonrpc@1"
+      },
+      "bytes": "7b226a736f6e727063223a22322e30222c226d6574686f64223a226772656574222c22706172616d73223a5b372c2278225d2c226964223a34327d",
       "expect": "reject"
     },
     {

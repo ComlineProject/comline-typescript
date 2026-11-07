@@ -168,7 +168,7 @@ test("a malformed frame closes a connection on the core, failing its calls", asy
   }
 });
 
-test("jsonrpc@1 on the core: an absent params, result or error data reads as null", async () => {
+test("jsonrpc@1 on the core: absent params or error data, and a null result, read as null", async () => {
   const [mine, theirs] = duplex();
   const conn = Connection.unverified(mine, new JsonCodec(), new JsonRpcConnectionFraming());
   assert.ok(wireOf(conn));
@@ -187,7 +187,7 @@ test("jsonrpc@1 on the core: an absent params, result or error data reads as nul
 
   const result = conn.call(ECHO, ECHO_CALL, "x");
   const req = JSON.parse(dec.decode(await theirs.recv())) as { id: number };
-  await theirs.send(enc.encode(`{"jsonrpc":"2.0","id":${req.id}}`));
+  await theirs.send(enc.encode(`{"jsonrpc":"2.0","result":null,"id":${req.id}}`));
   assert.equal(dec.decode((await result as { ok: Uint8Array }).ok), "null");
 
   const failed = conn.call(ECHO, ECHO_CALL, "x");
