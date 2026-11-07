@@ -55,6 +55,7 @@ rustup toolchain install --profile minimal >/dev/null 2>&1 || rustup toolchain i
 toolchain="$(rustup show active-toolchain | cut -d' ' -f1)"
 rustup target add --toolchain "$toolchain" wasm32-unknown-unknown >/dev/null
 sysroot="$(rustc --print sysroot)"
+commit="$(rustc -vV | sed -n 's/^commit-hash: //p')"
 cargo_home="${CARGO_HOME:-$HOME/.cargo}"
 rustup_home="${RUSTUP_HOME:-$HOME/.rustup}"
 
@@ -63,8 +64,10 @@ export CARGO_TARGET_DIR="$tmp/target"
 export CARGO_INCREMENTAL=0
 # RUSTFLAGS replaces any rustflags from the environment's cargo config, so
 # nothing outside the clone shapes the build. The clone and target dir are
-# both under $tmp, whose name differs on every run.
-export RUSTFLAGS="--remap-path-prefix=$tmp=/build --remap-path-prefix=$cargo_home=/cargo --remap-path-prefix=$rustup_home=/rustup --remap-path-prefix=$sysroot=/rust"
+# both under $tmp, whose name differs on every run. With the rust-src component
+# installed, std's panic paths resolve into the sysroot; the last remap, which
+# rustc tries first, puts them back at /rustc/<commit>, as without it.
+export RUSTFLAGS="--remap-path-prefix=$tmp=/build --remap-path-prefix=$cargo_home=/cargo --remap-path-prefix=$rustup_home=/rustup --remap-path-prefix=$sysroot=/rust --remap-path-prefix=$sysroot/lib/rustlib/src/rust=/rustc/$commit"
 unset CARGO_BUILD_RUSTFLAGS CARGO_ENCODED_RUSTFLAGS RUSTC_WRAPPER CARGO_BUILD_RUSTC_WRAPPER
 cargo build --quiet --locked -p comline-runtime-ffi --profile wasm --target wasm32-unknown-unknown
 
