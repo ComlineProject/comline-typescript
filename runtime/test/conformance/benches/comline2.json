@@ -1,5 +1,5 @@
 {
-  "$schema": "../specs/gen/bench.schema.json",
+  "$schema": "bench.schema.json",
   "hello": {
     "exchange": "offer",
     "package_id": "01010101010101010101010101010101",

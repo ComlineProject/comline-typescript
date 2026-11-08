@@ -1,5 +1,5 @@
 {
-  "$schema": "../specs/gen/bench.schema.json",
+  "$schema": "bench.schema.json",
   "frame": {
     "ir_hash": "12302652060662169617",
     "wire_format": "packed@1",

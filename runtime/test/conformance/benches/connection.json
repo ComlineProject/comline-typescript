@@ -1,5 +1,5 @@
 {
-  "$schema": "../specs/gen/bench.schema.json",
+  "$schema": "bench.schema.json",
   "framing": "datagram@2",
   "format": "packed@1",
   "protocol": 1,
