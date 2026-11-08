@@ -61,6 +61,28 @@ def real_node(node):
     return subprocess.run([node, "-p", "process.execPath"], capture_output=True, text=True, check=True).stdout.strip()
 
 
+def shard_of(ids, plan, spec):
+    """Shard I of N: a deterministic balanced split. Longest-processing-time
+    first over a cost guess (iterations, times 16 for the large payloads, which
+    cost far more per iteration), so the heavy ids spread across the shards."""
+    i, n = map(int, spec.split("/"))
+    if not 0 <= i < n:
+        sys.exit(f"--shard {spec}: need 0 <= I < N")
+
+    def cost(w):
+        c = sum(k + wu for k, wu in plan[w].values())
+        return c * 16 if "/large-array/" in w or w.endswith("/65536") else c
+
+    load = [0] * n
+    mine = []
+    for w in sorted(ids, key=lambda w: (-cost(w), w)):
+        s = min(range(n), key=lambda j: (load[j], j))
+        load[s] += cost(w)
+        if s == i:
+            mine.append(w)
+    return sorted(mine, key=ids.index)
+
+
 def pct(x):
     return f"{x:.3f}%"
 
@@ -69,7 +91,13 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("workload", nargs="*", help=f"default: {' '.join(DEFAULTS)}")
     ap.add_argument("--compare", action="store_true", help="print ts/wasm pairs as a markdown table")
-    ap.add_argument("--repeat", type=int, default=5)
+    ap.add_argument("--repeat", type=int, default=5, help="most runs per workload and tier")
+    ap.add_argument("--min-repeat", type=int, default=3,
+                    help="runs first; stop there if they settled (default 3)")
+    ap.add_argument("--settle", type=float, default=0.001,
+                    help="(max-min)/median at or below which --min-repeat runs are enough (default 0.001 = 0.1%%)")
+    ap.add_argument("--shard", metavar="I/N",
+                    help="with --shared: only shard I of N (0-based) of the ids; shards are disjoint and cover all")
     ap.add_argument("-K", type=int, help="measured iterations (default 5000; with --shared, per benchmark)")
     ap.add_argument("-W", type=int, help="warm-up iterations (default 5000; with --shared, per benchmark)")
     ap.add_argument("-j", type=int, default=4, help="parallel valgrind runs")
@@ -90,6 +118,8 @@ def main():
             w, *n = line.split()
             plan[w] = {False: (int(n[0]), int(n[1])), True: (int(n[2]), int(n[3]))}
         a.workload = a.workload or list(plan)
+        if a.shard:
+            a.workload = shard_of(a.workload, plan, a.shard)
     workloads = a.workload or DEFAULTS
     if not os.path.exists(a.region):
         sys.exit(f"{a.region} not found: build the region addon (bench/README.md)")
@@ -100,11 +130,22 @@ def main():
         k, wu = plan.get(w, {}).get(opt, (5000, 5000))
         return a.K or k, a.W or wu
 
-    with cf.ThreadPoolExecutor(a.j) as pool:
-        futs = {(w, opt): [pool.submit(run_once, a.node, w, *iters(w, opt), a.region, opt) for _ in range(a.repeat)]
-                for opt in modes for w in workloads}
-        allruns = {key: [f.result() for f in fs] for key, fs in futs.items()}
     spread_of = lambda r, m: (max(r) - min(r)) / m if m else 0
+    first = max(1, min(a.min_repeat, a.repeat))
+    with cf.ThreadPoolExecutor(a.j) as pool:
+        def submit(key, n):
+            w, opt = key
+            return [pool.submit(run_once, a.node, w, *iters(w, opt), a.region, opt) for _ in range(n)]
+
+        keys = [(w, opt) for opt in modes for w in workloads]
+        allruns = {key: [f.result() for f in fs] for key, fs in {k: submit(k, first) for k in keys}.items()}
+        # Runs that disagree beyond --settle get the rest of --repeat.
+        more = {k: submit(k, a.repeat - first) for k, r in allruns.items()
+                if len(r) < a.repeat and spread_of(r, statistics.median(r)) > a.settle}
+        for k, fs in more.items():
+            allruns[k] += [f.result() for f in fs]
+        print(f"{len(keys) - len(more)} of {len(keys)} (workload, tier) pairs settled after {first} runs",
+              file=sys.stderr)
 
     for opt in modes:
         runs = {w: allruns[(w, opt)] for w in workloads}
