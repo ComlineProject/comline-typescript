@@ -115,7 +115,7 @@ export async function workload(id, sink, drain) {
     const ours = new rt.HandshakeFrame(facts);
     const bytes = ours.encode();
     const peer = rt.HandshakeFrame.decode(bytes);
-    if (op === "encode") return { work: () => sink(new rt.HandshakeFrame(facts).encode().length) };
+    if (op === "encode") return { work: () => sink(ours.encode().length) };
     if (op === "decode") return { work: () => sink(rt.HandshakeFrame.decode(bytes).capabilities) };
     if (op === "check")
       return {

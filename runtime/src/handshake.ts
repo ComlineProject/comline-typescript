@@ -20,8 +20,6 @@ const VERSION = 1;
 const LEN = 2 + 1 + 8 + 8 + 8 + 4;
 
 const U64_MASK = (1n << 64n) - 1n;
-const FNV_OFFSET = 0xcbf29ce484222325n;
-const FNV_PRIME = 0x00000100000001b3n;
 
 // Encoding names are versioned, `name@major`, matching the Rust runtime: a later
 // `msgpack@2` must never be mistaken for `msgpack@1`. The handshake hashes them.
@@ -53,13 +51,55 @@ export const HANDSHAKE_NONE = "none";
  * `comline_runtime::contract::name_hash`.
  */
 export function nameHash(name: string): bigint {
-  let h = FNV_OFFSET;
-  for (const b of new TextEncoder().encode(name)) {
-    h = (h ^ BigInt(b)) & U64_MASK;
-    h = (h * FNV_PRIME) & U64_MASK;
-  }
-  return h;
+  nameHashWords(name);
+  return join(WORDS[0]!, WORDS[1]!);
 }
+
+// The low and high 32 bits of the last `nameHashWords`.
+const WORDS = new Uint32Array(2);
+
+// FNV-1a 64 in two 32-bit halves, into `WORDS`: no BigInt per byte. The prime
+// is 2^40 + 0x1b3, so `h * prime` is `h * 0x1b3 + (h << 40)` (mod 2^64).
+function nameHashWords(name: string): void {
+  let lo = 0x84222325;
+  let hi = 0xcbf29ce4;
+  for (let i = 0; i < name.length; i++) {
+    const c = name.charCodeAt(i);
+    if (c >= 0x80) return nameHashUtf8(name);
+    lo = (lo ^ c) >>> 0;
+    const m = lo * 0x1b3; // < 2^41, exact
+    hi = (Math.imul(hi, 0x1b3) + Math.floor(m / 0x100000000) + (lo << 8)) >>> 0;
+    lo = m >>> 0;
+  }
+  WORDS[0] = lo;
+  WORDS[1] = hi;
+}
+
+// The same over a non-ASCII name, through its UTF-8 bytes.
+function nameHashUtf8(name: string): void {
+  let lo = 0x84222325;
+  let hi = 0xcbf29ce4;
+  for (const b of new TextEncoder().encode(name)) {
+    lo = (lo ^ b) >>> 0;
+    const m = lo * 0x1b3;
+    hi = (Math.imul(hi, 0x1b3) + Math.floor(m / 0x100000000) + (lo << 8)) >>> 0;
+    lo = m >>> 0;
+  }
+  WORDS[0] = lo;
+  WORDS[1] = hi;
+}
+
+const join = (lo: number, hi: number): bigint => (BigInt(hi) << 32n) | BigInt(lo);
+
+function put32(frame: Uint8Array, at: number, x: number): void {
+  frame[at] = x;
+  frame[at + 1] = x >>> 8;
+  frame[at + 2] = x >>> 16;
+  frame[at + 3] = x >>> 24;
+}
+
+const get32 = (frame: Uint8Array, at: number): number =>
+  (frame[at]! | (frame[at + 1]! << 8) | (frame[at + 2]! << 16) | (frame[at + 3]! << 24)) >>> 0;
 
 /**
  * What one end knows when a connection opens, handed to its
@@ -82,28 +122,62 @@ export interface Facts {
  * connection opens.
  */
 export class HandshakeFrame {
-  readonly irHash: bigint;
-  readonly wireFormat: bigint;
-  readonly framing: bigint;
+  /** Transport capability bits. */
   readonly capabilities: number;
+  // The three 64-bit fields as 32-bit halves: the frame's bytes are written
+  // from and read into these, and `check` compares them, with no BigInt work.
+  // The BigInt getters below are built only when asked for.
+  private readonly irLo: number;
+  private readonly irHi: number;
+  private readonly formatLo: number;
+  private readonly formatHi: number;
+  private readonly framingLo: number;
+  private readonly framingHi: number;
 
   constructor(init: Facts) {
-    this.irHash = init.irHash & U64_MASK;
-    this.wireFormat = nameHash(init.wireFormat);
-    this.framing = nameHash(init.framing);
+    const ir = init.irHash & U64_MASK;
+    this.irLo = Number(ir & 0xffffffffn);
+    this.irHi = Number(ir >> 32n);
+    nameHashWords(init.wireFormat);
+    this.formatLo = WORDS[0]!;
+    this.formatHi = WORDS[1]!;
+    nameHashWords(init.framing);
+    this.framingLo = WORDS[0]!;
+    this.framingHi = WORDS[1]!;
     this.capabilities = (init.capabilities ?? 0) >>> 0;
+  }
+
+  /** Fingerprint of the frozen IR. */
+  get irHash(): bigint {
+    return join(this.irLo, this.irHi);
+  }
+
+  /** {@link nameHash} of the wire format's name. */
+  get wireFormat(): bigint {
+    return join(this.formatLo, this.formatHi);
+  }
+
+  /** {@link nameHash} of the framing's name. */
+  get framing(): bigint {
+    return join(this.framingLo, this.framingHi);
   }
 
   /** The fixed 31-byte frame. */
   encode(): Uint8Array {
+    // Byte by byte rather than through a `DataView`: a frame this small lives
+    // on the JS heap, and a `DataView` needs its `.buffer`, which moves it off
+    // (that alone cost ~20x the rest of the encode).
     const frame = new Uint8Array(LEN);
-    const view = new DataView(frame.buffer);
-    frame.set(MAGIC, 0);
+    frame[0] = 0x43; // "CO"
+    frame[1] = 0x4f;
     frame[2] = VERSION;
-    view.setBigUint64(3, this.irHash, true);
-    view.setBigUint64(11, this.wireFormat, true);
-    view.setBigUint64(19, this.framing, true);
-    view.setUint32(27, this.capabilities, true);
+    put32(frame, 3, this.irLo);
+    put32(frame, 7, this.irHi);
+    put32(frame, 11, this.formatLo);
+    put32(frame, 15, this.formatHi);
+    put32(frame, 19, this.framingLo);
+    put32(frame, 23, this.framingHi);
+    put32(frame, 27, this.capabilities);
     return frame;
   }
 
@@ -113,14 +187,17 @@ export class HandshakeFrame {
     if (frame[0] !== MAGIC[0] || frame[1] !== MAGIC[1] || frame[2] !== VERSION) {
       return undefined;
     }
-    const view = new DataView(frame.buffer, frame.byteOffset, LEN);
-    const h = Object.create(HandshakeFrame.prototype) as HandshakeFrame;
-    return Object.assign(h, {
-      irHash: view.getBigUint64(3, true),
-      wireFormat: view.getBigUint64(11, true),
-      framing: view.getBigUint64(19, true),
-      capabilities: view.getUint32(27, true),
-    });
+    // Fields in their declaration order (the order a constructed frame
+    // defines them in), so both share a shape.
+    const h = Object.create(HandshakeFrame.prototype) as Fields;
+    h.capabilities = get32(frame, 27);
+    h.irLo = get32(frame, 3);
+    h.irHi = get32(frame, 7);
+    h.formatLo = get32(frame, 11);
+    h.formatHi = get32(frame, 15);
+    h.framingLo = get32(frame, 19);
+    h.framingHi = get32(frame, 23);
+    return h as unknown as HandshakeFrame;
   }
 
   /**
@@ -130,11 +207,25 @@ export class HandshakeFrame {
    */
   check(peer: HandshakeFrame): void {
     const agree =
-      this.irHash === peer.irHash &&
-      this.wireFormat === peer.wireFormat &&
-      this.framing === peer.framing;
+      this.irLo === peer.irLo &&
+      this.irHi === peer.irHi &&
+      this.formatLo === peer.formatLo &&
+      this.formatHi === peer.formatHi &&
+      this.framingLo === peer.framingLo &&
+      this.framingHi === peer.framingHi;
     if (!agree) throw RuntimeError.handshake();
   }
+}
+
+/** `HandshakeFrame`'s own fields, writable, for `decode`. */
+interface Fields {
+  capabilities: number;
+  irLo: number;
+  irHi: number;
+  formatLo: number;
+  formatHi: number;
+  framingLo: number;
+  framingHi: number;
 }
 
 /**
