@@ -69,11 +69,14 @@ function executable(path: string): boolean {
 
 /** Where the reference binary is, or `undefined` if it isn't anywhere. */
 export function locate(): string | undefined {
+  // On Windows the binary is `comline-reference.exe`, and a path to it may
+  // be given without the extension (as `command -v` does under Git Bash).
+  const exe = process.platform === "win32" ? ".exe" : "";
   const env = process.env.COMLINE_REFERENCE;
-  if (env) return env;
+  if (env) return exe && !env.toLowerCase().endsWith(exe) && executable(env + exe) ? env + exe : env;
   for (const dir of (process.env.PATH ?? "").split(delimiter)) {
     if (!dir) continue;
-    const candidate = join(dir, "comline-reference");
+    const candidate = join(dir, "comline-reference" + exe);
     if (executable(candidate)) return candidate;
   }
   return undefined;
