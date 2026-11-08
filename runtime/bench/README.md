@@ -39,10 +39,20 @@ definitions vendored in `test/conformance/benches/` (ComlineProject/runtime's
 `format/<encode|decode>/<shape>/<format>`,
 `framing/<encode|decode>/<framing>/<size>`, `handshake/<encode|decode|check>`
 and `connection/step`. Each measures what generated code runs (a codec with
-the shape's `Layout`, a framing, `HandshakeFrame`, a `Connection` on
-TypeScript), with values and bytes built outside the iteration.
-`connection/step` is one `call` and its reply through a stub transport
-that hands back prebuilt replies. Left out: `msgpack@1` (not shipped) and
+the shape's `Layout`, a framing, `HandshakeFrame`), with values and bytes
+built outside the iteration, and follows the definitions' README on what's
+inside the measured region. `connection/step` is the connection's own work,
+sans I/O, as Rust measures it: the params encoded, the call framed and
+recorded as waiting, the reply frame decoded and matched to it. No transport
+and no promise handoff, which the definition leaves out; the TypeScript
+runtime has no sans-I/O connection state, so the workload runs
+`Connection`'s TypeScript path step for step (codec, `Datagram2Framing`, the
+waiting map). Beyond the definition, its framing writes a new array per frame
+where Rust's writes into a reused buffer. `framing/decode/jsonrpc@1/*` runs
+`JsonRpcFraming.decodeResponse`, which parses the whole frame into a JSON
+tree, `result` included, where the definition (and Rust) only checks
+`result` is well formed and passes on its text: that extra work is the
+runtime's, and shows in its number. Left out: `msgpack@1` (not shipped) and
 `comline2/*` (the `comline@2` hello runs on the wasm core).
 `node bench/shared.mjs` lists the ids, each with its measured and warm-up
 iterations for each tier (fewer for the heaviest; a long warm-up with the

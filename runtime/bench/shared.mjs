@@ -126,60 +126,46 @@ export async function workload(id, sink, drain) {
       };
   }
 
-  if (id === "connection/step") return connectionStep(rt, shapeOf, sink, drain);
+  if (id === "connection/step") return connectionStep(rt, shapeOf, sink);
 
   throw new Error(`unknown or unsupported shared bench ${id}`);
 }
 
-// One call on a connection and its reply: the call's params encoded and
-// framed, then the reply frame received and matched to it. The peer is a
-// transport that answers each request with the reply to it, its frames built
-// beforehand (request ids run 0, 1, ...), so only the connection's work is
-// in the iteration (and the transport's promise handoff).
-async function connectionStep(rt, shapeOf, sink, drain) {
-  const def = JSON.parse(readFileSync(new URL("connection.json", BENCHES), "utf8"));
+// One step of the connection's own work, sans I/O, as the benches README
+// defines it (Rust: `connection::State::encode_request` then `receive`): the
+// params encoded, the call framed under the next request id and recorded as
+// waiting, then the reply frame decoded, matched to the waiting call and taken
+// off. No transport and no promise handoff, which the definition leaves out.
+// The TypeScript runtime has no sans-I/O connection state to call, so this is
+// `Connection`'s TypeScript path (`callFrom`, `readLoop`) step for step, its
+// waiting map included, on a fresh state each iteration as Rust's is. Unlike
+// Rust's, the framing writes a new array per frame rather than into a reused
+// one: that allocation is the runtime's and stays in.
+function connectionStep(rt, shapeOf, sink) {
+  const def = read("connection.json");
   if (def.framing !== "datagram@2" || def.format !== "packed@1") throw new Error("connection/step: new framing or format");
-  const framing = new rt.Datagram2Framing();
-  const { value, layout } = shapeOf(def.params);
-  const payload = Uint8Array.from(Buffer.from(def.reply.payload, "hex"));
   if (def.reply.kind !== "ok") throw new Error("connection/step: a reply other than ok");
-  const REPLIES = 40000;
-  const replies = Array.from({ length: REPLIES }, (_, i) => framing.encodeReply(def.protocol, BigInt(i), { ok: payload }));
-  let sent = 0;
-  let parked;
-  const queue = [];
-  const transport = {
-    send() {
-      if (sent >= REPLIES) throw new Error("connection/step: out of prebuilt replies");
-      const reply = replies[sent++];
-      if (parked) {
-        const r = parked;
-        parked = undefined;
-        r(reply);
-      } else queue.push(reply);
-      return Promise.resolve();
-    },
-    recv() {
-      if (queue.length) return Promise.resolve(queue.shift());
-      return new Promise((r) => (parked = r));
-    },
-  };
-  const conn = rt.Connection.unverified(transport, new rt.PackedCodec(), framing);
-  if (conn.wire !== undefined) throw new Error("connection/step: the connection is on the core");
+  const framing = new rt.Datagram2Framing();
+  const codec = new rt.PackedCodec();
+  const { value, layout } = shapeOf(def.params);
   const call = rt.call(def.call.id, def.call.name);
-  const options = { layout };
-  let done = 0;
-  const got = (envelope) => {
-    sink(envelope.ok.length);
-    done++;
-  };
+  const payload = Uint8Array.from(Buffer.from(def.reply.payload, "hex"));
+  // A fresh state's first request id is 0, so its reply is always this one.
+  const reply = framing.encodeReply(def.protocol, 0n, { ok: payload });
+  const waiting = new Map();
+  const waiter = {};
   return {
-    async: true,
     work: () => {
-      const before = done;
-      conn.call(def.protocol, call, value, options).then(got);
-      drain();
-      if (done !== before + 1) throw new Error("connection/step: the reply didn't arrive in the iteration");
+      let nextId = 0n;
+      const body = codec.encode(value, layout);
+      const requestId = nextId++;
+      waiting.set(requestId, waiter);
+      const frame = framing.encodeRequest(def.protocol, call, requestId, body);
+      const decoded = framing.decode(reply);
+      if (!decoded || decoded.kind !== "reply" || waiting.get(decoded.requestId) !== waiter)
+        throw new Error("connection/step: the reply doesn't match the call");
+      waiting.delete(decoded.requestId);
+      sink(frame.length + decoded.envelope.ok.length);
     },
   };
 }

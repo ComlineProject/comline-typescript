@@ -1,0 +1,1409 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+        "Comline2Bench": {
+            "type": "object",
+            "description": "`comline2.json`: the `comline@2` handshake's hello.",
+            "additionalProperties": false,
+            "properties": {
+                "$schema": {
+                    "type": "string"
+                },
+                "hello": {
+                    "$ref": "#/$defs/Comline2Hello"
+                },
+                "ops": {
+                    "type": "array",
+                    "items": {
+                        "enum": [
+                            "encode",
+                            "decode",
+                            "answer"
+                        ]
+                    }
+                }
+            },
+            "required": [
+                "hello",
+                "ops"
+            ]
+        },
+        "Comline2Hello": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "encodings": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                            "kind": {
+                                "enum": [
+                                    "format",
+                                    "framing",
+                                    "handshake"
+                                ]
+                            },
+                            "param_hash": {
+                                "$ref": "#/$defs/Hash128"
+                            }
+                        },
+                        "required": [
+                            "kind",
+                            "param_hash"
+                        ]
+                    }
+                },
+                "exchange": {
+                    "enum": [
+                        "offer",
+                        "symmetric"
+                    ]
+                },
+                "package_id": {
+                    "$ref": "#/$defs/Hash128"
+                },
+                "protocols": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                            "functions": {
+                                "type": "array",
+                                "items": {
+                                    "allOf": [
+                                        {
+                                            "type": "number"
+                                        },
+                                        {
+                                            "type": "integer",
+                                            "maximum": 65535,
+                                            "minimum": 0
+                                        }
+                                    ]
+                                }
+                            },
+                            "line": {
+                                "$ref": "#/$defs/Comline2Release"
+                            },
+                            "number": {
+                                "allOf": [
+                                    {
+                                        "type": "number"
+                                    },
+                                    {
+                                        "type": "integer",
+                                        "maximum": 65535,
+                                        "minimum": 0
+                                    }
+                                ]
+                            },
+                            "shape_hash": {
+                                "$ref": "#/$defs/Hash128"
+                            }
+                        },
+                        "required": [
+                            "functions",
+                            "line",
+                            "number",
+                            "shape_hash"
+                        ]
+                    }
+                },
+                "version": {
+                    "$ref": "#/$defs/Comline2Version"
+                }
+            },
+            "required": [
+                "encodings",
+                "exchange",
+                "package_id",
+                "protocols",
+                "version"
+            ]
+        },
+        "Comline2Release": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "major": {
+                    "allOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "integer",
+                            "maximum": 4294967295,
+                            "minimum": 0
+                        }
+                    ]
+                },
+                "minor": {
+                    "allOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "integer",
+                            "maximum": 4294967295,
+                            "minimum": 0
+                        }
+                    ]
+                },
+                "patch": {
+                    "allOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "integer",
+                            "maximum": 4294967295,
+                            "minimum": 0
+                        }
+                    ]
+                }
+            },
+            "required": [
+                "major",
+                "minor",
+                "patch"
+            ]
+        },
+        "Comline2Version": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "major": {
+                    "allOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "integer",
+                            "maximum": 4294967295,
+                            "minimum": 0
+                        }
+                    ]
+                },
+                "minor": {
+                    "allOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "integer",
+                            "maximum": 4294967295,
+                            "minimum": 0
+                        }
+                    ]
+                },
+                "patch": {
+                    "allOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "integer",
+                            "maximum": 4294967295,
+                            "minimum": 0
+                        }
+                    ]
+                },
+                "pre": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "major",
+                "minor",
+                "patch"
+            ]
+        },
+        "Connection": {
+            "type": "object",
+            "description": "`connection.json`: one connection step, a call and its reply.",
+            "additionalProperties": false,
+            "properties": {
+                "$schema": {
+                    "type": "string"
+                },
+                "call": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": {
+                            "allOf": [
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "integer",
+                                    "maximum": 65535,
+                                    "minimum": 0
+                                }
+                            ]
+                        },
+                        "name": {
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "id",
+                        "name"
+                    ]
+                },
+                "format": {
+                    "$ref": "#/$defs/EncodingName"
+                },
+                "framing": {
+                    "$ref": "#/$defs/EncodingName"
+                },
+                "params": {
+                    "type": "string",
+                    "description": "The id of the shape whose value is the params"
+                },
+                "protocol": {
+                    "allOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "integer",
+                            "maximum": 65535,
+                            "minimum": 0
+                        }
+                    ]
+                },
+                "reply": {
+                    "type": "object",
+                    "description": "An `ok`, with the hex `payload`",
+                    "additionalProperties": false,
+                    "properties": {
+                        "kind": {
+                            "const": "ok"
+                        },
+                        "payload": {
+                            "$ref": "#/$defs/Hex"
+                        }
+                    },
+                    "required": [
+                        "kind",
+                        "payload"
+                    ]
+                }
+            },
+            "required": [
+                "call",
+                "format",
+                "framing",
+                "params",
+                "protocol",
+                "reply"
+            ]
+        },
+        "EncodingName": {
+            "type": "string",
+            "description": "A wire format's or a framing's name, versioned or not, namespaced or not.",
+            "pattern": "^[a-z0-9._-]+(@[0-9]+)?$"
+        },
+        "Formats": {
+            "type": "object",
+            "description": "`formats.json`: encode and decode, per format, per shape.",
+            "additionalProperties": false,
+            "properties": {
+                "$schema": {
+                    "type": "string"
+                },
+                "formats": {
+                    "type": "array",
+                    "description": "The formats each shape is measured in",
+                    "items": {
+                        "$ref": "#/$defs/EncodingName"
+                    }
+                },
+                "shapes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/Shape"
+                    }
+                }
+            },
+            "required": [
+                "formats",
+                "shapes"
+            ]
+        },
+        "Framings": {
+            "type": "object",
+            "description": "`framings.json`: framing encode and decode, per framing, per payload size.",
+            "additionalProperties": false,
+            "properties": {
+                "$schema": {
+                    "type": "string"
+                },
+                "frame": {
+                    "type": "object",
+                    "description": "The measured frame: an `ok` response",
+                    "additionalProperties": false,
+                    "properties": {
+                        "kind": {
+                            "const": "ok"
+                        },
+                        "payload_fill": {
+                            "type": "string"
+                        },
+                        "protocol": {
+                            "description": "The protocol number, in the framings whose reply carries one\n(`datagram@2`, `datagram@3`); the others ignore it",
+                            "allOf": [
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "integer",
+                                    "maximum": 65535,
+                                    "minimum": 0
+                                }
+                            ]
+                        },
+                        "request_id": {
+                            "$ref": "#/$defs/Unsigned"
+                        }
+                    },
+                    "required": [
+                        "kind",
+                        "payload_fill",
+                        "protocol",
+                        "request_id"
+                    ]
+                },
+                "framings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/EncodingName"
+                    }
+                },
+                "payload_sizes": {
+                    "type": "array",
+                    "items": {
+                        "allOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "integer",
+                                "minimum": 0
+                            }
+                        ]
+                    }
+                }
+            },
+            "required": [
+                "frame",
+                "framings",
+                "payload_sizes"
+            ]
+        },
+        "Generate": {
+            "type": "object",
+            "description": "An array of `count` items, each `item` with its sequences at that index.",
+            "additionalProperties": false,
+            "properties": {
+                "generate": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "count": {
+                            "allOf": [
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "integer",
+                                    "minimum": 0
+                                }
+                            ]
+                        },
+                        "item": {
+                            "$ref": "#/$defs/Item"
+                        }
+                    },
+                    "required": [
+                        "count",
+                        "item"
+                    ]
+                }
+            },
+            "required": [
+                "generate"
+            ]
+        },
+        "Handshake": {
+            "type": "object",
+            "description": "`handshake.json`: the handshake frame.",
+            "additionalProperties": false,
+            "properties": {
+                "$schema": {
+                    "type": "string"
+                },
+                "frame": {
+                    "$ref": "#/$defs/HandshakeFrame"
+                },
+                "ops": {
+                    "type": "array",
+                    "items": {
+                        "enum": [
+                            "encode",
+                            "decode",
+                            "check"
+                        ]
+                    }
+                }
+            },
+            "required": [
+                "frame",
+                "ops"
+            ]
+        },
+        "HandshakeFrame": {
+            "type": "object",
+            "description": "names unhashed",
+            "additionalProperties": false,
+            "properties": {
+                "capabilities": {
+                    "allOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "integer",
+                            "maximum": 4294967295,
+                            "minimum": 0
+                        }
+                    ]
+                },
+                "framing": {
+                    "type": "string"
+                },
+                "ir_hash": {
+                    "$ref": "#/$defs/Unsigned"
+                },
+                "wire_format": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "capabilities",
+                "framing",
+                "ir_hash",
+                "wire_format"
+            ]
+        },
+        "Hash128": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+        },
+        "Hex": {
+            "type": "string",
+            "description": "Bytes as lowercase hex.",
+            "pattern": "^([0-9a-f]{2})*$"
+        },
+        "Item": {
+            "description": "A value in which an integer narrower than 64 bits may be a sequence.",
+            "anyOf": [
+                {
+                    "$ref": "#/$defs/Value"
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "u8": {
+                            "$ref": "#/$defs/Sequence"
+                        }
+                    },
+                    "required": [
+                        "u8"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "u16": {
+                            "$ref": "#/$defs/Sequence"
+                        }
+                    },
+                    "required": [
+                        "u16"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "u32": {
+                            "$ref": "#/$defs/Sequence"
+                        }
+                    },
+                    "required": [
+                        "u32"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "i8": {
+                            "$ref": "#/$defs/Sequence"
+                        }
+                    },
+                    "required": [
+                        "i8"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "i16": {
+                            "$ref": "#/$defs/Sequence"
+                        }
+                    },
+                    "required": [
+                        "i16"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "i32": {
+                            "$ref": "#/$defs/Sequence"
+                        }
+                    },
+                    "required": [
+                        "i32"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "array": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/$defs/Item"
+                            }
+                        }
+                    },
+                    "required": [
+                        "array"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "tuple": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/$defs/Item"
+                            }
+                        }
+                    },
+                    "required": [
+                        "tuple"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "option": {
+                            "$ref": "#/$defs/Item"
+                        }
+                    },
+                    "required": [
+                        "option"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "struct": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "fields": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "array",
+                                        "prefixItems": [
+                                            {
+                                                "type": "string"
+                                            },
+                                            {
+                                                "$ref": "#/$defs/Item"
+                                            }
+                                        ],
+                                        "maxItems": 2,
+                                        "minItems": 2
+                                    }
+                                },
+                                "name": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "fields",
+                                "name"
+                            ]
+                        }
+                    },
+                    "required": [
+                        "struct"
+                    ]
+                }
+            ]
+        },
+        "Sequence": {
+            "type": "object",
+            "description": "`start + step * index`, then `modulo` (Euclidean) if it has one. That the\nnumbers fit their type is checked when it's expanded, not here.",
+            "additionalProperties": false,
+            "properties": {
+                "modulo": {
+                    "allOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "integer",
+                            "exclusiveMinimum": 0
+                        }
+                    ]
+                },
+                "start": {
+                    "type": "integer"
+                },
+                "step": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "start",
+                "step"
+            ]
+        },
+        "Shape": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "description": "As a `decode` case states it",
+                    "$ref": "#/$defs/Type"
+                },
+                "value": {
+                    "description": "A value of that type, as an `encode` case states it, or generated",
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/Value"
+                        },
+                        {
+                            "$ref": "#/$defs/Generate"
+                        }
+                    ]
+                }
+            },
+            "required": [
+                "description",
+                "id",
+                "type",
+                "value"
+            ]
+        },
+        "Signed": {
+            "type": "string",
+            "description": "A signed integer as a decimal string.",
+            "pattern": "^(0|-?[1-9][0-9]*)$"
+        },
+        "Type": {
+            "description": "A type a `decode` case reads into. It covers every shape a generated Rust\ntype can have. `self` means something only inside a `recursive` type.",
+            "anyOf": [
+                {
+                    "const": "bool"
+                },
+                {
+                    "const": "u8"
+                },
+                {
+                    "const": "u16"
+                },
+                {
+                    "const": "u32"
+                },
+                {
+                    "const": "u64"
+                },
+                {
+                    "const": "u128"
+                },
+                {
+                    "const": "i8"
+                },
+                {
+                    "const": "i16"
+                },
+                {
+                    "const": "i32"
+                },
+                {
+                    "const": "i64"
+                },
+                {
+                    "const": "i128"
+                },
+                {
+                    "const": "f32"
+                },
+                {
+                    "const": "f64"
+                },
+                {
+                    "const": "string"
+                },
+                {
+                    "const": "char"
+                },
+                {
+                    "const": "unit"
+                },
+                {
+                    "const": "self"
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "bounded_string": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "max": {
+                                    "allOf": [
+                                        {
+                                            "type": "number"
+                                        },
+                                        {
+                                            "type": "integer",
+                                            "maximum": 4294967295,
+                                            "minimum": 0
+                                        }
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "max"
+                            ]
+                        }
+                    },
+                    "required": [
+                        "bounded_string"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "option": {
+                            "$ref": "#/$defs/Type"
+                        }
+                    },
+                    "required": [
+                        "option"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "array": {
+                            "$ref": "#/$defs/Type"
+                        }
+                    },
+                    "required": [
+                        "array"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "fixed": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "len": {
+                                    "allOf": [
+                                        {
+                                            "type": "number"
+                                        },
+                                        {
+                                            "type": "integer",
+                                            "minimum": 0
+                                        }
+                                    ]
+                                },
+                                "of": {
+                                    "$ref": "#/$defs/Type"
+                                }
+                            },
+                            "required": [
+                                "len",
+                                "of"
+                            ]
+                        }
+                    },
+                    "required": [
+                        "fixed"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "bounded_array": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "max": {
+                                    "allOf": [
+                                        {
+                                            "type": "number"
+                                        },
+                                        {
+                                            "type": "integer",
+                                            "maximum": 4294967295,
+                                            "minimum": 0
+                                        }
+                                    ]
+                                },
+                                "of": {
+                                    "$ref": "#/$defs/Type"
+                                }
+                            },
+                            "required": [
+                                "max",
+                                "of"
+                            ]
+                        }
+                    },
+                    "required": [
+                        "bounded_array"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "recursive": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "max_depth": {
+                                    "allOf": [
+                                        {
+                                            "type": "number"
+                                        },
+                                        {
+                                            "type": "integer",
+                                            "maximum": 4294967295,
+                                            "minimum": 0
+                                        }
+                                    ]
+                                },
+                                "of": {
+                                    "$ref": "#/$defs/Type"
+                                }
+                            },
+                            "required": [
+                                "max_depth",
+                                "of"
+                            ]
+                        }
+                    },
+                    "required": [
+                        "recursive"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "struct": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "fields": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "array",
+                                        "prefixItems": [
+                                            {
+                                                "type": "string"
+                                            },
+                                            {
+                                                "$ref": "#/$defs/Type"
+                                            }
+                                        ],
+                                        "maxItems": 2,
+                                        "minItems": 2
+                                    }
+                                },
+                                "name": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "fields",
+                                "name"
+                            ]
+                        }
+                    },
+                    "required": [
+                        "struct"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "enum": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "name": {
+                                    "type": "string"
+                                },
+                                "variants": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                }
+                            },
+                            "required": [
+                                "name",
+                                "variants"
+                            ]
+                        }
+                    },
+                    "required": [
+                        "enum"
+                    ]
+                }
+            ]
+        },
+        "Unsigned": {
+            "type": "string",
+            "description": "An unsigned integer as a decimal string, as 64- and 128-bit integers are\nheld, so a JSON reader that holds numbers as doubles keeps them exact.",
+            "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "Value": {
+            "description": "A value as a vector states it: typed, so a runtime knows which width or\nshape to encode.",
+            "anyOf": [
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "bool": {
+                            "type": "boolean"
+                        }
+                    },
+                    "required": [
+                        "bool"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "u8": {
+                            "allOf": [
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "integer",
+                                    "maximum": 255,
+                                    "minimum": 0
+                                }
+                            ]
+                        }
+                    },
+                    "required": [
+                        "u8"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "u16": {
+                            "allOf": [
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "integer",
+                                    "maximum": 65535,
+                                    "minimum": 0
+                                }
+                            ]
+                        }
+                    },
+                    "required": [
+                        "u16"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "u32": {
+                            "allOf": [
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "integer",
+                                    "maximum": 4294967295,
+                                    "minimum": 0
+                                }
+                            ]
+                        }
+                    },
+                    "required": [
+                        "u32"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "u64": {
+                            "$ref": "#/$defs/Unsigned"
+                        }
+                    },
+                    "required": [
+                        "u64"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "u128": {
+                            "$ref": "#/$defs/Unsigned"
+                        }
+                    },
+                    "required": [
+                        "u128"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "i8": {
+                            "allOf": [
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "integer",
+                                    "maximum": 127,
+                                    "minimum": -128
+                                }
+                            ]
+                        }
+                    },
+                    "required": [
+                        "i8"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "i16": {
+                            "allOf": [
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "integer",
+                                    "maximum": 32767,
+                                    "minimum": -32768
+                                }
+                            ]
+                        }
+                    },
+                    "required": [
+                        "i16"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "i32": {
+                            "allOf": [
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "integer",
+                                    "maximum": 2147483647,
+                                    "minimum": -2147483648
+                                }
+                            ]
+                        }
+                    },
+                    "required": [
+                        "i32"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "i64": {
+                            "$ref": "#/$defs/Signed"
+                        }
+                    },
+                    "required": [
+                        "i64"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "i128": {
+                            "$ref": "#/$defs/Signed"
+                        }
+                    },
+                    "required": [
+                        "i128"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "f32": {
+                            "type": "number"
+                        }
+                    },
+                    "required": [
+                        "f32"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "f64": {
+                            "type": "number"
+                        }
+                    },
+                    "required": [
+                        "f64"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "string": {
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "string"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "char": {
+                            "type": "string",
+                            "pattern": "^[\\s\\S]$"
+                        }
+                    },
+                    "required": [
+                        "char"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "array": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/$defs/Value"
+                            }
+                        }
+                    },
+                    "required": [
+                        "array"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "tuple": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/$defs/Value"
+                            }
+                        }
+                    },
+                    "required": [
+                        "tuple"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "option": {
+                            "anyOf": [
+                                {
+                                    "type": "null"
+                                },
+                                {
+                                    "$ref": "#/$defs/Value"
+                                }
+                            ]
+                        }
+                    },
+                    "required": [
+                        "option"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "struct": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "fields": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "array",
+                                        "prefixItems": [
+                                            {
+                                                "type": "string"
+                                            },
+                                            {
+                                                "$ref": "#/$defs/Value"
+                                            }
+                                        ],
+                                        "maxItems": 2,
+                                        "minItems": 2
+                                    }
+                                },
+                                "name": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "fields",
+                                "name"
+                            ]
+                        }
+                    },
+                    "required": [
+                        "struct"
+                    ]
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "unit_variant": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "enum": {
+                                    "type": "string"
+                                },
+                                "index": {
+                                    "allOf": [
+                                        {
+                                            "type": "number"
+                                        },
+                                        {
+                                            "type": "integer",
+                                            "maximum": 4294967295,
+                                            "minimum": 0
+                                        }
+                                    ]
+                                },
+                                "variant": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "enum",
+                                "index",
+                                "variant"
+                            ]
+                        }
+                    },
+                    "required": [
+                        "unit_variant"
+                    ]
+                },
+                {
+                    "const": {
+                        "unit": null
+                    }
+                }
+            ]
+        }
+    },
+    "description": "One file of `benches/`: the work every runtime's benchmarks measure.",
+    "anyOf": [
+        {
+            "$ref": "#/$defs/Formats"
+        },
+        {
+            "$ref": "#/$defs/Framings"
+        },
+        {
+            "$ref": "#/$defs/Handshake"
+        },
+        {
+            "$ref": "#/$defs/Comline2Bench"
+        },
+        {
+            "$ref": "#/$defs/Connection"
+        }
+    ]
+}

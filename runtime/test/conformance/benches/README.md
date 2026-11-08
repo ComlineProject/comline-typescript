@@ -2,7 +2,14 @@
 
 The work every runtime's benchmarks measure, so the numbers compare across
 languages. Vendor this directory with the vectors; it uses the vectors' own
-value and type encoding (see [the corpus README](../README.md)).
+value and type encoding (see [the corpus README](../README.md)). It's whole on
+its own: [`bench.schema.json`](bench.schema.json), which each file names in
+`$schema`, is generated here from [the specs](../specs/bench.cue).
+
+The Rust benches ([`runtime/core/benches`](../../core/benches)) are the
+reference: where this README and they disagree, it's a bug in one of them.
+Each section says what's inside the measured region; anything it doesn't name
+(building the inputs, allocating the output buffer, I/O) is outside.
 
 | File | Benchmarks |
 | --- | --- |
@@ -47,15 +54,22 @@ in Rust that's a `serde` derive, not the corpus's `Value`.
 
 ## `framings.json`
 
-The measured frame is an `ok` response to request `request_id` (`42`), on
-protocol `protocol` (`1`) for a framing that carries one (`datagram@2`,
-`datagram@3`). Its
+The measured frame is an `ok` response to request `request_id` (`42`). Its
 payload, already encoded, is `size` bytes for each of `payload_sizes`: a JSON
 string, `"`, then `size - 2` copies of `payload_fill` (`a`), then `"`, so it's
 valid JSON for `jsonrpc@1` too.
 
+`protocol` (`1`) is the frame's protocol number in the framings whose reply
+carries one, `datagram@2` and `datagram@3`. `datagram@1` and `jsonrpc@1` have
+no protocol number in a reply, and ignore it.
+
 **Encode** frames the payload. **Decode** parses the frame back into its
-request id and envelope.
+request id and envelope, the payload left as the bytes it was written as:
+decoding those into values is a format's work, which `formats.json` measures.
+For `jsonrpc@1` that means the envelope is parsed (`jsonrpc`, `id`, and which
+of `result` and `error` it has), and `result` is only checked to be one
+well-formed JSON value and handed on as its text, not parsed into values. In
+Rust that's `serde_json`'s `RawValue`.
 
 ## `handshake.json`
 
@@ -76,6 +90,27 @@ One step on a fresh connection state: frame a call to `call` on `protocol`
 with the `params` shape's value as its params, in `framing` and `format`,
 waiting on a reply; then receive the `reply` to it (an `ok`, with the hex
 `payload`). Both halves are measured together.
+
+Inside the measured region, in order:
+
+1. Encoding the params: the `params` shape's value, as a generated type
+   holds it, into `format`'s bytes (the work `format/encode/<params>/<format>`
+   measures on its own).
+2. Framing the call: taking the next request id and recording the call as
+   waiting on it, then writing the request frame into an output buffer that
+   already has room for it.
+3. Receiving the reply: decoding the reply frame, already in memory, into its
+   request id and envelope, matching it to the waiting call and taking that
+   call off the waiting set. The reply's payload is left as bytes, not
+   decoded.
+
+Outside it: building the params value and the reply frame, sending or
+receiving through a transport, and any handoff to the code that waits on the
+reply (a promise, a future's waker, a callback). The step is the connection's
+own work, sans I/O. In Rust that's `connection::State::encode_request` then
+`State::receive`. A runtime whose connection is reachable only through a
+transport measures this same work the closest way it can, and says in its
+results what its number includes beyond it.
 
 ## Benchmark ids
 
