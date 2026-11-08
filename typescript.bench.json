@@ -1,216 +1,216 @@
 {
   "format": 2,
   "runtime": "typescript",
-  "commit": "b80442da0b290ddf1d8f950ce9559695e7469443",
+  "commit": "9bd824f5dba17d67624d2d379ef9d490a5ae947d",
   "toolchain": "node v22.23.4",
   "benches": {
     "format/encode/small-scalar/json@1": {
       "instructions": {
-        "value": 40909,
+        "value": 40908,
         "spread": 1e-06
       },
       "instructions-opt": {
-        "value": 42848,
-        "spread": 2.5e-05
+        "value": 21678,
+        "spread": 2e-06
       }
     },
     "format/encode/small-scalar/packed@1": {
       "instructions": {
-        "value": 26198,
-        "spread": 3e-06
+        "value": 26465,
+        "spread": 2e-06
       },
       "instructions-opt": {
-        "value": 59468,
-        "spread": 0.00011
+        "value": 6612,
+        "spread": 0.0
       }
     },
     "format/encode/string-heavy/json@1": {
       "instructions": {
-        "value": 83826,
-        "spread": 1e-06
+        "value": 83879,
+        "spread": 2e-06
       },
       "instructions-opt": {
-        "value": 73099,
-        "spread": 4e-05
+        "value": 53214,
+        "spread": 2e-06
       }
     },
     "format/encode/string-heavy/packed@1": {
       "instructions": {
-        "value": 118147,
+        "value": 117972,
         "spread": 1e-06
       },
       "instructions-opt": {
-        "value": 150183,
-        "spread": 6.2e-05
+        "value": 61002,
+        "spread": 1e-06
       }
     },
     "format/encode/nested/json@1": {
       "instructions": {
-        "value": 188501,
+        "value": 188490,
         "spread": 4e-06
       },
       "instructions-opt": {
-        "value": 112121,
-        "spread": 2.6e-05
+        "value": 88393,
+        "spread": 2e-06
       }
     },
     "format/encode/nested/packed@1": {
       "instructions": {
-        "value": 142491,
-        "spread": 1e-06
+        "value": 142286,
+        "spread": 2e-06
       },
       "instructions-opt": {
-        "value": 122596,
-        "spread": 7.6e-05
+        "value": 43337,
+        "spread": 1e-06
       }
     },
     "format/encode/large-array/json@1": {
       "instructions": {
-        "value": 30352542,
-        "spread": 2e-06
+        "value": 30362092,
+        "spread": 1e-06
       },
       "instructions-opt": {
-        "value": 14855512,
-        "spread": 1e-06
+        "value": 14865877,
+        "spread": 2e-06
       }
     },
     "format/encode/large-array/packed@1": {
       "instructions": {
-        "value": 19261919,
-        "spread": 1e-06
+        "value": 19268734,
+        "spread": 3e-06
       },
       "instructions-opt": {
-        "value": 6066150,
-        "spread": 2.7e-05
+        "value": 3567687,
+        "spread": 1e-06
       }
     },
     "format/encode/enum-heavy/json@1": {
       "instructions": {
-        "value": 136799,
-        "spread": 1e-06
+        "value": 136706,
+        "spread": 3e-06
       },
       "instructions-opt": {
-        "value": 82169,
-        "spread": 3.5e-05
+        "value": 62008,
+        "spread": 3e-06
       }
     },
     "format/encode/enum-heavy/packed@1": {
       "instructions": {
-        "value": 113732,
+        "value": 113592,
         "spread": 1e-06
       },
       "instructions-opt": {
-        "value": 66289,
-        "spread": 0.000141
+        "value": 16321,
+        "spread": 2e-06
       }
     },
     "format/decode/small-scalar/json@1": {
       "instructions": {
-        "value": 139408,
-        "spread": 2e-06
+        "value": 139360,
+        "spread": 4e-06
       },
       "instructions-opt": {
-        "value": 133202,
-        "spread": 2.9e-05
+        "value": 65823,
+        "spread": 4e-06
       }
     },
     "format/decode/small-scalar/packed@1": {
       "instructions": {
-        "value": 36542,
+        "value": 36387,
         "spread": 2e-06
       },
       "instructions-opt": {
-        "value": 83087,
-        "spread": 0.000112
+        "value": 11508,
+        "spread": 0.0
       }
     },
     "format/decode/string-heavy/json@1": {
       "instructions": {
-        "value": 231104,
+        "value": 231444,
         "spread": 2e-06
       },
       "instructions-opt": {
-        "value": 203916,
-        "spread": 4.2e-05
+        "value": 139244,
+        "spread": 3e-06
       }
     },
     "format/decode/string-heavy/packed@1": {
       "instructions": {
-        "value": 129449,
-        "spread": 1e-06
+        "value": 129365,
+        "spread": 2e-06
       },
       "instructions-opt": {
-        "value": 118732,
-        "spread": 0.000103
+        "value": 40239,
+        "spread": 3e-06
       }
     },
     "format/decode/nested/json@1": {
       "instructions": {
-        "value": 626913,
+        "value": 627425,
         "spread": 3e-06
       },
       "instructions-opt": {
-        "value": 360760,
-        "spread": 2.1e-05
+        "value": 297425,
+        "spread": 2e-06
       }
     },
     "format/decode/nested/packed@1": {
       "instructions": {
-        "value": 204061,
-        "spread": 2e-06
+        "value": 204030,
+        "spread": 1e-06
       },
       "instructions-opt": {
-        "value": 150236,
-        "spread": 0.000102
+        "value": 58779,
+        "spread": 5e-06
       }
     },
     "format/decode/large-array/json@1": {
       "instructions": {
-        "value": 87285811,
+        "value": 87283695,
         "spread": 0.0
       },
       "instructions-opt": {
-        "value": 42628079,
-        "spread": 5e-06
+        "value": 39845888,
+        "spread": 0.0
       }
     },
     "format/decode/large-array/packed@1": {
       "instructions": {
-        "value": 29235019,
-        "spread": 0.0
+        "value": 29308377,
+        "spread": 1e-06
       },
       "instructions-opt": {
-        "value": 12509598,
-        "spread": 2.4e-05
+        "value": 9557439,
+        "spread": 1e-06
       }
     },
     "format/decode/enum-heavy/json@1": {
       "instructions": {
-        "value": 375730,
+        "value": 375854,
         "spread": 1e-06
       },
       "instructions-opt": {
-        "value": 273813,
-        "spread": 3.9e-05
+        "value": 190843,
+        "spread": 6e-06
       }
     },
     "format/decode/enum-heavy/packed@1": {
       "instructions": {
-        "value": 181389,
+        "value": 181199,
         "spread": 1e-06
       },
       "instructions-opt": {
-        "value": 97896,
-        "spread": 2e-06
+        "value": 29329,
+        "spread": 5e-06
       }
     },
     "framing/encode/datagram@1/16": {
       "instructions": {
-        "value": 5516,
+        "value": 5517,
         "spread": 0.0
       },
       "instructions-opt": {
-        "value": 3512,
+        "value": 3511,
         "spread": 0.0
       }
     },
@@ -220,43 +220,83 @@
         "spread": 0.0
       },
       "instructions-opt": {
-        "value": 6225,
+        "value": 6224,
         "spread": 0.0
       }
     },
     "framing/encode/datagram@1/4096": {
       "instructions": {
-        "value": 18277,
+        "value": 18285,
         "spread": 0.0
       },
       "instructions-opt": {
-        "value": 16253,
+        "value": 16262,
         "spread": 0.0
       }
     },
     "framing/encode/datagram@1/65536": {
       "instructions": {
-        "value": 271097,
+        "value": 271115,
         "spread": 0.0
       },
       "instructions-opt": {
-        "value": 271129,
+        "value": 271122,
         "spread": 0.0
       }
     },
     "framing/encode/datagram@2/16": {
       "instructions": {
-        "value": 8189,
+        "value": 8090,
         "spread": 0.0
       },
       "instructions-opt": {
-        "value": 4160,
+        "value": 4161,
         "spread": 0.0
       }
     },
     "framing/encode/datagram@2/256": {
       "instructions": {
-        "value": 10926,
+        "value": 10807,
+        "spread": 0.0
+      },
+      "instructions-opt": {
+        "value": 6877,
+        "spread": 0.0
+      }
+    },
+    "framing/encode/datagram@2/4096": {
+      "instructions": {
+        "value": 20858,
+        "spread": 0.0
+      },
+      "instructions-opt": {
+        "value": 16911,
+        "spread": 0.0
+      }
+    },
+    "framing/encode/datagram@2/65536": {
+      "instructions": {
+        "value": 273692,
+        "spread": 0.0
+      },
+      "instructions-opt": {
+        "value": 273691,
+        "spread": 0.0
+      }
+    },
+    "framing/encode/datagram@3/16": {
+      "instructions": {
+        "value": 8364,
+        "spread": 0.0
+      },
+      "instructions-opt": {
+        "value": 4159,
+        "spread": 0.0
+      }
+    },
+    "framing/encode/datagram@3/256": {
+      "instructions": {
+        "value": 11080,
         "spread": 0.0
       },
       "instructions-opt": {
@@ -264,107 +304,77 @@
         "spread": 0.0
       }
     },
-    "framing/encode/datagram@2/4096": {
-      "instructions": {
-        "value": 20388,
-        "spread": 0.0
-      },
-      "instructions-opt": {
-        "value": 16903,
-        "spread": 0.0
-      }
-    },
-    "framing/encode/datagram@2/65536": {
-      "instructions": {
-        "value": 274137,
-        "spread": 0.0
-      },
-      "instructions-opt": {
-        "value": 273686,
-        "spread": 0.0
-      }
-    },
-    "framing/encode/datagram@3/16": {
-      "instructions": {
-        "value": 8367,
-        "spread": 0.0
-      },
-      "instructions-opt": {
-        "value": 4257,
-        "spread": 0.0
-      }
-    },
-    "framing/encode/datagram@3/256": {
-      "instructions": {
-        "value": 11106,
-        "spread": 0.0
-      },
-      "instructions-opt": {
-        "value": 6972,
-        "spread": 0.0
-      }
-    },
     "framing/encode/datagram@3/4096": {
       "instructions": {
-        "value": 20561,
+        "value": 21136,
         "spread": 0.0
       },
       "instructions-opt": {
-        "value": 16989,
+        "value": 16910,
         "spread": 0.0
       }
     },
     "framing/encode/datagram@3/65536": {
       "instructions": {
-        "value": 273952,
+        "value": 273951,
         "spread": 0.0
       },
       "instructions-opt": {
-        "value": 273966,
+        "value": 273964,
         "spread": 0.0
       }
     },
     "framing/encode/jsonrpc@1/16": {
       "instructions": {
-        "value": 7750,
+        "value": 7747,
         "spread": 0.0
       },
       "instructions-opt": {
-        "value": 5213,
+        "value": 5211,
         "spread": 0.0
       }
     },
     "framing/encode/jsonrpc@1/256": {
       "instructions": {
-        "value": 8595,
+        "value": 8585,
         "spread": 0.0
       },
       "instructions-opt": {
-        "value": 6046,
+        "value": 6045,
         "spread": 0.0
       }
     },
     "framing/encode/jsonrpc@1/4096": {
       "instructions": {
-        "value": 25023,
-        "spread": 9e-06
+        "value": 24906,
+        "spread": 2.2e-05
       },
       "instructions-opt": {
-        "value": 22481,
-        "spread": 3e-06
+        "value": 22296,
+        "spread": 3.8e-05
       }
     },
     "framing/encode/jsonrpc@1/65536": {
       "instructions": {
-        "value": 443893,
-        "spread": 3e-06
+        "value": 443847,
+        "spread": 1.5e-05
       },
       "instructions-opt": {
-        "value": 443928,
-        "spread": 7e-06
+        "value": 443890,
+        "spread": 1.3e-05
       }
     },
     "framing/decode/datagram@1/16": {
+      "instructions": {
+        "value": 3864,
+        "spread": 0.0
+      },
+      "instructions-opt": {
+        "value": 1968,
+        "spread": 0.0
+      }
+    },
+    "framing/decode/datagram@1/256": {
       "instructions": {
         "value": 3864,
         "spread": 0.0
@@ -374,19 +384,9 @@
         "spread": 0.0
       }
     },
-    "framing/decode/datagram@1/256": {
-      "instructions": {
-        "value": 3865,
-        "spread": 0.0
-      },
-      "instructions-opt": {
-        "value": 1968,
-        "spread": 0.0
-      }
-    },
     "framing/decode/datagram@1/4096": {
       "instructions": {
-        "value": 3865,
+        "value": 3864,
         "spread": 0.0
       },
       "instructions-opt": {
@@ -396,51 +396,51 @@
     },
     "framing/decode/datagram@1/65536": {
       "instructions": {
-        "value": 3970,
+        "value": 3968,
         "spread": 0.0
       },
       "instructions-opt": {
-        "value": 3969,
+        "value": 3971,
         "spread": 0.0
       }
     },
     "framing/decode/datagram@2/16": {
       "instructions": {
-        "value": 6282,
+        "value": 6185,
         "spread": 0.0
       },
       "instructions-opt": {
-        "value": 2169,
+        "value": 2072,
         "spread": 0.0
       }
     },
     "framing/decode/datagram@2/256": {
       "instructions": {
-        "value": 6282,
+        "value": 6185,
         "spread": 0.0
       },
       "instructions-opt": {
-        "value": 2169,
+        "value": 2072,
         "spread": 0.0
       }
     },
     "framing/decode/datagram@2/4096": {
       "instructions": {
-        "value": 6282,
+        "value": 6185,
         "spread": 0.0
       },
       "instructions-opt": {
-        "value": 2169,
+        "value": 2072,
         "spread": 0.0
       }
     },
     "framing/decode/datagram@2/65536": {
       "instructions": {
-        "value": 6775,
+        "value": 6288,
         "spread": 0.0
       },
       "instructions-opt": {
-        "value": 6778,
+        "value": 6290,
         "spread": 0.0
       }
     },
@@ -450,17 +450,17 @@
         "spread": 0.0
       },
       "instructions-opt": {
-        "value": 2181,
+        "value": 2182,
         "spread": 0.0
       }
     },
     "framing/decode/datagram@3/256": {
       "instructions": {
-        "value": 6567,
+        "value": 6566,
         "spread": 0.0
       },
       "instructions-opt": {
-        "value": 2182,
+        "value": 2181,
         "spread": 0.0
       }
     },
@@ -470,7 +470,7 @@
         "spread": 0.0
       },
       "instructions-opt": {
-        "value": 2181,
+        "value": 2182,
         "spread": 0.0
       }
     },
@@ -486,57 +486,57 @@
     },
     "framing/decode/jsonrpc@1/16": {
       "instructions": {
-        "value": 58721,
-        "spread": 8e-06
+        "value": 58639,
+        "spread": 2e-06
       },
       "instructions-opt": {
-        "value": 92699,
-        "spread": 5.6e-05
+        "value": 38607,
+        "spread": 3e-06
       }
     },
     "framing/decode/jsonrpc@1/256": {
       "instructions": {
-        "value": 64759,
-        "spread": 7e-06
+        "value": 64678,
+        "spread": 1e-06
       },
       "instructions-opt": {
-        "value": 98640,
-        "spread": 4.8e-05
+        "value": 44547,
+        "spread": 1.9e-05
       }
     },
     "framing/decode/jsonrpc@1/4096": {
       "instructions": {
-        "value": 163895,
+        "value": 163676,
         "spread": 1e-06
       },
       "instructions-opt": {
-        "value": 198064,
-        "spread": 2.3e-05
+        "value": 143492,
+        "spread": 2e-06
       }
     },
     "framing/decode/jsonrpc@1/65536": {
       "instructions": {
-        "value": 1918412,
-        "spread": 2e-06
+        "value": 1918420,
+        "spread": 1e-06
       },
       "instructions-opt": {
-        "value": 1953162,
-        "spread": 9e-06
+        "value": 1902174,
+        "spread": 3e-06
       }
     },
     "handshake/encode": {
       "instructions": {
-        "value": 43643,
+        "value": 43566,
         "spread": 1e-06
       },
       "instructions-opt": {
-        "value": 29392,
+        "value": 29386,
         "spread": 2e-06
       }
     },
     "handshake/decode": {
       "instructions": {
-        "value": 5022,
+        "value": 5021,
         "spread": 0.0
       },
       "instructions-opt": {
@@ -550,18 +550,18 @@
         "spread": 0.0
       },
       "instructions-opt": {
-        "value": 303,
+        "value": 304,
         "spread": 0.0
       }
     },
     "connection/step": {
       "instructions": {
-        "value": 49863,
-        "spread": 0.0
+        "value": 41527,
+        "spread": 3e-06
       },
       "instructions-opt": {
-        "value": 122080,
-        "spread": 6.1e-05
+        "value": 15395,
+        "spread": 2e-06
       }
     }
   }
