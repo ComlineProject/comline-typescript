@@ -264,18 +264,25 @@ try {
 }
 
 function run() {
+  // Two full collections first, so start-up's garbage and its lazy sweeping
+  // (the second finishes the first's) don't land in the loop in varying
+  // amounts. Before the warm-up, not after it: a full collection clears the
+  // maps only the dead iterations' objects used, and V8 then throws away the
+  // optimized code that embeds them ("weak objects" in --trace-deopt), so the
+  // region would rerun the work unoptimized and recompile it (#139).
+  setFlagsFromString("--expose-gc");
+  const gc = runInNewContext("gc");
+  gc();
+  gc();
+
   // Warm up through the same loop, over several calls.
   const ROUNDS = 4;
   for (let r = 0; r < ROUNDS; r++) measured(Math.ceil(W / ROUNDS));
 
   // Start the measured loop on an empty young generation, so where the first
-  // scavenge falls doesn't depend on what start-up allocated. Two full
-  // collections: the second finishes the first's lazy sweeping, which would
-  // otherwise land in the loop in varying amounts.
-  setFlagsFromString("--expose-gc");
-  const gc = runInNewContext("gc");
-  gc();
-  gc();
+  // scavenge falls doesn't depend on how much the warm-up allocated. A
+  // scavenge, which keeps the optimized code.
+  gc({ type: "minor" });
 
   if (process.env.COMLINE_REGION) {
     createRequire(import.meta.url)(process.env.COMLINE_REGION).region(() => measured(K));
