@@ -1,0 +1,28 @@
+{
+  "runtime": "typescript",
+  "commit": "9bd824f5dba17d67624d2d379ef9d490a5ae947d",
+  "toolchain": "node v22.23.4",
+  "date": "2026-11-08T10:24:12Z",
+  "run": "https://github.com/ComlineProject/comline-typescript/actions/runs/42471158962",
+  "targets": {},
+  "proptest": {
+    "cases": 20000,
+    "properties": {
+      "packed@1 and json@1 decoding agree with the reference": "pass",
+      "packed@1 and json@1 encodings equal the reference's": "pass",
+      "name hashes equal the reference's": "pass",
+      "handshake frames agree with the reference": "pass",
+      "envelopes agree with the reference": "pass",
+      "request frames agree with the reference, in every framing": "pass",
+      "response frames agree with the reference, in every framing": "pass",
+      "datagram@2, ordered, on TypeScript: every step agrees with the reference": "pass",
+      "datagram@2, unordered, on TypeScript: every step agrees with the reference": "pass",
+      "jsonrpc@1, ordered, on TypeScript: every step agrees with the reference": "pass",
+      "jsonrpc@1, unordered, on TypeScript: every step agrees with the reference": "pass",
+      "datagram@2, ordered, on the core: every step agrees with the reference": "pass",
+      "datagram@2, unordered, on the core: every step agrees with the reference": "pass",
+      "jsonrpc@1, ordered, on the core: every step agrees with the reference": "pass",
+      "jsonrpc@1, unordered, on the core: every step agrees with the reference": "pass"
+    }
+  }
+}
