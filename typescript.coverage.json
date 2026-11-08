@@ -1,8 +1,8 @@
 {
   "format": 1,
-  "commit": "dafcf8ea2c44d92b5b4d22777659a753e8b70fb7",
+  "commit": "714dfc5e37a1bf450449e9ce6c743cd780456ff9",
   "toolchain": "node 22.23.4 test coverage",
-  "run": "https://github.com/ComlineProject/comline-typescript/actions/runs/42480325407",
+  "run": "https://github.com/ComlineProject/comline-typescript/actions/runs/42484518551",
   "tool": "node 22.23.4 test coverage",
   "totals": {
     "lines": {
@@ -14,8 +14,8 @@
       "total": 287
     },
     "branches": {
-      "covered": 1132,
-      "total": 1207
+      "covered": 1133,
+      "total": 1206
     }
   },
   "units": {
@@ -43,7 +43,7 @@
         "total": 44
       },
       "branches": {
-        "covered": 214,
+        "covered": 213,
         "total": 219
       }
     },
@@ -57,8 +57,8 @@
         "total": 209
       },
       "branches": {
-        "covered": 829,
-        "total": 890
+        "covered": 831,
+        "total": 889
       }
     }
   }
