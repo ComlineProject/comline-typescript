@@ -1,0 +1,60 @@
+{
+  "$schema": "../specs/gen/bench.schema.json",
+  "hello": {
+    "exchange": "offer",
+    "package_id": "01010101010101010101010101010101",
+    "version": {
+      "major": 0,
+      "minor": 3,
+      "patch": 0
+    },
+    "encodings": [
+      {
+        "kind": "format",
+        "param_hash": "11111111111111111111111111111111"
+      },
+      {
+        "kind": "framing",
+        "param_hash": "22222222222222222222222222222222"
+      },
+      {
+        "kind": "handshake",
+        "param_hash": "33333333333333333333333333333333"
+      }
+    ],
+    "protocols": [
+      {
+        "number": 0,
+        "line": {
+          "major": 0,
+          "minor": 2,
+          "patch": 0
+        },
+        "shape_hash": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0",
+        "functions": [
+          0,
+          1,
+          2
+        ]
+      },
+      {
+        "number": 1,
+        "line": {
+          "major": 0,
+          "minor": 1,
+          "patch": 0
+        },
+        "shape_hash": "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0",
+        "functions": [
+          0,
+          1
+        ]
+      }
+    ]
+  },
+  "ops": [
+    "encode",
+    "decode",
+    "answer"
+  ]
+}

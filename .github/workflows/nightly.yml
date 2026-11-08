@@ -3,6 +3,8 @@ name: Nightly differential tests
 # The property tests against the Rust reference (runtime/test/prop/), at
 # many more runs than a pull request's. A failure opens an issue, or comments
 # on the open one with the same title, rather than blocking anything.
+# Each run, pass or fail, also writes `typescript.fuzz.json` (each property's
+# verdict) and commits it to the `reports` branch, which the Observatory reads.
 
 on:
   schedule:
@@ -10,7 +12,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 jobs:
@@ -21,13 +23,15 @@ jobs:
       run:
         working-directory: runtime
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
         with:
-          node-version: 20
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
       - id: reference
         run: echo "rev=$(cat test/conformance/VECTORS_REV)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         id: reference-cache
         with:
           path: ~/.cargo/bin/comline-reference
@@ -40,11 +44,41 @@ jobs:
       - run: npm ci
       - run: npx tsc -p tsconfig.json
       - name: Properties, 20000 runs each
+        id: properties
         run: |
           set -o pipefail
-          FC_NUM_RUNS=20000 node --test dist/test/prop/*.test.js 2>&1 | tee "$RUNNER_TEMP/properties.log"
+          FC_NUM_RUNS=20000 node --test \
+            --test-reporter=spec --test-reporter-destination=stdout \
+            --test-reporter=./scripts/prop-verdicts.mjs --test-reporter-destination="$RUNNER_TEMP/verdicts.json" \
+            dist/test/prop/*.test.js 2>&1 | tee "$RUNNER_TEMP/properties.log"
+      - name: Write typescript.fuzz.json
+        if: always() && steps.properties.outcome != 'skipped'
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const properties = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/verdicts.json", "utf8"));
+            const report = {
+              runtime: "typescript",
+              commit: process.env.GITHUB_SHA,
+              toolchain: "node " + process.version,
+              date: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+              run: process.env.RUN_URL,
+              targets: {},
+              proptest: { cases: 20000, properties },
+            };
+            fs.writeFileSync("typescript.fuzz.json", JSON.stringify(report, null, 2) + "\n");
+          '
+          cat typescript.fuzz.json
+      - uses: ComlineProject/observatory/.github/actions/publish-report@v1
+        if: always() && hashFiles('runtime/typescript.fuzz.json') != ''
+        with:
+          reports: runtime/typescript.fuzz.json
+          readme: .github/reports-branch.md
+          dry-run: ${{ github.ref != 'refs/heads/main' }}
       - name: Open or update an issue
-        if: failure()
+        if: failure() && steps.properties.outcome == 'failure'
         env:
           GH_TOKEN: ${{ github.token }}
           TITLE: "Nightly: the differential property tests found a divergence"

@@ -1,0 +1,10 @@
+{
+  "$schema": "../specs/gen/bench.schema.json",
+  "frame": {
+    "ir_hash": "12302652060662169617",
+    "wire_format": "packed@1",
+    "framing": "datagram@2",
+    "capabilities": 3
+  },
+  "ops": ["encode", "decode", "check"]
+}

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Vendors the runtime wire conformance corpus (features.json, profiles/ and vectors/)
+# Vendors the runtime wire conformance corpus (features.json, profiles/, vectors/ and
+# the shared benchmark definitions, benches/)
 # from ComlineProject/runtime into test/conformance/, at a pinned commit.
 #
 #   scripts/vendor-conformance.sh <rev>   # vendor <rev> and pin it in VECTORS_REV
@@ -23,7 +24,7 @@ git -C "$tmp/runtime" checkout --quiet "$rev" -- runtime/conformance
 corpus="$tmp/runtime/runtime/conformance"
 
 if [[ "${1:-}" == "--check" ]]; then
-  if diff -r "$corpus/vectors" "$dest/vectors" && diff -r "$corpus/profiles" "$dest/profiles" && diff "$corpus/features.json" "$dest/features.json"; then
+  if diff -r "$corpus/vectors" "$dest/vectors" && diff -r "$corpus/profiles" "$dest/profiles" && diff -r "$corpus/benches" "$dest/benches" && diff "$corpus/features.json" "$dest/features.json"; then
     echo "test/conformance matches $repo@$rev"
   else
     echo "test/conformance differs from $repo@$rev: re-vendor with scripts/vendor-conformance.sh <rev>" >&2
@@ -32,9 +33,10 @@ if [[ "${1:-}" == "--check" ]]; then
   exit 0
 fi
 
-rm -rf "$dest/vectors" "$dest/profiles"
+rm -rf "$dest/vectors" "$dest/profiles" "$dest/benches"
 cp -r "$corpus/vectors" "$dest/vectors"
 cp -r "$corpus/profiles" "$dest/profiles"
+cp -r "$corpus/benches" "$dest/benches"
 cp "$corpus/features.json" "$dest/features.json"
 git -C "$tmp/runtime" rev-parse "$rev" > "$dest/VECTORS_REV"
 echo "vendored $repo@$(cat "$dest/VECTORS_REV")"

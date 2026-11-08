@@ -1,0 +1,9 @@
+{
+  "$schema": "../specs/gen/bench.schema.json",
+  "framing": "datagram@2",
+  "format": "packed@1",
+  "protocol": 1,
+  "call": { "id": 1, "name": "record" },
+  "params": "small-scalar",
+  "reply": { "kind": "ok", "payload": "" }
+}
