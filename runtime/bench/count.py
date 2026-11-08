@@ -87,38 +87,52 @@ def main():
     if a.shared:
         for line in subprocess.run([a.node, os.path.join(HERE, "shared.mjs")], capture_output=True,
                                    text=True, check=True).stdout.splitlines():
-            w, k, wu = line.split()
-            plan[w] = (int(k), int(wu))
+            w, *n = line.split()
+            plan[w] = {False: (int(n[0]), int(n[1])), True: (int(n[2]), int(n[3]))}
         a.workload = a.workload or list(plan)
     workloads = a.workload or DEFAULTS
-    kw = {w: (a.K or plan.get(w, (5000, 5000))[0], a.W or plan.get(w, (5000, 5000))[1]) for w in workloads}
     if not os.path.exists(a.region):
         sys.exit(f"{a.region} not found: build the region addon (bench/README.md)")
+    # A shared report has both tiers: interpreter/baseline (--no-opt) and optimized.
+    modes = [False, True] if a.shared and a.json else [a.opt]
+
+    def iters(w, opt):
+        k, wu = plan.get(w, {}).get(opt, (5000, 5000))
+        return a.K or k, a.W or wu
 
     with cf.ThreadPoolExecutor(a.j) as pool:
-        futs = {w: [pool.submit(run_once, a.node, w, *kw[w], a.region, a.opt) for _ in range(a.repeat)]
-                for w in workloads}
-        runs = {w: [f.result() for f in fs] for w, fs in futs.items()}
-    med = {w: statistics.median(r) for w, r in runs.items()}
+        futs = {(w, opt): [pool.submit(run_once, a.node, w, *iters(w, opt), a.region, opt) for _ in range(a.repeat)]
+                for opt in modes for w in workloads}
+        allruns = {key: [f.result() for f in fs] for key, fs in futs.items()}
+    spread_of = lambda r, m: (max(r) - min(r)) / m if m else 0
 
-    print("| workload | median instr/iter | min | max | spread |")
-    print("|---|---:|---:|---:|---:|")
-    for w, r in runs.items():
-        spread = 100 * (max(r) - min(r)) / med[w] if med[w] else 0
-        print(f"| {w} | {med[w]:,.0f} | {min(r):,.0f} | {max(r):,.0f} | {pct(spread)} |")
+    for opt in modes:
+        runs = {w: allruns[(w, opt)] for w in workloads}
+        med = {w: statistics.median(r) for w, r in runs.items()}
+        if len(modes) > 1:
+            print(f"\n{'--opt' if opt else '--no-opt'}\n")
+        print("| workload | median instr/iter | min | max | spread |")
+        print("|---|---:|---:|---:|---:|")
+        for w, r in runs.items():
+            print(f"| {w} | {med[w]:,.0f} | {min(r):,.0f} | {max(r):,.0f} | {pct(100 * spread_of(r, med[w]))} |")
 
     if a.json:
         commit = a.commit or subprocess.run(["git", "rev-parse", "HEAD"], cwd=HERE, capture_output=True,
                                             text=True, check=True).stdout.strip()
         version = subprocess.run([a.node, "--version"], capture_output=True, text=True, check=True).stdout.strip()
+
+        def metric(r):
+            m = statistics.median(r)
+            return {"value": round(m), "spread": round(spread_of(r, m), 6)}
+
         report = {
+            "format": 2,
             "runtime": "typescript",
             "commit": commit,
             "toolchain": f"node {version}",
-            "metric": "instructions",
-            "benches": {w: {"ir": round(med[w]),
-                            "spread": round((max(r) - min(r)) / med[w], 6) if med[w] else 0}
-                        for w, r in runs.items()},
+            "benches": {w: {("instructions-opt" if opt else "instructions"): metric(allruns[(w, opt)])
+                            for opt in modes}
+                        for w in workloads},
         }
         with open(a.json, "w") as f:
             json.dump(report, f, indent=2)

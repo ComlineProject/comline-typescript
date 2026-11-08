@@ -185,17 +185,19 @@ async function connectionStep(rt, shapeOf, sink, drain) {
 }
 
 /**
- * The measured and warm-up iterations for `id`, `[K, W]`: fewer for the
- * heaviest, which take milliseconds an iteration at `--no-opt` and fifty
- * times that under callgrind.
+ * The measured and warm-up iterations for `id`, `[K, W, K opt, W opt]`:
+ * fewer for the heaviest, which take milliseconds an iteration at `--no-opt`
+ * and a hundred times that under callgrind; with the optimizing tier on, a
+ * warm-up long enough for TurboFan to have compiled the work (checked: a
+ * longer one, 20000 or 100, gives the same counts within 1%).
  */
 export function iterations(id) {
-  if (id.includes("/large-array/")) return [20, 40];
-  if (id.endsWith("/65536")) return [200, 200];
-  return [1000, 1000];
+  if (id.includes("/large-array/")) return [20, 40, 20, 40];
+  if (id.endsWith("/65536")) return [200, 200, 200, 1000];
+  return [1000, 1000, 1000, 5000];
 }
 
-// `node bench/shared.mjs` prints each id with its `K W`.
+// `node bench/shared.mjs` prints each id with its `K W Kopt Wopt`.
 if (import.meta.url === `file://${process.argv[1]}`) {
   for (const id of ids()) console.log(id, ...iterations(id));
 }

@@ -7,8 +7,10 @@ from this branch's history:
 
 - `typescript.bench.json`: instruction counts of the shared benchmarks
   (ComlineProject/runtime's `runtime/conformance/benches/`), from
-  `.github/workflows/bench.yml` on every push to `main`. How they run:
-  `runtime/bench/README.md` on `main`.
+  `.github/workflows/bench.yml` on every push to `main`, in two tiers per
+  benchmark: `instructions` (`node --no-opt`) and `instructions-opt` (the
+  optimizing tier on, after a warm-up), which is the one the Observatory's
+  ratio to Rust uses. How they run: `runtime/bench/README.md` on `main`.
 - `typescript.fuzz.json`: the nightly property tests against the Rust
   reference, from `.github/workflows/nightly.yml`.
 

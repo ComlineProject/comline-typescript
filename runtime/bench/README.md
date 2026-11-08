@@ -45,16 +45,25 @@ TypeScript), with values and bytes built outside the iteration.
 that hands back prebuilt replies. Left out: `msgpack@1` (not shipped) and
 `comline2/*` (the `comline@2` hello runs on the wasm core).
 `node bench/shared.mjs` lists the ids, each with its measured and warm-up
-iterations (fewer for the heaviest). `count.py --shared --json FILE` counts
-them all and writes the report CI publishes (`.github/workflows/bench.yml`):
+iterations for each tier (fewer for the heaviest; a long warm-up with the
+optimizing tier on, so TurboFan has compiled the work before the region).
+`count.py --shared --json FILE` counts them all in both tiers and writes the
+report CI publishes (`.github/workflows/bench.yml`), in the Observatory's
+bench format 2:
 
 ```json
-{"runtime": "typescript", "commit": "<sha>", "toolchain": "node v22.x.y", "metric": "instructions",
- "benches": {"format/encode/nested/packed@1": {"ir": 12345, "spread": 0.002}}}
+{"format": 2, "runtime": "typescript", "commit": "<sha>", "toolchain": "node v22.x.y",
+ "benches": {"format/encode/nested/packed@1": {
+   "instructions":     {"value": 12345, "spread": 0.002},
+   "instructions-opt": {"value": 2345,  "spread": 0.004}}}}
 ```
 
-`ir` is the median instructions per iteration (the loop's own few included),
-`spread` the 5 runs' (max - min) / median.
+`instructions` is with `--no-opt` (interpreter and baseline tiers, very
+repeatable); `instructions-opt` with the optimizing tier on, after the
+warm-up: the one to set beside Rust's counts (the Observatory's ratio to Rust
+uses it). `value` is the median instructions per iteration of 5 runs (the
+loop's own few included), `spread` their (max - min) / median. No `runner`:
+instruction counts don't depend on the machine.
 
 ## Build
 
