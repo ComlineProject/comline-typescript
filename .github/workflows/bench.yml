@@ -22,6 +22,13 @@ on:
 permissions:
   contents: read
 
+# A full count takes most of an hour: a newer push to `main` supersedes the
+# running one rather than queueing behind it (and the publish skips a report
+# older than the one already published either way).
+concurrency:
+  group: bench-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   smoke:
     if: github.event_name == 'pull_request'
