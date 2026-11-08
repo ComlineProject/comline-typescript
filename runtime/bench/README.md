@@ -31,6 +31,31 @@ through two `Connection`s over `duplex()` (`datagram@2`; params and result both
 `-jsonrpc-roundtrip-<bytes>` is the same over `JsonRpcConnectionFraming`, the
 params and result a JSON string <bytes> long.
 
+## Shared benchmarks
+
+`bench/shared.mjs` runs the benchmarks every runtime measures, from the
+definitions vendored in `test/conformance/benches/` (ComlineProject/runtime's
+`runtime/conformance/benches/`, pinned by `VECTORS_REV`), under their ids:
+`format/<encode|decode>/<shape>/<format>`,
+`framing/<encode|decode>/<framing>/<size>`, `handshake/<encode|decode|check>`
+and `connection/step`. Each measures what generated code runs (a codec with
+the shape's `Layout`, a framing, `HandshakeFrame`, a `Connection` on
+TypeScript), with values and bytes built outside the iteration.
+`connection/step` is one `call` and its reply through a stub transport
+that hands back prebuilt replies. Left out: `msgpack@1` (not shipped) and
+`comline2/*` (the `comline@2` hello runs on the wasm core).
+`node bench/shared.mjs` lists the ids, each with its measured and warm-up
+iterations (fewer for the heaviest). `count.py --shared --json FILE` counts
+them all and writes the report CI publishes (`.github/workflows/bench.yml`):
+
+```json
+{"runtime": "typescript", "commit": "<sha>", "toolchain": "node v22.x.y", "metric": "instructions",
+ "benches": {"format/encode/nested/packed@1": {"ir": 12345, "spread": 0.002}}}
+```
+
+`ir` is the median instructions per iteration (the loop's own few included),
+`spread` the 5 runs' (max - min) / median.
+
 ## Build
 
 Needs `valgrind` and a C compiler. From `runtime/`:

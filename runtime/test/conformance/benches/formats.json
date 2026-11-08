@@ -1,0 +1,285 @@
+{
+  "$schema": "../specs/gen/bench.schema.json",
+  "formats": ["json@1", "msgpack@1", "packed@1"],
+  "shapes": [
+    {
+      "id": "small-scalar",
+      "description": "A struct of five fixed-width scalars: the cheapest message.",
+      "type": {"struct": {"name": "Reading", "fields": [["id", "u32"], ["channel", "u16"], ["active", "bool"], ["value", "f64"], ["offset", "i64"]]}},
+      "value": {
+        "struct": {
+          "name": "Reading",
+          "fields": [["id", {"u32": 48213}], ["channel", {"u16": 7}], ["active", {"bool": true}], ["value", {"f64": 21.5}], ["offset", {"i64": "-1250000"}]]
+        }
+      }
+    },
+    {
+      "id": "string-heavy",
+      "description": "Mostly text: five strings and a list of six, with non-ASCII characters, a quote and a newline to escape.",
+      "type": {
+        "struct": {
+          "name": "Profile",
+          "fields": [
+            ["username", "string"],
+            ["display_name", "string"],
+            ["email", "string"],
+            ["bio", "string"],
+            ["locale", "string"],
+            ["tags", {"array": "string"}]
+          ]
+        }
+      },
+      "value": {
+        "struct": {
+          "name": "Profile",
+          "fields": [
+            ["username", {"string": "ada.lovelace"}],
+            ["display_name", {"string": "Ada Lovelace — \"The Enchantress of Numbers\""}],
+            ["email", {"string": "ada.lovelace@analytical-engine.example"}],
+            [
+              "bio",
+              {
+                "string": "Mathematician and writer, chiefly known for her work on Charles Babbage's proposed mechanical general-purpose computer, the Analytical Engine. She was the first to recognise that the machine had applications beyond pure calculation.\nNotes: A–G, 1843."
+              }
+            ],
+            ["locale", {"string": "en-GB"}],
+            [
+              "tags",
+              {
+                "array": [
+                  {"string": "mathematics"},
+                  {"string": "computing"},
+                  {"string": "poetical science"},
+                  {"string": "analytical engine"},
+                  {"string": "bernoulli numbers"},
+                  {"string": "née Byron"}
+                ]
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "id": "nested",
+      "description": "Structs three deep, with options both present and absent at each level.",
+      "type": {
+        "struct": {
+          "name": "Order",
+          "fields": [
+            ["id", "u64"],
+            [
+              "customer",
+              {
+                "struct": {
+                  "name": "Customer",
+                  "fields": [
+                    ["id", "u32"],
+                    ["name", "string"],
+                    [
+                      "address",
+                      {
+                        "option": {
+                          "struct": {
+                            "name": "Address",
+                            "fields": [["street", "string"], ["city", "string"], ["postcode", {"option": "string"}], ["country", "u16"]]
+                          }
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "shipping",
+              {
+                "option": {
+                  "struct": {"name": "Address", "fields": [["street", "string"], ["city", "string"], ["postcode", {"option": "string"}], ["country", "u16"]]}
+                }
+              }
+            ],
+            [
+              "billing",
+              {
+                "option": {
+                  "struct": {"name": "Address", "fields": [["street", "string"], ["city", "string"], ["postcode", {"option": "string"}], ["country", "u16"]]}
+                }
+              }
+            ],
+            [
+              "line",
+              {
+                "struct": {
+                  "name": "Line",
+                  "fields": [
+                    ["sku", "u32"],
+                    ["quantity", "u16"],
+                    ["price", {"option": {"struct": {"name": "Price", "fields": [["cents", "i64"], ["discount", {"option": "u8"}]]}}}]
+                  ]
+                }
+              }
+            ],
+            ["note", {"option": "string"}],
+            ["gift", {"option": {"struct": {"name": "Gift", "fields": [["from", {"option": "string"}], ["wrapped", "bool"]]}}}]
+          ]
+        }
+      },
+      "value": {
+        "struct": {
+          "name": "Order",
+          "fields": [
+            ["id", {"u64": "9007199254740993"}],
+            [
+              "customer",
+              {
+                "struct": {
+                  "name": "Customer",
+                  "fields": [
+                    ["id", {"u32": 1815}],
+                    ["name", {"string": "Ada Lovelace"}],
+                    [
+                      "address",
+                      {
+                        "option": {
+                          "struct": {
+                            "name": "Address",
+                            "fields": [
+                              ["street", {"string": "12 Marylebone Road"}],
+                              ["city", {"string": "London"}],
+                              ["postcode", {"option": {"string": "NW1 5LR"}}],
+                              ["country", {"u16": 826}]
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "shipping",
+              {
+                "option": {
+                  "struct": {
+                    "name": "Address",
+                    "fields": [
+                      ["street", {"string": "1 Rue de Rivoli"}],
+                      ["city", {"string": "Paris"}],
+                      ["postcode", {"option": null}],
+                      ["country", {"u16": 250}]
+                    ]
+                  }
+                }
+              }
+            ],
+            ["billing", {"option": null}],
+            [
+              "line",
+              {
+                "struct": {
+                  "name": "Line",
+                  "fields": [
+                    ["sku", {"u32": 31337}],
+                    ["quantity", {"u16": 3}],
+                    [
+                      "price",
+                      {"option": {"struct": {"name": "Price", "fields": [["cents", {"i64": "129900"}], ["discount", {"option": {"u8": 15}}]]}}}
+                    ]
+                  ]
+                }
+              }
+            ],
+            ["note", {"option": null}],
+            ["gift", {"option": {"struct": {"name": "Gift", "fields": [["from", {"option": null}], ["wrapped", {"bool": true}]]}}}]
+          ]
+        }
+      }
+    },
+    {
+      "id": "large-array",
+      "description": "1000 small structs in one array; element i is {x: 7i - 3500, y: 13i mod 1000, z: -i, weight: 31i mod 65536}.",
+      "type": {"array": {"struct": {"name": "Sample", "fields": [["x", "i32"], ["y", "i32"], ["z", "i32"], ["weight", "u16"]]}}},
+      "value": {
+        "generate": {
+          "count": 1000,
+          "item": {"struct": {"name": "Sample", "fields": [
+            ["x", {"i32": {"start": -3500, "step": 7}}],
+            ["y", {"i32": {"start": 0, "step": 13, "modulo": 1000}}],
+            ["z", {"i32": {"start": 0, "step": -1}}],
+            ["weight", {"u16": {"start": 0, "step": 31, "modulo": 65536}}]
+          ]}}
+        }
+      }
+    },
+    {
+      "id": "enum-heavy",
+      "description": "Unit-variant enums: three fields, an option, and two lists of them.",
+      "type": {
+        "struct": {
+          "name": "Job",
+          "fields": [
+            ["status", {"enum": {"name": "Status", "variants": ["Queued", "Running", "Paused", "Succeeded", "Failed", "Cancelled"]}}],
+            ["priority", {"enum": {"name": "Priority", "variants": ["Low", "Normal", "High", "Critical"]}}],
+            ["kind", {"enum": {"name": "Kind", "variants": ["Build", "Test", "Lint", "Bench", "Deploy", "Release", "Docs", "Fuzz"]}}],
+            ["previous", {"option": {"enum": {"name": "Status", "variants": ["Queued", "Running", "Paused", "Succeeded", "Failed", "Cancelled"]}}}],
+            ["history", {"array": {"enum": {"name": "Status", "variants": ["Queued", "Running", "Paused", "Succeeded", "Failed", "Cancelled"]}}}],
+            ["kinds", {"array": {"enum": {"name": "Kind", "variants": ["Build", "Test", "Lint", "Bench", "Deploy", "Release", "Docs", "Fuzz"]}}}]
+          ]
+        }
+      },
+      "value": {
+        "struct": {
+          "name": "Job",
+          "fields": [
+            ["status", {"unit_variant": {"enum": "Status", "index": 1, "variant": "Running"}}],
+            ["priority", {"unit_variant": {"enum": "Priority", "index": 2, "variant": "High"}}],
+            ["kind", {"unit_variant": {"enum": "Kind", "index": 3, "variant": "Bench"}}],
+            ["previous", {"option": {"unit_variant": {"enum": "Status", "index": 2, "variant": "Paused"}}}],
+            [
+              "history",
+              {
+                "array": [
+                  {"unit_variant": {"enum": "Status", "index": 0, "variant": "Queued"}},
+                  {"unit_variant": {"enum": "Status", "index": 1, "variant": "Running"}},
+                  {"unit_variant": {"enum": "Status", "index": 2, "variant": "Paused"}},
+                  {"unit_variant": {"enum": "Status", "index": 1, "variant": "Running"}},
+                  {"unit_variant": {"enum": "Status", "index": 4, "variant": "Failed"}},
+                  {"unit_variant": {"enum": "Status", "index": 0, "variant": "Queued"}},
+                  {"unit_variant": {"enum": "Status", "index": 1, "variant": "Running"}},
+                  {"unit_variant": {"enum": "Status", "index": 2, "variant": "Paused"}},
+                  {"unit_variant": {"enum": "Status", "index": 1, "variant": "Running"}},
+                  {"unit_variant": {"enum": "Status", "index": 3, "variant": "Succeeded"}},
+                  {"unit_variant": {"enum": "Status", "index": 0, "variant": "Queued"}},
+                  {"unit_variant": {"enum": "Status", "index": 1, "variant": "Running"}},
+                  {"unit_variant": {"enum": "Status", "index": 5, "variant": "Cancelled"}},
+                  {"unit_variant": {"enum": "Status", "index": 0, "variant": "Queued"}},
+                  {"unit_variant": {"enum": "Status", "index": 1, "variant": "Running"}},
+                  {"unit_variant": {"enum": "Status", "index": 1, "variant": "Running"}}
+                ]
+              }
+            ],
+            [
+              "kinds",
+              {
+                "array": [
+                  {"unit_variant": {"enum": "Kind", "index": 0, "variant": "Build"}},
+                  {"unit_variant": {"enum": "Kind", "index": 1, "variant": "Test"}},
+                  {"unit_variant": {"enum": "Kind", "index": 2, "variant": "Lint"}},
+                  {"unit_variant": {"enum": "Kind", "index": 3, "variant": "Bench"}},
+                  {"unit_variant": {"enum": "Kind", "index": 4, "variant": "Deploy"}},
+                  {"unit_variant": {"enum": "Kind", "index": 5, "variant": "Release"}},
+                  {"unit_variant": {"enum": "Kind", "index": 6, "variant": "Docs"}},
+                  {"unit_variant": {"enum": "Kind", "index": 7, "variant": "Fuzz"}},
+                  {"unit_variant": {"enum": "Kind", "index": 1, "variant": "Test"}},
+                  {"unit_variant": {"enum": "Kind", "index": 3, "variant": "Bench"}}
+                ]
+              }
+            ]
+          ]
+        }
+      }
+    }
+  ]
+}

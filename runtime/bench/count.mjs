@@ -12,7 +12,8 @@
 // Workloads: noop, {ts,wasm}-request-<bytes>, wasm-request-<bytes>-into,
 // {ts,wasm}-name-hash, {ts,wasm}-handshake, binding-handshake,
 // ts-duplex-send-<bytes>[-nocopy], {ts,wasm}-roundtrip-<bytes>,
-// {ts,wasm}-jsonrpc-roundtrip-<bytes>.
+// {ts,wasm}-jsonrpc-roundtrip-<bytes>, and the shared benchmarks by id
+// (bench/shared.mjs).
 // `ts-duplex-send-<bytes>` is one frame through `duplex()`: `send`, then the
 // peer's `recv`, its promises run to completion each iteration (a forced
 // microtask checkpoint). `-nocopy` is the same with `send` queueing the
@@ -217,7 +218,13 @@ async function roundtrip(n, onCore, json = false) {
 }
 
 const trip = /^(ts|wasm)-(jsonrpc-)?roundtrip-(\d+)$/.exec(name);
-const workloads = trip
+// A shared benchmark, by its id (`format/encode/nested/packed@1`): bench/shared.mjs.
+const shared = name.includes("/")
+  ? await (await import("./shared.mjs")).workload(name, (x) => (sink ^= x), () => runMicrotasks())
+  : undefined;
+const workloads = shared
+  ? { [name]: shared.work }
+  : trip
   ? { [name]: await roundtrip(Number(trip[3]), trip[1] === "wasm", trip[2] !== undefined) }
   : name.startsWith("wasm-")
   ? await wasm()
@@ -281,5 +288,5 @@ function run() {
 // An async workload drains its promises with a microtask checkpoint, which
 // V8 skips inside another one: and this module's top level, after an
 // `await`, runs in one. So those run from a task of their own.
-if (trip || duplexSend) setImmediate(run);
+if (trip || duplexSend || shared?.async) setImmediate(run);
 else run();

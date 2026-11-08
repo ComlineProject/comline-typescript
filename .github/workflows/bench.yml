@@ -1,0 +1,78 @@
+name: Benchmarks
+
+# Instruction counts of the shared benchmarks (the definitions vendored in
+# runtime/test/conformance/benches/), with callgrind: runtime/bench/README.md.
+# Not a gate: nothing is compared against the base yet.
+#
+# On every push to `main` (and a manual run) it counts every shared benchmark
+# the TypeScript runtime runs and writes `typescript.bench.json`, uploaded as
+# an artifact; from `main` it's also committed to the `reports` branch, which
+# the Observatory reads. A manual run from another branch does a dry run of
+# the publish. A pull request only checks that every benchmark runs (once,
+# uncounted, no valgrind): a full count takes too long for every push.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: github.event_name == 'pull_request'
+    name: shared benchmarks run
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: runtime
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run build
+      - name: Each shared benchmark, a few iterations uncounted
+        run: |
+          node bench/shared.mjs | while read -r id _; do
+            node --allow-natives-syntax --predictable --no-opt bench/count.mjs "$id" 3 3
+          done
+
+  bench:
+    if: github.event_name != 'pull_request'
+    name: shared benchmarks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: runtime
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: sudo apt-get update && sudo apt-get install -y valgrind
+      - run: npm ci
+      - run: npm run build
+      - name: Build the region addon
+        run: |
+          mkdir -p bench/.core
+          cc -O2 -shared -fPIC -I"$(dirname "$(dirname "$(node -p process.execPath)")")/include/node" \
+             -o bench/.core/region.node bench/region/region.c
+      - name: Count
+        run: python3 bench/count.py --shared -j "$(nproc)" --commit "${{ github.sha }}" --json typescript.bench.json | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: typescript.bench.json
+          path: runtime/typescript.bench.json
+      - uses: ComlineProject/observatory/.github/actions/publish-report@v1
+        with:
+          reports: runtime/typescript.bench.json
+          readme: .github/reports-branch.md
+          dry-run: ${{ github.ref != 'refs/heads/main' }}
