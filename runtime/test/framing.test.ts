@@ -91,6 +91,67 @@ test("frames that aren't JSON-RPC 2.0 are refused (runtime#75)", () => {
   assert.ok(f.decodeRequest(enc.encode('{"jsonrpc":"2.0","method":"greet","id":1}')));
 });
 
+test("jsonrpc ids and error codes are integers as written, as serde reads them (#75)", () => {
+  const f = new JsonRpcFraming();
+  for (const id of ["1.0", "1e0", "-0", "10e-1", "18446744073709551616", "-1"]) {
+    const request = `{"jsonrpc":"2.0","method":"greet","params":[],"id":${id}}`;
+    assert.equal(f.decodeRequest(enc.encode(request)), undefined, request);
+    const response = `{"jsonrpc":"2.0","result":1,"id":${id}}`;
+    assert.equal(f.decodeResponse(enc.encode(response)), undefined, response);
+  }
+  for (const code of ["1.0", "1e0", "-0"]) {
+    const body = `{"jsonrpc":"2.0","error":{"code":${code},"message":"x"},"id":1}`;
+    assert.equal(f.decodeResponse(enc.encode(body)), undefined, body);
+    assert.equal(f.isPeerRefusal(enc.encode(body.replace('"id":1', '"id":null'))), false, body);
+  }
+  const max = f.decodeResponse(enc.encode('{"jsonrpc":"2.0","result":1,"id":18446744073709551615}'));
+  assert.equal(max?.requestId, (1n << 64n) - 1n);
+  assert.deepEqual(f.decodeResponse(enc.encode('{"jsonrpc":"2.0","error":{"code":0,"message":"x"},"id":0}')), {
+    requestId: 0n,
+    envelope: { err: { id: 0, body: enc.encode("null") } },
+  });
+});
+
+test("jsonrpc result is checked as JSON and handed on as written", () => {
+  const f = new JsonRpcFraming();
+  const ok = (result: string) =>
+    f.decodeResponse(enc.encode(`{"jsonrpc":"2.0","result":${result},"id":1}`));
+  for (const result of [
+    '{ "a" : [1, -2.5e3, true, false, null, {}, []], "a": "\\u00e9\\ud83d\\ude00\\n" }',
+    '"plain"',
+    "0",
+    "null",
+    "[ ]",
+  ]) {
+    const decoded = ok(result);
+    assert.ok(decoded && "ok" in decoded.envelope, result);
+    assert.equal(dec.decode(decoded.envelope.ok), result);
+  }
+  for (const result of [
+    "[1,]",
+    '{"a"}',
+    '{"a":1,}',
+    "01",
+    "nul",
+    '"\\ud800"',
+    '"\\udc00"',
+    '"\\ud800\\u0041"',
+    '"\\x"',
+    '"\\u12"',
+    '"a\u0001"',
+    '"open',
+    "[",
+  ]) {
+    assert.equal(ok(result), undefined, result);
+  }
+  // `null` beside an error is no result, and anything else is one too many.
+  assert.ok(f.decodeResponse(enc.encode('{"jsonrpc":"2.0","result":null,"error":{"code":1,"message":"x"},"id":1}')));
+  assert.equal(
+    f.decodeResponse(enc.encode('{"jsonrpc":"2.0","result":[],"error":{"code":1,"message":"x"},"id":1}')),
+    undefined,
+  );
+});
+
 test("datagram request: header layout matches the Rust framing", () => {
   const f = new DatagramFraming();
   const frame = f.encodeRequest(call(3, "send"), 42n, enc.encode("args"));

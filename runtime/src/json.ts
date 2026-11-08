@@ -30,89 +30,197 @@ const SPACE = /[ \t\n\r]*/y;
 /** Half a surrogate pair, alone: `\ud800` escapes to no Unicode scalar value. */
 const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
 
-/** Parses `text` as one JSON value; throws `SyntaxError` on anything else. */
-export function parseJson(text: string): JsonNode {
-  let at = 0;
-  const fail = (): never => {
-    throw new SyntaxError(`invalid JSON at ${at}`);
-  };
-  const space = () => {
-    SPACE.lastIndex = at;
-    SPACE.exec(text);
-    at = SPACE.lastIndex;
-  };
-  // A string's value; one escaping half a surrogate pair is refused, as
-  // serde_json refuses it.
-  const string = (): string => {
-    const value = JSON.parse(token(STRING) ?? fail()) as string;
-    if (LONE_SURROGATE.test(value)) fail();
-    return value;
-  };
-  const token = (re: RegExp): string | undefined => {
-    re.lastIndex = at;
-    const m = re.exec(text);
+/** A run of string characters that need no escape. */
+const PLAIN = /[^"\\\u0000-\u001f]*/y;
+const HEX4 = /^[0-9a-fA-F]{4}$/;
+/** What a backslash can escape besides `u`. */
+const SHORT_ESCAPES = '"\\/bfnrt';
+
+/**
+ * Reads JSON from `text` at `at`. {@link JsonReader.value} builds a value;
+ * {@link JsonReader.skip} only checks one, as strictly, and builds nothing.
+ */
+export class JsonReader {
+  at = 0;
+
+  constructor(readonly text: string) {}
+
+  fail(): never {
+    throw new SyntaxError(`invalid JSON at ${this.at}`);
+  }
+
+  space(): void {
+    SPACE.lastIndex = this.at;
+    SPACE.exec(this.text);
+    this.at = SPACE.lastIndex;
+  }
+
+  private token(re: RegExp): string | undefined {
+    re.lastIndex = this.at;
+    const m = re.exec(this.text);
     if (!m) return undefined;
-    at = re.lastIndex;
+    this.at = re.lastIndex;
     return m[0];
-  };
-  const value = (): JsonNode => {
-    space();
-    const start = at;
-    const c = text[at];
+  }
+
+  /**
+   * A string's value; one escaping half a surrogate pair is refused, as
+   * serde_json refuses it.
+   */
+  string(): string {
+    const value = JSON.parse(this.token(STRING) ?? this.fail()) as string;
+    if (LONE_SURROGATE.test(value)) this.fail();
+    return value;
+  }
+
+  /** One JSON value, after any whitespace before it. */
+  value(): JsonNode {
+    const text = this.text;
+    this.space();
+    const start = this.at;
+    const c = text[this.at];
     if (c === "{") {
-      at++;
+      this.at++;
       const members = new Map<string, JsonNode>();
       let repeated: Set<string> | undefined;
-      space();
-      if (text[at] === "}") {
-        at++;
-        return { kind: "object", members, start, end: at };
+      this.space();
+      if (text[this.at] === "}") {
+        this.at++;
+        return { kind: "object", members, start, end: this.at };
       }
       for (;;) {
-        space();
-        const key = string();
-        space();
-        if (text[at++] !== ":") fail();
+        this.space();
+        const key = this.string();
+        this.space();
+        if (text[this.at++] !== ":") this.fail();
         if (members.has(key)) (repeated ??= new Set()).add(key);
-        members.set(key, value());
-        space();
-        const next = text[at++];
-        if (next === "}") return { kind: "object", members, repeated, start, end: at };
-        if (next !== ",") fail();
+        members.set(key, this.value());
+        this.space();
+        const next = text[this.at++];
+        if (next === "}") return { kind: "object", members, repeated, start, end: this.at };
+        if (next !== ",") this.fail();
       }
     }
     if (c === "[") {
-      at++;
+      this.at++;
       const items: JsonNode[] = [];
-      space();
-      if (text[at] === "]") {
-        at++;
-        return { kind: "array", items, start, end: at };
+      this.space();
+      if (text[this.at] === "]") {
+        this.at++;
+        return { kind: "array", items, start, end: this.at };
       }
       for (;;) {
-        items.push(value());
-        space();
-        const next = text[at++];
-        if (next === "]") return { kind: "array", items, start, end: at };
-        if (next !== ",") fail();
+        items.push(this.value());
+        this.space();
+        const next = text[this.at++];
+        if (next === "]") return { kind: "array", items, start, end: this.at };
+        if (next !== ",") this.fail();
       }
     }
     if (c === '"') {
-      return { kind: "string", value: string(), start, end: at };
+      return { kind: "string", value: this.string(), start, end: this.at };
     }
     for (const kind of ["null", "true", "false"] as const) {
-      if (text.startsWith(kind, at)) {
-        at += kind.length;
-        return { kind, start, end: at };
+      if (text.startsWith(kind, this.at)) {
+        this.at += kind.length;
+        return { kind, start, end: this.at };
       }
     }
-    const raw = token(NUMBER) ?? fail();
-    return { kind: "number", raw, start, end: at };
-  };
+    const raw = this.token(NUMBER) ?? this.fail();
+    return { kind: "number", raw, start, end: this.at };
+  }
 
-  const root = value();
-  space();
-  if (at !== text.length) fail();
+  /**
+   * Checks one JSON value, after any whitespace before it, and moves past
+   * it without building it: what {@link value} accepts, and nothing else.
+   * Like serde_json's `RawValue`, a repeated member is left for whoever
+   * reads the value.
+   */
+  skip(): void {
+    const text = this.text;
+    this.space();
+    const c = text[this.at];
+    if (c === "{" || c === "[") {
+      const close = c === "{" ? "}" : "]";
+      this.at++;
+      this.space();
+      if (text[this.at] === close) {
+        this.at++;
+        return;
+      }
+      for (;;) {
+        if (c === "{") {
+          this.space();
+          this.skipString();
+          this.space();
+          if (text[this.at++] !== ":") this.fail();
+        }
+        this.skip();
+        this.space();
+        const next = text[this.at++];
+        if (next === close) return;
+        if (next !== ",") this.fail();
+      }
+    }
+    if (c === '"') return this.skipString();
+    for (const kind of ["null", "true", "false"] as const) {
+      if (text.startsWith(kind, this.at)) {
+        this.at += kind.length;
+        return;
+      }
+    }
+    this.token(NUMBER) ?? this.fail();
+  }
+
+  /** A string, checked as {@link string} checks it, without unescaping it. */
+  private skipString(): void {
+    const text = this.text;
+    if (text[this.at] !== '"') this.fail();
+    this.at++;
+    for (;;) {
+      PLAIN.lastIndex = this.at;
+      PLAIN.exec(text);
+      this.at = PLAIN.lastIndex;
+      const c = text[this.at];
+      if (c === '"') {
+        this.at++;
+        return;
+      }
+      if (c !== "\\") this.fail();
+      const e = text[this.at + 1];
+      if (e !== undefined && SHORT_ESCAPES.includes(e)) {
+        this.at += 2;
+        continue;
+      }
+      if (e !== "u") this.fail();
+      const unit = this.escapedUnit(this.at);
+      this.at += 6;
+      // A high surrogate escaped must be followed by its low one, escaped
+      // too: what follows it raw is never one.
+      if (unit >= 0xdc00 && unit <= 0xdfff) this.fail();
+      if (unit >= 0xd800 && unit <= 0xdbff) {
+        if (text[this.at] !== "\\" || text[this.at + 1] !== "u") this.fail();
+        const low = this.escapedUnit(this.at);
+        if (low < 0xdc00 || low > 0xdfff) this.fail();
+        this.at += 6;
+      }
+    }
+  }
+
+  /** The UTF-16 unit `\uXXXX` at `at` escapes. */
+  private escapedUnit(at: number): number {
+    const hex = this.text.slice(at + 2, at + 6);
+    if (!HEX4.test(hex)) this.fail();
+    return parseInt(hex, 16);
+  }
+}
+
+/** Parses `text` as one JSON value; throws `SyntaxError` on anything else. */
+export function parseJson(text: string): JsonNode {
+  const reader = new JsonReader(text);
+  const root = reader.value();
+  reader.space();
+  if (reader.at !== text.length) reader.fail();
   return root;
 }
 

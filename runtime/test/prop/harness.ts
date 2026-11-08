@@ -238,37 +238,6 @@ function equalAsF32(t: Type, a: JsonNode, b: JsonNode): boolean {
   });
 }
 
-/** A JSON number that isn't written as an integer: `1.0`, `1e0`, `-0`. */
-const misspelled = (node: JsonNode | undefined): boolean =>
-  node?.kind === "number" && (/[.eE]/.test(node.raw) || node.raw === "-0");
-
-/**
- * Whether a JSON-RPC frame has a member the reference declares twice, or an
- * `id` or error `code` that is an integer in value but not in spelling: the
- * two things TypeScript's JSON-RPC framing lets through that `serde` refuses.
- */
-function jsonRpcLenient(bytes: Uint8Array): boolean {
-  let source: string;
-  let root: JsonNode;
-  try {
-    source = text.decode(bytes);
-    root = parseJson(source);
-  } catch {
-    return false;
-  }
-  if (root.kind !== "object") return false;
-  const error = root.members.get("error");
-  const duplicates = duplicateKeys(source);
-  const twice = (node: JsonNode | undefined, declared: string[]) =>
-    node !== undefined && [...(duplicates.get(node.start) ?? [])].some((k) => declared.includes(k));
-  return (
-    twice(root, ["method", "params", "id", "result", "error"]) ||
-    (error?.kind === "object" && twice(error, ["code", "data"])) ||
-    misspelled(root.members.get("id")) ||
-    (error?.kind === "object" && misspelled(error.members.get("code")))
-  );
-}
-
 /** The classes a JSON-decode violation belongs to. */
 const VIOLATION_CLASS: Record<string, string> = {
   variant: "json-decode-unchecked-variants-and-ranges",
@@ -290,7 +259,6 @@ const CLASSES: Record<string, true> = {
   "json-decode-unchecked-variants-and-ranges": true,
   "json-decode-unchecked-shape": true,
   "json-encode-f32-digits": true,
-  "jsonrpc-decode-lenient": true,
   "connection-replies-in-any-order": true,
 };
 
@@ -327,14 +295,8 @@ function explain(d: Divergence): string[] | undefined {
   if (d.property === "session") {
     return d.session && skipsInnermost(d.session) ? ["connection-replies-in-any-order"] : undefined;
   }
-  if (d.framing === "jsonrpc@1") {
-    // TypeScript took a JSON-RPC frame the reference refuses, for the reason
-    // above.
-    if (d.property.endsWith(" decode") && d.tsAccepted && !d.referenceAccepted && d.bytes && jsonRpcLenient(d.bytes)) {
-      return ["jsonrpc-decode-lenient"];
-    }
-    return undefined;
-  }
+  // No JSON-RPC frame is known to be read differently (comline-typescript#75 is fixed).
+  if (d.framing === "jsonrpc@1") return undefined;
   if (d.format !== "json@1" || !d.type) return undefined;
   // TypeScript accepted JSON the reference refuses: explained only by what
   // is wrong with the value as a value of the type.
