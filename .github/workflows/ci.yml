@@ -170,3 +170,62 @@ jobs:
         working-directory: std-extra
       - run: npx -y -p typescript@5.0.4 tsc --noEmit
         working-directory: std-extra
+
+  # Cross-platform (core#9): the same checks on the other platforms, as
+  # separate jobs so the Linux check names above stay unchanged.
+  rust_xp:
+    name: Rust project - stable (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-24.04-arm]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup update stable && rustup default stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --verbose
+      - run: cargo test --verbose
+      - run: cargo run -p xtask -- --check
+
+  runtime_xp:
+    name: runtime - Node 22 (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-24.04-arm]
+    defaults:
+      run:
+        shell: bash
+        working-directory: runtime
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: runtime/package-lock.json
+      # The Rust reference the property tests compare against, built on the
+      # platform under test (cached per OS and architecture).
+      - id: reference
+        run: echo "rev=$(cat test/conformance/VECTORS_REV)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v5
+        id: reference-cache
+        with:
+          path: |
+            ~/.cargo/bin/comline-reference
+            ~/.cargo/bin/comline-reference.exe
+          key: comline-reference-${{ runner.os }}-${{ runner.arch }}-${{ steps.reference.outputs.rev }}
+      - if: steps.reference-cache.outputs.cache-hit != 'true'
+        run: |
+          rustup update stable && rustup default stable
+          cargo install --locked --git https://github.com/ComlineProject/runtime --rev "${{ steps.reference.outputs.rev }}" comline-reference
+      - run: echo "COMLINE_REFERENCE=$(command -v comline-reference)" >> "$GITHUB_ENV"
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run typecheck:generated
