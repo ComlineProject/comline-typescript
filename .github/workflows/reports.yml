@@ -2,8 +2,8 @@ name: Reports
 
 # Size and coverage reports for the Observatory: the runtime package as
 # shipped (npm pack, plus its built entry file) and the line/function/branch
-# coverage of its own tests (the property tests, which need the Rust
-# reference, are left to ci.yml). On every push to `main` (and a manual run)
+# coverage of its own tests, the property tests included (they compare against
+# the Rust reference, built as in ci.yml, at the default PR run count). On every push to `main` (and a manual run)
 # they're committed to the `reports` branch; elsewhere the publish is a dry run.
 
 on:
@@ -52,12 +52,27 @@ jobs:
             runtime/npm-tarball=packed/runtime.tgz
             runtime/dist/index.js=runtime/dist/src/index.js
 
+      # The Rust reference the property tests compare against, installed as
+      # ci.yml does (same cache key, same rev).
+      - id: reference
+        run: echo "rev=$(cat runtime/test/conformance/VECTORS_REV)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: reference-cache
+        with:
+          path: ~/.cargo/bin/comline-reference
+          key: comline-reference-${{ steps.reference.outputs.rev }}
+      - if: steps.reference-cache.outputs.cache-hit != 'true'
+        run: |
+          rustup update stable && rustup default stable
+          cargo install --locked --git https://github.com/ComlineProject/runtime --rev "${{ steps.reference.outputs.rev }}" comline-reference
+      - run: echo "COMLINE_REFERENCE=$HOME/.cargo/bin/comline-reference" >> "$GITHUB_ENV"
+
       - name: Test with coverage
         working-directory: runtime
         run: |
           node --test --experimental-test-coverage \
             --test-reporter=lcov --test-reporter-destination=coverage.lcov \
-            dist/test/*.test.js
+            dist/test/*.test.js dist/test/prop/*.test.js
       - name: Convert coverage
         run: |
           python3 -I runtime/scripts/lcov-to-observatory.py runtime/coverage.lcov \
