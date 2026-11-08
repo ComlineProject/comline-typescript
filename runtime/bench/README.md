@@ -9,7 +9,7 @@ so none of this is published.
 Each workload runs under `valgrind --tool=callgrind`. `count.mjs` warms the
 workload up, then runs K iterations inside a native call (`region/region.c`)
 that callgrind toggles collection on, so only the measured loop is counted.
-`count.py` runs each workload 5 times and reports the median
+`count.py` runs each workload up to 5 times and reports the median
 instructions per iteration and the min-max spread.
 
 Workloads: `ts-` and `wasm-` `request-16`, `request-4096` (encode a request,
@@ -72,7 +72,17 @@ bench format 2:
 repeatable); `instructions-opt` with the optimizing tier on, after the
 warm-up: the one to set beside Rust's counts (the Observatory's ratio to Rust
 uses it). `value` is the median instructions per iteration of 5 runs (the
-loop's own few included), `spread` their (max - min) / median. No `runner`:
+loop's own few included), `spread` their (max - min) / median. Each
+(benchmark, tier) first runs `--min-repeat` times (default 3); if those
+spread by no more than `--settle` (default 0.001, 0.1%) it stops there and
+reports the median and spread of those runs, otherwise it runs up to
+`--repeat` (default 5) in all.
+
+CI splits the count in 4 shards (`count.py --shared --shard I/N`: disjoint,
+deterministic, balanced by a cost guess that weighs `large-array` and
+`/65536` ids heavily), each writing a partial report; `bench/merge.py`
+joins them into the one `typescript.bench.json`, failing on a missing or
+duplicated id or on parts that differ in commit or toolchain. No `runner`:
 instruction counts don't depend on the machine.
 
 ## Build
@@ -109,7 +119,7 @@ python3 bench/count.py ts-request-16 wasm-request-16 ts-name-hash wasm-name-hash
 `--compare` adds a markdown table of each `ts-X` against `wasm-X`: TS, core,
 delta (core minus TS) and the delta as a % of TS. `-K`, `-W`, `--repeat` and
 `-j` set the measured and warm-up iterations, the repeats and the parallel
-runs.
+runs; `--min-repeat` and `--settle` the early stop.
 
 ## Caveats
 

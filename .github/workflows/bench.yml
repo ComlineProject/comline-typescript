@@ -15,14 +15,26 @@ name: Benchmarks
 
 on:
   pull_request:
+  # A push that touches none of what the count measures would publish the
+  # same numbers: skip it.
   push:
     branches: [main]
+    paths:
+      - runtime/src/**
+      - runtime/bench/**
+      - runtime/test/conformance/benches/**
+      - runtime/core/**
+      - runtime/package.json
+      - runtime/package-lock.json
+      - runtime/tsconfig*.json
+      - .github/workflows/bench.yml
+      - .github/reports-branch.md
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# A full count takes most of an hour: a newer push to `main` supersedes the
+# A full count takes a while: a newer push to `main` supersedes the
 # running one rather than queueing behind it (and the publish skips a report
 # older than the one already published either way).
 concurrency:
@@ -50,8 +62,40 @@ jobs:
             node --allow-natives-syntax --predictable --no-opt bench/count.mjs "$id" 3 3
           done
 
-  bench:
+  count:
     if: github.event_name != 'pull_request'
+    name: count (shard ${{ matrix.shard }}/4)
+    timeout-minutes: 150
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        shard: [0, 1, 2, 3]
+    defaults:
+      run:
+        working-directory: runtime
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: sudo apt-get update && sudo apt-get install -y valgrind
+      - run: npm ci
+      - run: npm run build
+      - name: Build the region addon
+        run: |
+          mkdir -p bench/.core
+          cc -O2 -shared -fPIC -I"$(dirname "$(dirname "$(node -p process.execPath)")")/include/node" \
+             -o bench/.core/region.node bench/region/region.c
+      - name: Count
+        run: python3 bench/count.py --shared --shard ${{ matrix.shard }}/4 -j "$(nproc)" --commit "${{ github.sha }}" --json part-${{ matrix.shard }}.json | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bench-part-${{ matrix.shard }}
+          path: runtime/part-${{ matrix.shard }}.json
+
+  bench:
+    needs: count
     name: shared benchmarks
     timeout-minutes: 150
     runs-on: ubuntu-latest
@@ -67,16 +111,13 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - run: sudo apt-get update && sudo apt-get install -y valgrind
-      - run: npm ci
-      - run: npm run build
-      - name: Build the region addon
-        run: |
-          mkdir -p bench/.core
-          cc -O2 -shared -fPIC -I"$(dirname "$(dirname "$(node -p process.execPath)")")/include/node" \
-             -o bench/.core/region.node bench/region/region.c
-      - name: Count
-        run: python3 bench/count.py --shared -j "$(nproc)" --commit "${{ github.sha }}" --json typescript.bench.json | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: bench-part-*
+          path: runtime/parts
+          merge-multiple: true
+      - name: Merge
+        run: python3 bench/merge.py --out typescript.bench.json parts/part-*.json
       - uses: actions/upload-artifact@v7
         with:
           name: typescript.bench.json
