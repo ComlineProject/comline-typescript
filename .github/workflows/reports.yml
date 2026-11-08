@@ -4,10 +4,14 @@ name: Reports
 # shipped (npm pack, plus its built entry file) and the line/function/branch
 # coverage of its own tests, the property tests included (they compare against
 # the Rust reference, built as in ci.yml, at the default PR run count). On every push to `main` (and a manual run)
-# they're committed to the `reports` branch; elsewhere the publish is a dry run.
+# they're committed to the `reports` branch; elsewhere the publish is a dry run. A pull request runs it only when this
+# workflow (or its helper script) changes.
 
 on:
   pull_request:
+    paths:
+      - '.github/workflows/reports.yml'
+      - 'runtime/scripts/lcov-to-observatory.py'
   push:
     branches: [main]
   workflow_dispatch:
