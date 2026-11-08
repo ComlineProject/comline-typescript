@@ -1,0 +1,77 @@
+name: Reports
+
+# Size and coverage reports for the Observatory: the runtime package as
+# shipped (npm pack, plus its built entry file) and the line/function/branch
+# coverage of its own tests (the property tests, which need the Rust
+# reference, are left to ci.yml). On every push to `main` (and a manual run)
+# they're committed to the `reports` branch; elsewhere the publish is a dry run.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reports-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  reports:
+    name: size and coverage
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: runtime
+      - run: npm run build
+        working-directory: runtime
+
+      - name: Pack the package
+        working-directory: runtime
+        run: |
+          mkdir -p ../packed
+          npm pack --pack-destination ../packed
+          mv ../packed/*.tgz ../packed/runtime.tgz
+      - uses: ComlineProject/observatory/.github/actions/report-size@v1
+        with:
+          output: typescript.size.json
+          toolchain: node ${{ steps.node.outputs.node-version }}
+          artifacts: |
+            runtime/npm-tarball=packed/runtime.tgz
+            runtime/dist/index.js=runtime/dist/src/index.js
+
+      - name: Test with coverage
+        working-directory: runtime
+        run: |
+          node --test --experimental-test-coverage \
+            --test-reporter=lcov --test-reporter-destination=coverage.lcov \
+            dist/test/*.test.js
+      - name: Convert coverage
+        run: |
+          python3 -I runtime/scripts/lcov-to-observatory.py runtime/coverage.lcov \
+            typescript.coverage.json "${{ github.sha }}" "node $(node -p process.versions.node) test coverage" \
+            "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: reports
+          path: |
+            typescript.size.json
+            typescript.coverage.json
+      - uses: ComlineProject/observatory/.github/actions/publish-report@v1
+        with:
+          reports: typescript.size.json typescript.coverage.json
+          readme: .github/reports-branch.md
+          dry-run: ${{ github.ref != 'refs/heads/main' }}
