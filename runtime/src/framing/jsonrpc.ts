@@ -12,7 +12,7 @@ import type {
   Frame,
   Framing,
 } from "../contract.js";
-import { type JsonNode, jsonInteger, parseJson } from "../json.js";
+import { type JsonNode, JsonReader } from "../json.js";
 
 const enc = new TextEncoder();
 // Strict, as serde_json is: a frame that isn't UTF-8 is refused, not repaired.
@@ -28,6 +28,17 @@ const MESSAGE_MEMBERS = ["jsonrpc", "method", "params", "id", "result", "error"]
 const ERROR_MEMBERS = ["code", "message", "data"];
 
 /**
+ * A member read only as far as checking it's one well-formed JSON value:
+ * where it is in the frame, and the character it starts with. Like serde_json's
+ * `RawValue`, it's handed on as written, and parsed once, by the format.
+ */
+type Raw = { readonly kind: "raw"; readonly start: number; readonly end: number; readonly first: string };
+type Member = JsonNode | Raw;
+
+/** A message's members, `params` and `result` as {@link Raw}. */
+type Message = { readonly text: string; readonly members: ReadonlyMap<string, Member> };
+
+/**
  * Whether any of `keys` is written more than once. serde refuses a
  * repeated member it reads, so the Rust runtime does, and this matches it.
  */
@@ -38,22 +49,73 @@ function repeats(repeated: ReadonlySet<string> | undefined, keys: readonly strin
 /**
  * `frame` as a JSON-RPC 2.0 message's members: a JSON object carrying
  * `"jsonrpc": "2.0"`. `undefined` for anything else (runtime#75).
+ *
+ * The object is walked here, member by member: `params` and `result` are
+ * only checked and sliced out, not built, and the rest are read as values.
  */
-function members(frame: Uint8Array): { text: string; members: ReadonlyMap<string, JsonNode> } | undefined {
+function members(frame: Uint8Array): Message | undefined {
   try {
     const text = dec.decode(frame);
-    const root = parseJson(text);
-    if (root.kind !== "object" || repeats(root.repeated, MESSAGE_MEMBERS)) return undefined;
-    const version = root.members.get("jsonrpc");
-    return version?.kind === "string" && version.value === "2.0" ? { text, members: root.members } : undefined;
+    const reader = new JsonReader(text);
+    const members = new Map<string, Member>();
+    const seen = new Set<string>();
+    reader.space();
+    if (text[reader.at++] !== "{") return undefined;
+    reader.space();
+    if (text[reader.at] === "}") reader.at++;
+    else {
+      for (;;) {
+        reader.space();
+        const key = reader.string();
+        reader.space();
+        if (text[reader.at++] !== ":") return undefined;
+        // serde refuses a member it reads twice.
+        if (seen.has(key) && MESSAGE_MEMBERS.includes(key)) return undefined;
+        seen.add(key);
+        if (key === "params" || key === "result") {
+          reader.space();
+          const start = reader.at;
+          reader.skip();
+          members.set(key, { kind: "raw", start, end: reader.at, first: text[start]! });
+        } else {
+          members.set(key, reader.value());
+        }
+        reader.space();
+        const next = text[reader.at++];
+        if (next === "}") break;
+        if (next !== ",") return undefined;
+      }
+    }
+    reader.space();
+    if (reader.at !== text.length) return undefined;
+    const version = members.get("jsonrpc");
+    return version?.kind === "string" && version.value === "2.0" ? { text, members } : undefined;
   } catch {
     return undefined;
   }
 }
 
+/** Whether `member` is `null` (a value read whole, or one left raw). */
+function isNull(member: Member): boolean {
+  return member.kind === "null" || (member.kind === "raw" && member.first === "n");
+}
+
 /** A member's JSON exactly as written, or `null` when it's absent. */
-function raw(text: string, node: JsonNode | undefined): Uint8Array {
-  return node ? enc.encode(text.slice(node.start, node.end)) : NULL;
+function raw(text: string, member: Member | undefined): Uint8Array {
+  return member ? enc.encode(text.slice(member.start, member.end)) : NULL;
+}
+
+/**
+ * A JSON integer as serde reads one into an integer type: written as an
+ * integer, so not `1.0`, `1e0` or `-0`, which serde_json reads as floats
+ * (comline-typescript#75). `undefined` for anything else.
+ */
+function integer(member: Member | undefined): bigint | undefined {
+  if (member?.kind !== "number") return undefined;
+  const digits = member.raw;
+  // Wider than any 64-bit integer is none, and isn't worth building.
+  if (digits.length > 20 || /[.eE]/.test(digits) || digits === "-0") return undefined;
+  return BigInt(digits);
 }
 
 /**
@@ -66,9 +128,9 @@ function requestHead(call: Call, params: Uint8Array): string {
   return p === "" || p === "null" ? method : `${method},"params":${p}`;
 }
 
-/** A `u64` id, or `undefined` if `node` isn't one. */
-function u64(node: JsonNode | undefined): bigint | undefined {
-  const n = jsonInteger(node);
+/** A `u64` id, or `undefined` if `member` isn't one. */
+function u64(member: Member | undefined): bigint | undefined {
+  const n = integer(member);
   return n !== undefined && n >= 0n && n <= U64_MAX ? n : undefined;
 }
 
@@ -82,12 +144,60 @@ function isPeerRefusal(frame: Uint8Array): boolean {
   const r = members(frame);
   if (r?.members.get("id")?.kind !== "null") return false;
   const result = r.members.get("result");
-  if (result && result.kind !== "null") return false;
+  if (result && !isNull(result)) return false;
   const error = r.members.get("error");
   if (error?.kind !== "object" || repeats(error.repeated, ERROR_MEMBERS)) return false;
   if (error.members.get("message")?.kind !== "string") return false;
-  const code = jsonInteger(error.members.get("code"));
+  const code = integer(error.members.get("code"));
   return code !== undefined && code >= I64_MIN && code <= I64_MAX;
+}
+
+/** A request, from its message's members. */
+function request(r: Message | undefined): DecodedRequest | undefined {
+  const method = r?.members.get("method");
+  if (!r || method?.kind !== "string") return undefined;
+  // Params are an array or an object. `null` isn't JSON-RPC 2.0's, and this
+  // framing no longer writes it, but it's read as none: peers send it.
+  const params = r.members.get("params");
+  if (params && !(params.kind === "raw" && "[{n".includes(params.first))) return undefined;
+  // A notification has no id; it's request 0. A null id is refused: it
+  // still wants a reply, which a notification never gets (runtime#75).
+  const id = r.members.get("id");
+  const requestId = !id ? 0n : u64(id);
+  if (requestId === undefined) return undefined;
+  return {
+    call: { name: method.value },
+    requestId,
+    params: raw(r.text, r.members.get("params")),
+  };
+}
+
+/** A response, from its message's members. */
+function response(r: Message | undefined): DecodedResponse | undefined {
+  const requestId = u64(r?.members.get("id"));
+  if (!r || requestId === undefined) return undefined;
+  const error = r.members.get("error");
+  if (error && error.kind !== "null") {
+    if (error.kind !== "object" || repeats(error.repeated, ERROR_MEMBERS)) return undefined;
+    // An error object has a message; a response, never both outcomes.
+    if (error.members.get("message")?.kind !== "string") return undefined;
+    const result = r.members.get("result");
+    if (result && !isNull(result)) return undefined;
+    const code = integer(error.members.get("code"));
+    if (code === undefined || code < I64_MIN || code > I64_MAX) return undefined;
+    // An ordinal is a u16; any other code (-32603 and the rest of
+    // JSON-RPC's own) is a provider fault.
+    if (code < 0n || code > 0xffffn) return { requestId, envelope: { fault: true } };
+    return {
+      requestId,
+      envelope: { err: { id: Number(code), body: raw(r.text, error.members.get("data")) } },
+    };
+  }
+  // A response has its outcome: `null` is one, and nothing, as in a request's
+  // frame, isn't.
+  const result = r.members.get("result");
+  if (!result) return undefined;
+  return { requestId, envelope: { ok: raw(r.text, result) } };
 }
 
 /**
@@ -112,23 +222,7 @@ export class JsonRpcFraming implements Framing {
   }
 
   decodeRequest(frame: Uint8Array): DecodedRequest | undefined {
-    const r = members(frame);
-    const method = r?.members.get("method");
-    if (!r || method?.kind !== "string") return undefined;
-    // Params are an array or an object. `null` isn't JSON-RPC 2.0's, and this
-    // framing no longer writes it, but it's read as none: peers send it.
-    const params = r.members.get("params");
-    if (params && !["array", "object", "null"].includes(params.kind)) return undefined;
-    // A notification has no id; it's request 0. A null id is refused: it
-    // still wants a reply, which a notification never gets (runtime#75).
-    const id = r.members.get("id");
-    const requestId = !id ? 0n : u64(id);
-    if (requestId === undefined) return undefined;
-    return {
-      call: { name: method.value },
-      requestId,
-      params: raw(r.text, r.members.get("params")),
-    };
+    return request(members(frame));
   }
 
   encodeResponseOk(requestId: bigint, payload: Uint8Array): Uint8Array {
@@ -155,31 +249,7 @@ export class JsonRpcFraming implements Framing {
   }
 
   decodeResponse(frame: Uint8Array): DecodedResponse | undefined {
-    const r = members(frame);
-    const requestId = u64(r?.members.get("id"));
-    if (!r || requestId === undefined) return undefined;
-    const error = r.members.get("error");
-    if (error && error.kind !== "null") {
-      if (error.kind !== "object" || repeats(error.repeated, ERROR_MEMBERS)) return undefined;
-      // An error object has a message; a response, never both outcomes.
-      if (error.members.get("message")?.kind !== "string") return undefined;
-      const result = r.members.get("result");
-      if (result && result.kind !== "null") return undefined;
-      const code = jsonInteger(error.members.get("code"));
-      if (code === undefined || code < I64_MIN || code > I64_MAX) return undefined;
-      // An ordinal is a u16; any other code (-32603 and the rest of
-      // JSON-RPC's own) is a provider fault.
-      if (code < 0n || code > 0xffffn) return { requestId, envelope: { fault: true } };
-      return {
-        requestId,
-        envelope: { err: { id: Number(code), body: raw(r.text, error.members.get("data")) } },
-      };
-    }
-    // A response has its outcome: `null` is one, and nothing, as in a request's
-    // frame, isn't.
-    const result = r.members.get("result");
-    if (!result) return undefined;
-    return { requestId, envelope: { ok: raw(r.text, result) } };
+    return response(members(frame));
   }
 
   isPeerRefusal(frame: Uint8Array): boolean {
@@ -223,13 +293,13 @@ export class JsonRpcConnectionFraming implements ConnectionFraming {
     const r = members(frame);
     if (!r) return undefined;
     if (r.members.has("method")) {
-      const request = this.frames.decodeRequest(frame);
-      if (!request) return undefined;
+      const decoded = request(r);
+      if (!decoded) return undefined;
       const id = r.members.get("id");
-      return { kind: "request", protocol: undefined, request, oneWay: !id };
+      return { kind: "request", protocol: undefined, request: decoded, oneWay: !id };
     }
-    const response = this.frames.decodeResponse(frame);
-    return response && { kind: "reply", protocol: undefined, ...response };
+    const decoded = response(r);
+    return decoded && { kind: "reply", protocol: undefined, ...decoded };
   }
 
   isPeerRefusal(frame: Uint8Array): boolean {
