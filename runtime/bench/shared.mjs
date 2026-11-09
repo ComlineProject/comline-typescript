@@ -3,8 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 // The shared benchmarks: the work every runtime measures, from the vendored
-// definitions in test/conformance/benches/ (ComlineProject/runtime's
-// runtime/conformance/benches/), under the ids its README gives. Each id maps
+// definitions in test/conformance/benches/ (ComlineProject/specification's
+// benches/), under the ids its README gives. Each id maps
 // to one iteration's work, everything it reads built here, outside it.
 // `count.mjs` runs them by id; `node bench/shared.mjs` lists the ids this
 // runtime measures, each with its iterations. Left out: msgpack@1 (not shipped) and `comline2/*` (the

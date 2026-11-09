@@ -59,7 +59,7 @@ jobs:
       # The Rust reference the property tests compare against, installed as
       # ci.yml does (same cache key, same rev).
       - id: reference
-        run: echo "rev=$(cat runtime/test/conformance/VECTORS_REV)" >> "$GITHUB_OUTPUT"
+        run: echo "rev=$(cat runtime/core/CORE_REV)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
         id: reference-cache
         with:

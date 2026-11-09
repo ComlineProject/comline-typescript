@@ -34,8 +34,8 @@ params and result a JSON string <bytes> long.
 ## Shared benchmarks
 
 `bench/shared.mjs` runs the benchmarks every runtime measures, from the
-definitions vendored in `test/conformance/benches/` (ComlineProject/runtime's
-`runtime/conformance/benches/`, pinned by `VECTORS_REV`), under their ids:
+definitions vendored in `test/conformance/benches/` (ComlineProject/specification's
+`benches/`, pinned by `SPEC_REV`), under their ids:
 `format/<encode|decode>/<shape>/<format>`,
 `framing/<encode|decode>/<framing>/<size>`, `handshake/<encode|decode|check>`
 and `connection/step`. Each measures what generated code runs (a codec with
