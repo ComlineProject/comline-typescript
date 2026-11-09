@@ -6,8 +6,8 @@
  * The conformance corpus's typed values and reader types, and how they map
  * to what generated TypeScript holds and declares. Shared by the vector
  * runner (`conformance.test.ts`) and the differential properties
- * (`prop/*.test.ts`). The encoding is described in the runtime repository's
- * `runtime/conformance/README.md`.
+ * (`prop/*.test.ts`). The encoding is described in the README of
+ * `ComlineProject/specification`.
  */
 
 import type { Layout } from "../src/index.js";

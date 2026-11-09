@@ -11,15 +11,15 @@
 # remapped and a fixed SOURCE_DATE_EPOCH, so `--check` can rebuild from source
 # and compare bytes rather than trust a committed binary.
 #
-# CORE_REV and test/conformance/VECTORS_REV move together: the core is proven
-# by the vectors of the same commit. Re-vendor both at the same rev
-# (scripts/vendor-conformance.sh <rev> first).
+# CORE_REV and test/conformance/SPEC_REV move together: the core is proven by
+# the specification its runtime vendors (runtime/conformance/spec/REV), so
+# SPEC_REV must be that revision (scripts/vendor-conformance.sh <it> first).
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")/.." && pwd)"
 dest="$here/core"
 repo="https://github.com/ComlineProject/runtime"
-vectors_rev="$(cat "$here/test/conformance/VECTORS_REV")"
+spec_rev="$(cat "$here/test/conformance/SPEC_REV")"
 files=(comline_runtime_ffi.wasm comline.mjs comline.d.mts)
 
 if [[ "${1:-}" == "--check" ]]; then
@@ -34,9 +34,16 @@ git clone --quiet "$repo" "$tmp/runtime"
 git -C "$tmp/runtime" checkout --quiet --detach "$rev"
 rev="$(git -C "$tmp/runtime" rev-parse HEAD)"
 
-if [[ "$rev" != "$vectors_rev" ]]; then
-  echo "core rev $rev differs from VECTORS_REV $vectors_rev: they move together;" >&2
-  echo "run scripts/vendor-conformance.sh $rev first" >&2
+runtime_spec="$tmp/runtime/runtime/conformance/spec/REV"
+if [[ ! -f "$runtime_spec" ]]; then
+  echo "$repo@$rev vendors no specification (runtime/conformance/spec/REV):" >&2
+  echo "the core can only be vendored at a runtime revision that does" >&2
+  exit 1
+fi
+runtime_spec_rev="$(cat "$runtime_spec")"
+if [[ "$runtime_spec_rev" != "$spec_rev" ]]; then
+  echo "core rev $rev is proven by specification $runtime_spec_rev, but SPEC_REV is $spec_rev;" >&2
+  echo "run scripts/vendor-conformance.sh $runtime_spec_rev first" >&2
   exit 1
 fi
 

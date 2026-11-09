@@ -30,7 +30,7 @@ jobs:
         with:
           node-version: 22
       - id: reference
-        run: echo "rev=$(cat test/conformance/VECTORS_REV)" >> "$GITHUB_OUTPUT"
+        run: echo "rev=$(cat core/CORE_REV)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v6
         id: reference-cache
         with:
@@ -86,7 +86,7 @@ jobs:
           log="$RUNNER_TEMP/properties.log"
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           {
-            echo "The nightly property tests against \`comline-reference\` (VECTORS_REV \`${{ steps.reference.outputs.rev }}\`, commit ${{ github.sha }}) failed: $run_url"
+            echo "The nightly property tests against \`comline-reference\` (CORE_REV \`${{ steps.reference.outputs.rev }}\`, commit ${{ github.sha }}) failed: $run_url"
             echo
             echo "A divergence in no class \`known-divergences.json\` lists, with its shrunk counterexample. Replay it with \`FC_SEED\` and \`FC_PATH\` from the report."
             echo

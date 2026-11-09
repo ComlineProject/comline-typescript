@@ -10,8 +10,8 @@
  * line per line; its README describes it.
  *
  * The binary is `COMLINE_REFERENCE` (a path), or else `comline-reference` on
- * `PATH`. Build it at the commit in `test/conformance/VECTORS_REV`, so it
- * answers the way the vendored vectors do.
+ * `PATH`. Build it at the runtime commit in `core/CORE_REV`, which is proven
+ * by the vendored vectors, so it answers the way they do.
  */
 
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
@@ -94,7 +94,7 @@ export function unavailable(): string | undefined {
     ? `COMLINE_REFERENCE is ${path}, which isn't an executable`
     : "comline-reference isn't on PATH and COMLINE_REFERENCE isn't set";
   return (
-    `${why}. Build it from ComlineProject/runtime at test/conformance/VECTORS_REV ` +
+    `${why}. Build it from ComlineProject/runtime at core/CORE_REV ` +
     "(cargo build --release -p comline-reference) and set COMLINE_REFERENCE to the binary"
   );
 }

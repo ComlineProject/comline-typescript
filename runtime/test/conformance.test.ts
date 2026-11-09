@@ -4,15 +4,14 @@
 
 /**
  * Wire conformance: the runtime against the byte-exact vectors of
- * `ComlineProject/runtime`'s `runtime/conformance/`, vendored in
- * `test/conformance/` at the commit in `VECTORS_REV`.
+ * `ComlineProject/specification`, vendored in `test/conformance/` at the
+ * commit in `SPEC_REV`.
  *
  * Every claim in `conformance-support.json` must hold against the vectors:
  * a supported feature passes all its cases, an unsupported one reports each
  * as not implemented. The result, with the cases proving each claim, is
  * `conformance-report.json`; `CONFORMANCE_BLESS=1 npm test` rewrites it.
- * The vectors' format is described in the runtime repository's
- * `runtime/conformance/README.md`.
+ * The vectors' format is described in the specification's README.
  */
 
 import assert from "node:assert/strict";

@@ -46,10 +46,10 @@ jobs:
         with:
           node-version: 20
       # The Rust reference the property tests (test/prop/) compare against,
-      # built at the commit the vectors are vendored from. Without it they
+      # built at the runtime commit the core is vendored from. Without it they
       # fail in CI rather than skip.
       - id: reference
-        run: echo "rev=$(cat test/conformance/VECTORS_REV)" >> "$GITHUB_OUTPUT"
+        run: echo "rev=$(cat core/CORE_REV)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
         id: reference-cache
         with:
@@ -66,8 +66,9 @@ jobs:
       # The generated fixtures, against the built runtime as a consumer sees
       # it, under the strictest flags and erasable syntax only.
       - run: npm run typecheck:generated
-      # The wire conformance vectors are vendored from ComlineProject/runtime
-      # at the commit in VECTORS_REV; this fails if the copy was edited.
+      # The wire conformance vectors are vendored from
+      # ComlineProject/specification at the commit in SPEC_REV; this fails if
+      # the copy was edited.
       - run: scripts/vendor-conformance.sh --check
       # The core (core/: the wasm32 build of comline-runtime-ffi and its JS
       # glue) is rebuilt from source at CORE_REV, with the runtime's pinned
@@ -212,7 +213,7 @@ jobs:
       # The Rust reference the property tests compare against, built on the
       # platform under test (cached per OS and architecture).
       - id: reference
-        run: echo "rev=$(cat test/conformance/VECTORS_REV)" >> "$GITHUB_OUTPUT"
+        run: echo "rev=$(cat core/CORE_REV)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v5
         id: reference-cache
         with:

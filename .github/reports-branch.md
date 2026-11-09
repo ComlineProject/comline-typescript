@@ -6,7 +6,7 @@ latest verification reports of `main`, which the
 from this branch's history:
 
 - `typescript.bench.json`: instruction counts of the shared benchmarks
-  (ComlineProject/runtime's `runtime/conformance/benches/`), from
+  (ComlineProject/specification's `benches/`), from
   `.github/workflows/bench.yml` on every push to `main`, in two tiers per
   benchmark: `instructions` (`node --no-opt`) and `instructions-opt` (the
   optimizing tier on, after a warm-up), which is the one the Observatory's

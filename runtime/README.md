@@ -56,8 +56,8 @@ resolves before writing) must now copy it.
 
 ## Wire conformance
 
-The wire contract is checked against the byte-exact vectors that
-`ComlineProject/runtime` keeps in `runtime/conformance/`, so a TypeScript
+The wire contract is checked against the byte-exact vectors of the
+[Comline specification](https://github.com/ComlineProject/specification), so a TypeScript
 peer and a Rust peer generated from the same schema negotiate the same frame
 and speak the same request and response bytes.
 
@@ -68,7 +68,7 @@ and speak the same request and response bytes.
   [`conformance-report.json`](conformance-report.json) with the cases proving
   it. The docs' language reference is rendered from the report.
 - The vectors and encoding profiles are vendored in `test/conformance/` at the
-  commit in `VECTORS_REV`. CI checks that the copy is unedited.
+  specification commit in `SPEC_REV`. CI checks that the copy is unedited.
 - `test/conformance-server.ts` serves the conformance stdio ops protocol (the
   one `comline-reference` speaks), over the same ops, so `comline conformance`
   can drive this runtime. Its `version` reply lists `json@1` and `packed@1`,
@@ -108,11 +108,12 @@ core can't load and for custom framings. Behaviour is the same either way.
 
 The build is reproducible (the runtime's pinned toolchain, `--locked`, paths
 remapped, a fixed `SOURCE_DATE_EPOCH`), so CI rebuilds it from source and
-fails unless every byte matches. `CORE_REV` and `VECTORS_REV` move together:
-the script refuses to vendor a core at another commit than the vectors.
+fails unless every byte matches. `CORE_REV` and `SPEC_REV` move together:
+the script refuses to vendor a core whose runtime vendors another
+specification commit (its `runtime/conformance/spec/REV`) than `SPEC_REV`.
 
 ```sh
-scripts/vendor-conformance.sh <rev>   # first, the vectors at the same commit
+scripts/vendor-conformance.sh <spec>  # first, the spec the runtime at <rev> vendors
 scripts/vendor-core.sh <rev>          # then the core
 scripts/vendor-core.sh --check        # rebuild CORE_REV, compare the bytes
 ```
@@ -160,11 +161,11 @@ so lengths cross varint boundaries.
 
 ### Running it
 
-Build the reference at the commit the vectors are vendored from, and point
+Build the reference at the runtime commit the core is vendored from, and point
 `COMLINE_REFERENCE` at it (or put `comline-reference` on `PATH`):
 
 ```sh
-# in a checkout of ComlineProject/runtime, at test/conformance/VECTORS_REV
+# in a checkout of ComlineProject/runtime, at core/CORE_REV
 cargo build --release -p comline-reference
 
 # here
