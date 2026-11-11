@@ -12,6 +12,21 @@ name: Benchmarks
 # the Observatory reads. A manual run from another branch does a dry run of
 # the publish. A pull request only checks that every benchmark runs (once,
 # uncounted, no valgrind): a full count takes too long for every push.
+#
+# This is not the org's reusable bench workflow: that one is the iai-callgrind
+# gate for a Cargo project (`cargo bench` on the base and the head, its report
+# script's `--targets` protocol). Here the counts are valgrind's, taken of
+# Node running the TypeScript runtime, in shards, with no base to compare. The
+# `count` jobs do use the org's CI bench image, which has valgrind (3.24) and
+# python3, in place of installing valgrind from apt on the runner. The image
+# has no Node (and the TypeScript runtime needs one to run), so the jobs
+# install an exact Node version with `actions/setup-node`, as the VM jobs do.
+# The Rust toolchain in the image isn't used: the wasm core is vendored, built.
+#
+# The published history steps up where this moved to the image: valgrind went
+# from 3.22 (Ubuntu 24.04's) to 3.24, and the userland under Node from
+# Ubuntu 24.04's to Debian 13's. Node itself is the version the published
+# history was counted with (22.23.4): bump it on purpose, not along the way.
 
 on:
   pull_request:
@@ -34,26 +49,40 @@ on:
 permissions:
   contents: read
 
-# A full count takes a while: a newer push to `main` supersedes the
-# running one rather than queueing behind it (and the publish skips a report
-# older than the one already published either way).
+# A newer push to the same pull request supersedes this run; a branch's runs
+# queue instead (the publish skips a report older than the one already
+# published either way).
 concurrency:
-  group: bench-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Container jobs default to `sh`; the steps are bash.
+defaults:
+  run:
+    shell: bash
 
 jobs:
   smoke:
     if: github.event_name == 'pull_request'
     name: shared benchmarks run
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     defaults:
       run:
+        shell: bash
         working-directory: runtime
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
-          node-version: 22
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.23.4
+          cache: npm
+          cache-dependency-path: runtime/package-lock.json
       - run: npm ci
       - run: npm run build
       - name: Each shared benchmark, a few iterations uncounted
@@ -66,20 +95,26 @@ jobs:
     if: github.event_name != 'pull_request'
     name: count (shard ${{ matrix.shard }}/4)
     timeout-minutes: 150
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    # valgrind and python3 are in the image; harden-runner is for VM jobs.
+    container: ghcr.io/comlineproject/ci-bench@sha256:235555448c3c6027960cd95c0b2974014484e0c4f2808f064eb4cb3df91cebc0
     strategy:
       fail-fast: true
       matrix:
         shard: [0, 1, 2, 3]
     defaults:
       run:
+        shell: bash
         working-directory: runtime
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 22
-      - run: sudo apt-get update && sudo apt-get install -y valgrind
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.23.4
+          cache: npm
+          cache-dependency-path: runtime/package-lock.json
       - run: npm ci
       - run: npm run build
       - name: Build the region addon
@@ -88,8 +123,10 @@ jobs:
           cc -O2 -shared -fPIC -I"$(dirname "$(dirname "$(node -p process.execPath)")")/include/node" \
              -o bench/.core/region.node bench/region/region.c
       - name: Count
-        run: python3 bench/count.py --shared --shard ${{ matrix.shard }}/4 -j "$(nproc)" --commit "${{ github.sha }}" --json part-${{ matrix.shard }}.json | tee -a "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v7
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: python3 bench/count.py --shared --shard "$SHARD/4" -j "$(nproc)" --commit "$GITHUB_SHA" --json "part-$SHARD.json" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bench-part-${{ matrix.shard }}
           path: runtime/part-${{ matrix.shard }}.json
@@ -97,32 +134,39 @@ jobs:
   bench:
     needs: count
     name: shared benchmarks
-    timeout-minutes: 150
-    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     defaults:
       run:
+        shell: bash
         working-directory: runtime
     steps:
-      - uses: actions/checkout@v7
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v7
+          # This job pushes to the reports branch with the checkout's token.
+          persist-credentials: true
+      # merge.py lists the benchmarks with `node bench/shared.mjs`.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
-      - uses: actions/download-artifact@v7
+          node-version: 22.23.4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: bench-part-*
           path: runtime/parts
           merge-multiple: true
       - name: Merge
         run: python3 bench/merge.py --out typescript.bench.json parts/part-*.json
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: typescript.bench.json
           path: runtime/typescript.bench.json
-      - uses: ComlineProject/observatory/.github/actions/publish-report@v1
+      - uses: ComlineProject/observatory/.github/actions/publish-report@8d21b1fbe68f8b639676153ce1a308eaafdcc6a7 # v1
         with:
           reports: runtime/typescript.bench.json
           readme: .github/reports-branch.md

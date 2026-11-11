@@ -3,9 +3,14 @@ name: Reports
 # Size and coverage reports for the Observatory: the runtime package as
 # shipped (npm pack, plus its built entry file) and the line/function/branch
 # coverage of its own tests, the property tests included (they compare against
-# the Rust reference, built as in ci.yml, at the default PR run count). On every push to `main` (and a manual run)
-# they're committed to the `reports` branch; elsewhere the publish is a dry run. A pull request runs it only when this
-# workflow (or its helper script) changes.
+# the Rust reference, built as in ci.yml, at the default PR run count). On every
+# push to `main` (and a manual run) the `publish` job commits them to the
+# `reports` branch; a manual run from another branch does a dry run of it. A
+# pull request runs the measuring job only when this workflow (or its helper
+# script) changes, and never the publish.
+#
+# Only `publish` can write, and it runs none of the repository's code: the
+# job that installs the dependencies and runs the tests has a read-only token.
 
 on:
   pull_request:
@@ -20,23 +25,27 @@ permissions:
   contents: read
 
 concurrency:
-  group: reports-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   reports:
     name: size and coverage
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
-          fetch-depth: 0
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - id: node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: 22.23.5
+          cache: npm
+          cache-dependency-path: runtime/package-lock.json
       - run: npm ci
         working-directory: runtime
       - run: npm run build
@@ -48,7 +57,7 @@ jobs:
           mkdir -p ../packed
           npm pack --pack-destination ../packed
           mv ../packed/*.tgz ../packed/runtime.tgz
-      - uses: ComlineProject/observatory/.github/actions/report-size@v1
+      - uses: ComlineProject/observatory/.github/actions/report-size@8d21b1fbe68f8b639676153ce1a308eaafdcc6a7 # v1
         with:
           output: typescript.size.json
           toolchain: node ${{ steps.node.outputs.node-version }}
@@ -60,15 +69,20 @@ jobs:
       # ci.yml does (same cache key, same rev).
       - id: reference
         run: echo "rev=$(cat runtime/core/CORE_REV)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: reference-cache
         with:
           path: ~/.cargo/bin/comline-reference
           key: comline-reference-${{ steps.reference.outputs.rev }}
+      # Keep in step with rust-toolchain.toml.
       - if: steps.reference-cache.outputs.cache-hit != 'true'
-        run: |
-          rustup update stable && rustup default stable
-          cargo install --locked --git https://github.com/ComlineProject/runtime --rev "${{ steps.reference.outputs.rev }}" comline-reference
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: 1.99.1
+      - if: steps.reference-cache.outputs.cache-hit != 'true'
+        env:
+          REV: ${{ steps.reference.outputs.rev }}
+        run: cargo install --locked --git https://github.com/ComlineProject/runtime --rev "$REV" comline-reference
       - run: echo "COMLINE_REFERENCE=$HOME/.cargo/bin/comline-reference" >> "$GITHUB_ENV"
 
       - name: Test with coverage
@@ -80,17 +94,40 @@ jobs:
       - name: Convert coverage
         run: |
           python3 -I runtime/scripts/lcov-to-observatory.py runtime/coverage.lcov \
-            typescript.coverage.json "${{ github.sha }}" "node $(node -p process.versions.node) test coverage" \
+            typescript.coverage.json "$GITHUB_SHA" "node $(node -p process.versions.node) test coverage" \
             "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: reports
           path: |
             typescript.size.json
             typescript.coverage.json
-      - uses: ComlineProject/observatory/.github/actions/publish-report@v1
+          if-no-files-found: error
+
+  publish:
+    name: publish
+    needs: reports
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
-          reports: typescript.size.json typescript.coverage.json
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          # This job pushes to the reports branch with the checkout's token.
+          persist-credentials: true
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: reports
+          path: reports
+      - uses: ComlineProject/observatory/.github/actions/publish-report@8d21b1fbe68f8b639676153ce1a308eaafdcc6a7 # v1
+        with:
+          reports: reports/typescript.size.json reports/typescript.coverage.json
           readme: .github/reports-branch.md
           dry-run: ${{ github.ref != 'refs/heads/main' }}
