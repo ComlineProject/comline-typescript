@@ -5,6 +5,11 @@ name: Nightly differential tests
 # on the open one with the same title, rather than blocking anything.
 # Each run, pass or fail, also writes `typescript.fuzz.json` (each property's
 # verdict) and commits it to the `reports` branch, which the Observatory reads.
+#
+# Three jobs, so the one that runs the repository's code and its dependencies
+# holds a read-only token: `properties` runs the tests; `publish` (the only
+# one that can push) commits the report; `issue` (the only one that can write
+# issues) reports a divergence.
 
 on:
   schedule:
@@ -12,34 +17,54 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  issues: write
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   properties:
     name: runtime - properties against the reference
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
     defaults:
       run:
+        shell: bash
         working-directory: runtime
+    outputs:
+      rev: ${{ steps.reference.outputs.rev }}
+      # The outcomes of the two steps the other jobs go by.
+      properties: ${{ steps.properties.outcome }}
+      report: ${{ steps.report.outcome }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v7
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 22
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.23.5
+          cache: npm
+          cache-dependency-path: runtime/package-lock.json
       - id: reference
         run: echo "rev=$(cat core/CORE_REV)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v6
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: reference-cache
         with:
           path: ~/.cargo/bin/comline-reference
           key: comline-reference-${{ steps.reference.outputs.rev }}
+      # Keep in step with rust-toolchain.toml.
       - if: steps.reference-cache.outputs.cache-hit != 'true'
-        run: |
-          rustup update stable && rustup default stable
-          cargo install --locked --git https://github.com/ComlineProject/runtime --rev "${{ steps.reference.outputs.rev }}" comline-reference
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: 1.99.1
+      - if: steps.reference-cache.outputs.cache-hit != 'true'
+        env:
+          REV: ${{ steps.reference.outputs.rev }}
+        run: cargo install --locked --git https://github.com/ComlineProject/runtime --rev "$REV" comline-reference
       - run: echo "COMLINE_REFERENCE=$HOME/.cargo/bin/comline-reference" >> "$GITHUB_ENV"
       - run: npm ci
       - run: npx tsc -p tsconfig.json
@@ -50,8 +75,9 @@ jobs:
           FC_NUM_RUNS=20000 node --test \
             --test-reporter=spec --test-reporter-destination=stdout \
             --test-reporter=./scripts/prop-verdicts.mjs --test-reporter-destination="$RUNNER_TEMP/verdicts.json" \
-            dist/test/prop/*.test.js 2>&1 | tee "$RUNNER_TEMP/properties.log"
+            dist/test/prop/*.test.js 2>&1 | tee properties.log
       - name: Write typescript.fuzz.json
+        id: report
         if: always() && steps.properties.outcome != 'skipped'
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -71,22 +97,72 @@ jobs:
             fs.writeFileSync("typescript.fuzz.json", JSON.stringify(report, null, 2) + "\n");
           '
           cat typescript.fuzz.json
-      - uses: ComlineProject/observatory/.github/actions/publish-report@v1
-        if: always() && hashFiles('runtime/typescript.fuzz.json') != ''
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && steps.report.outcome == 'success'
         with:
-          reports: runtime/typescript.fuzz.json
+          name: typescript.fuzz.json
+          path: runtime/typescript.fuzz.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && steps.properties.outcome == 'failure'
+        with:
+          name: properties-log
+          path: runtime/properties.log
+
+  publish:
+    name: publish the report
+    needs: properties
+    if: ${{ !cancelled() && needs.properties.outputs.report == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          # This job pushes to the reports branch with the checkout's token.
+          persist-credentials: true
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: typescript.fuzz.json
+          path: reports
+      - uses: ComlineProject/observatory/.github/actions/publish-report@8d21b1fbe68f8b639676153ce1a308eaafdcc6a7 # v1
+        with:
+          reports: reports/typescript.fuzz.json
           readme: .github/reports-branch.md
           dry-run: ${{ github.ref != 'refs/heads/main' }}
+
+  issue:
+    name: open or update an issue
+    needs: properties
+    if: ${{ !cancelled() && needs.properties.outputs.properties == 'failure' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: audit
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: properties-log
+          path: ${{ runner.temp }}/log
       - name: Open or update an issue
-        if: failure() && steps.properties.outcome == 'failure'
         env:
           GH_TOKEN: ${{ github.token }}
           TITLE: "Nightly: the differential property tests found a divergence"
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REV: ${{ needs.properties.outputs.rev }}
+          SHA: ${{ github.sha }}
         run: |
-          log="$RUNNER_TEMP/properties.log"
-          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          log="$RUNNER_TEMP/log/properties.log"
           {
-            echo "The nightly property tests against \`comline-reference\` (CORE_REV \`${{ steps.reference.outputs.rev }}\`, commit ${{ github.sha }}) failed: $run_url"
+            echo "The nightly property tests against \`comline-reference\` (CORE_REV \`$REV\`, commit $SHA) failed: $RUN_URL"
             echo
             echo "A divergence in no class \`known-divergences.json\` lists, with its shrunk counterexample. Replay it with \`FC_SEED\` and \`FC_PATH\` from the report."
             echo
@@ -94,9 +170,9 @@ jobs:
             grep -E "Counterexample|Got error|^ +(type|value|bytes|input):|\(in |seed" "$log" | head -60 || true
             echo '```'
           } > "$RUNNER_TEMP/body.md"
-          existing="$(gh issue list --repo "${{ github.repository }}" --state open --search "in:title \"$TITLE\"" --json number,title --jq ".[] | select(.title == env.TITLE) | .number" | head -1)"
+          existing="$(gh issue list --repo "$REPO" --state open --search "in:title \"$TITLE\"" --json number,title --jq ".[] | select(.title == env.TITLE) | .number" | head -1)"
           if [ -n "$existing" ]; then
-            gh issue comment "$existing" --repo "${{ github.repository }}" --body-file "$RUNNER_TEMP/body.md"
+            gh issue comment "$existing" --repo "$REPO" --body-file "$RUNNER_TEMP/body.md"
           else
-            gh issue create --repo "${{ github.repository }}" --title "$TITLE" --label bug --body-file "$RUNNER_TEMP/body.md"
+            gh issue create --repo "$REPO" --title "$TITLE" --label bug --body-file "$RUNNER_TEMP/body.md"
           fi

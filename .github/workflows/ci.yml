@@ -4,61 +4,102 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
+# A newer push to the same pull request supersedes this run; a branch's runs
+# queue instead.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Container jobs default to `sh`; the steps are bash.
+defaults:
+  run:
+    shell: bash
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build_and_test:
-    name: Rust project - stable
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: rustup update stable && rustup default stable
-      - run: cargo build --verbose
-      - run: cargo test --verbose
-      # `std-extra/` is generated and committed; this fails if it was edited
-      # by hand, or if a generator change moved its output without it being
-      # regenerated.
-      - run: cargo run -p xtask -- --check
+  # The Cargo workspace's toolchain matrix (stable, beta, nightly on
+  # ubuntu-24.04), the same build and tests on ubuntu-24.04-arm, macos-15 and
+  # windows-2025 (core#9: paths and line endings are where they're expected to
+  # differ), and a stable canary on ubuntu-26.04 that may fail without failing
+  # the run: the org's reusable workflow.
+  #
+  # `std-extra/` is generated and committed; the xtask check fails if it was
+  # edited by hand, or if a generator change moved its output without it
+  # being regenerated. The reusable workflow has no step after the tests, so
+  # the check is its `extra-setup` hook, which runs in every job before the
+  # build: that keeps it on every platform, as before, and `cargo run` builds
+  # the workspace's dependencies for the build and tests that follow.
+  #
+  # No `--locked`: the repository doesn't commit a Cargo.lock.
+  rust:
+    name: rust
+    permissions:
+      contents: read
+    uses: ComlineProject/.github/.github/workflows/rust-ci.yml@797d473553d7f2fc50895bb2573acb83ac63c7cb # main, no release tag yet
+    with:
+      extra-setup: cargo run -p xtask -- --check
 
   wasip1:
     # The generator as a WASI module, which the CLI runs under wasmtime.
     # `comline-codegen` takes comline-core with `default-features = false`
     # (the IR only), so the parser and its tree-sitter dependency stay out of
-    # this build (core#144).
+    # this build (core#144). In the wasm CI image (stable 1.99.1, which
+    # `rust-toolchain.toml` pins, and both wasm targets).
     name: Generator builds for wasm32-wasip1
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container: ghcr.io/comlineproject/ci-wasm@sha256:badd6af13cee6c459c9284de8ef0ef4a1667ed7e35582f87d1afb08f3c30fd8f
     steps:
-      - uses: actions/checkout@v4
-      - run: rustup update stable && rustup default stable
-      - run: rustup target add wasm32-wasip1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo build --verbose -p comline-codegen-typescript --bin comline-gen-typescript --target wasm32-wasip1
 
   runtime:
     name: runtime - Node
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     defaults:
       run:
+        shell: bash
         working-directory: runtime
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
-          node-version: 20
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 20.20.2
+          cache: npm
+          cache-dependency-path: runtime/package-lock.json
       # The Rust reference the property tests (test/prop/) compare against,
       # built at the runtime commit the core is vendored from. Without it they
       # fail in CI rather than skip.
       - id: reference
         run: echo "rev=$(cat core/CORE_REV)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: reference-cache
         with:
           path: ~/.cargo/bin/comline-reference
           key: comline-reference-${{ steps.reference.outputs.rev }}
+      # Keep in step with rust-toolchain.toml.
       - if: steps.reference-cache.outputs.cache-hit != 'true'
-        run: |
-          rustup update stable && rustup default stable
-          cargo install --locked --git https://github.com/ComlineProject/runtime --rev "${{ steps.reference.outputs.rev }}" comline-reference
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: 1.99.1
+      - if: steps.reference-cache.outputs.cache-hit != 'true'
+        env:
+          REV: ${{ steps.reference.outputs.rev }}
+        run: cargo install --locked --git https://github.com/ComlineProject/runtime --rev "$REV" comline-reference
       - run: echo "COMLINE_REFERENCE=$HOME/.cargo/bin/comline-reference" >> "$GITHUB_ENV"
       - run: npm ci
       - run: npm run typecheck
@@ -74,7 +115,7 @@ jobs:
       # glue) is rebuilt from source at CORE_REV, with the runtime's pinned
       # toolchain (the script installs it and its wasm32 target) and its
       # committed Cargo.lock; this fails unless every byte matches.
-      - uses: actions/cache@v4
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry/index
@@ -87,15 +128,24 @@ jobs:
     # ops protocol (runtime/test/conformance-server.ts), against the vendored
     # corpus: the same proof the Rust runtime gives through `comline-reference`.
     name: runtime - comline conformance
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     defaults:
       run:
+        shell: bash
         working-directory: runtime
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
-          node-version: 20
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 20.20.2
+          cache: npm
+          cache-dependency-path: runtime/package-lock.json
       # The CLI at the tip of its default branch, built once per commit (the
       # docs repo's cli-drift workflow does the same).
       - name: Resolve the CLI's current commit
@@ -106,15 +156,20 @@ jobs:
         run: |
           branch=$(gh api repos/ComlineProject/cli --jq .default_branch)
           echo "sha=$(gh api "repos/ComlineProject/cli/commits/$branch" --jq .sha)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: cli-cache
         with:
           path: ~/.cargo/bin/comline
           key: comline-${{ runner.os }}-${{ steps.cli.outputs.sha }}
+      # Keep in step with rust-toolchain.toml.
       - if: steps.cli-cache.outputs.cache-hit != 'true'
-        run: |
-          rustup update stable && rustup default stable
-          cargo install --locked --git https://github.com/ComlineProject/cli --rev "${{ steps.cli.outputs.sha }}" comline
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: 1.99.1
+      - if: steps.cli-cache.outputs.cache-hit != 'true'
+        env:
+          SHA: ${{ steps.cli.outputs.sha }}
+        run: cargo install --locked --git https://github.com/ComlineProject/cli --rev "$SHA" comline
       - run: npm ci && npm run build
       # Every official encoding that is fully implemented here.
       - name: Conformance - datagram@1, datagram@2, jsonrpc@1, packed@1, comline@1
@@ -133,15 +188,26 @@ jobs:
 
   std_extra:
     name: std-extra - Node
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     defaults:
       run:
+        shell: bash
         working-directory: std-extra
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
-          node-version: 20
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 20.20.2
+          cache: npm
+          cache-dependency-path: |
+            runtime/package-lock.json
+            std-extra/package-lock.json
       # `@comline/runtime` is an optional peer of `@comline/std` (its types
       # name `Layout`), and isn't on npm yet: link the sibling, built.
       - run: npm ci && npm run build
@@ -157,12 +223,22 @@ jobs:
     # Generated code must type-check on the oldest TypeScript the generator
     # registers at (`LANG_VERSION`), not only on the one in the lockfiles.
     name: Generated code type-checks at the floor (TypeScript 5.0)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
-          node-version: 20
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 20.20.2
+          cache: npm
+          cache-dependency-path: |
+            runtime/package-lock.json
+            std-extra/package-lock.json
       - run: npm ci && npm run build
         working-directory: runtime
       - run: npx -y -p typescript@5.0.4 tsc -p tsconfig.generated.json
@@ -172,59 +248,53 @@ jobs:
       - run: npx -y -p typescript@5.0.4 tsc --noEmit
         working-directory: std-extra
 
-  # Cross-platform (core#9): the same checks on the other platforms, as
-  # separate jobs so the Linux check names above stay unchanged.
-  rust_xp:
-    name: Rust project - stable (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest, ubuntu-24.04-arm]
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v7
-      - run: rustup update stable && rustup default stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo build --verbose
-      - run: cargo test --verbose
-      - run: cargo run -p xtask -- --check
-
+  # The Node job on the other platforms, as separate jobs so the Linux check
+  # name above stays unchanged. (The Rust workspace's cross-platform build is
+  # the `rust` job's.)
   runtime_xp:
     name: runtime - Node 22 (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-24.04-arm]
+        os: [windows-2025, macos-15, ubuntu-24.04-arm]
     defaults:
       run:
         shell: bash
         working-directory: runtime
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
-          node-version: 22
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.23.5
           cache: npm
           cache-dependency-path: runtime/package-lock.json
       # The Rust reference the property tests compare against, built on the
       # platform under test (cached per OS and architecture).
       - id: reference
         run: echo "rev=$(cat core/CORE_REV)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v5
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: reference-cache
         with:
           path: |
             ~/.cargo/bin/comline-reference
             ~/.cargo/bin/comline-reference.exe
           key: comline-reference-${{ runner.os }}-${{ runner.arch }}-${{ steps.reference.outputs.rev }}
+      # Keep in step with rust-toolchain.toml.
       - if: steps.reference-cache.outputs.cache-hit != 'true'
-        run: |
-          rustup update stable && rustup default stable
-          cargo install --locked --git https://github.com/ComlineProject/runtime --rev "${{ steps.reference.outputs.rev }}" comline-reference
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: 1.99.1
+      - if: steps.reference-cache.outputs.cache-hit != 'true'
+        env:
+          REV: ${{ steps.reference.outputs.rev }}
+        run: cargo install --locked --git https://github.com/ComlineProject/runtime --rev "$REV" comline-reference
       - run: echo "COMLINE_REFERENCE=$(command -v comline-reference)" >> "$GITHUB_ENV"
       - run: npm ci
       - run: npm run typecheck
