@@ -9,7 +9,7 @@ license = "GPL-3.0-only"
 # repository structure — no crates.io publishing at this stage). Local
 # iteration: add a `[patch]` onto a sibling checkout.
 comline-codegen = { git = "https://github.com/ComlineProject/generation", rev = "0977d7a339e92ced0ebaac477a0f6b3c1104c680" }
-comline-core = { git = "https://github.com/ComlineProject/core", rev = "35ab4b801c9b35af591fb48972407468c8e8af24", default-features = false }
+comline-core = { git = "https://github.com/ComlineProject/core", rev = "a5bebdfbf71c57dba742a465bd4a08d53d650e56", default-features = false }
 
 eyre = "0.6.8"
 
@@ -23,4 +23,4 @@ path = "src/bin/comline-gen-typescript.rs"
 # `comline-codegen`.
 comline-conformance = { git = "https://github.com/ComlineProject/generation", rev = "0977d7a339e92ced0ebaac477a0f6b3c1104c680" }
 # The tests compile schemas, so they need core's compiler.
-comline-core = { git = "https://github.com/ComlineProject/core", rev = "35ab4b801c9b35af591fb48972407468c8e8af24" }
+comline-core = { git = "https://github.com/ComlineProject/core", rev = "a5bebdfbf71c57dba742a465bd4a08d53d650e56" }
