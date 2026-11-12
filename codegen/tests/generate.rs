@@ -1539,9 +1539,60 @@ fn handshake_none_passes_no_handshake_and_documents_what_is_given_up() {
     assert!(out.contains("    NoHandshake,\n"), "{out}");
     assert!(out.contains("await Client.connect(transport, codec, IR_HASH, framing, new NoHandshake())"));
     assert!(out.contains(".serve(transport, IR_HASH, new NoHandshake())"));
-    let doc = "/**\n * **Unverified:** gives up schema agreement and encoding agreement (handshake `none`).\n \
+    let doc = "/**\n * **Unverified:** gives up schema agreement and encoding agreement.\n \
                * Reason given: the 2009 gateway\n */\n";
     assert!(out.contains(&format!("{doc}export class GateDispatcher")), "{out}");
+    assert!(out.contains(&format!("{doc}export class GateClient")), "{out}");
+}
+
+/// A lockstep `Gate` protocol with these `@unverified` parameters.
+fn unverified_gate(marker: ConfigValue, set: Vec<comline_core::schema::ir::frozen::unit::Guarantee>) -> String {
+    one(vec![FrozenUnit::Protocol {
+        docstring: String::new(),
+        parameters: vec![
+            FrozenUnit::Property { name: "unverified".into(), value: marker },
+            FrozenUnit::Unverified(set),
+            FrozenUnit::Property { name: "framing".into(), value: ConfigValue::Str("datagram".into()) },
+        ],
+        name: "Gate".into(),
+        functions: vec![function("ping", vec![], None, vec![])],
+        span: (0, 0),
+    }])
+}
+
+/// core#253: the cause was recomputed from the official encodings, so a
+/// protocol given up only for its size read as `(handshake ...)`.
+#[test]
+fn unverified_docs_render_the_frozen_reasons_not_a_handshake() {
+    use comline_core::schema::ir::frozen::unit::Guarantee;
+    let reason = "the uploader streams whatever it's given";
+
+    let out = unverified_gate(ConfigValue::Str(reason.into()), vec![Guarantee::BoundedSize]);
+    let doc = format!("/**\n * **Unverified:** gives up bounded size.\n * Reason given: {reason}\n */\n");
+    assert!(out.contains(&format!("{doc}export class GateClient")), "{out}");
+    assert!(!out.contains("(handshake"), "{out}");
+
+    let out = unverified_gate(ConfigValue::Str("lines has no vectors".into()), vec![Guarantee::EncodingConformance]);
+    assert!(out.contains(" * **Unverified:** gives up encoding conformance.\n * Reason given: lines has no vectors\n"), "{out}");
+    assert!(!out.contains("(handshake"), "{out}");
+
+    // Nothing recorded beside a bounded size: what the build shows for it.
+    let out = unverified_gate(ConfigValue::Dict(vec![]), vec![Guarantee::BoundedSize]);
+    assert!(out.contains(" * Reason given: a string, list or nesting it reaches has no maximum\n"), "{out}");
+}
+
+/// A keyed `@unverified` says each guarantee's own reason.
+#[test]
+fn a_keyed_unverified_renders_each_guarantees_reason() {
+    use comline_core::schema::ir::frozen::unit::Guarantee;
+    let keyed = ConfigValue::Dict(vec![
+        ("schema_agreement".into(), ConfigValue::Str("the gateway predates Comline".into())),
+        ("bounded_size".into(), ConfigValue::Str("the uploader streams".into())),
+    ]);
+    let out = unverified_gate(keyed, vec![Guarantee::SchemaAgreement, Guarantee::BoundedSize]);
+    let doc = "/**\n * **Unverified:** gives up schema agreement and bounded size.\n \
+               * Reason given for schema agreement: the gateway predates Comline\n \
+               * Reason given for bounded size: the uploader streams\n */\n";
     assert!(out.contains(&format!("{doc}export class GateClient")), "{out}");
 }
 

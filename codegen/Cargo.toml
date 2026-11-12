@@ -8,8 +8,8 @@ license = "GPL-3.0-only"
 # Consumed by git rev (see ComlineProject/docs → Design → Runtime & generation
 # repository structure — no crates.io publishing at this stage). Local
 # iteration: add a `[patch]` onto a sibling checkout.
-comline-codegen = { git = "https://github.com/ComlineProject/generation", rev = "0977d7a339e92ced0ebaac477a0f6b3c1104c680" }
-comline-core = { git = "https://github.com/ComlineProject/core", rev = "35ab4b801c9b35af591fb48972407468c8e8af24", default-features = false }
+comline-codegen = { git = "https://github.com/ComlineProject/generation", rev = "cd63473e7029542ef1358accbc5fc61059824577" }
+comline-core = { git = "https://github.com/ComlineProject/core", rev = "263e58378bb7efcaa466542ca644228ad14e2884", default-features = false }
 
 eyre = "0.6.8"
 
@@ -21,6 +21,6 @@ path = "src/bin/comline-gen-typescript.rs"
 # The conformance corpus: every fixture is a whole package. Same generation
 # rev as `comline-codegen` above, so the corpus and the generator share one
 # `comline-codegen`.
-comline-conformance = { git = "https://github.com/ComlineProject/generation", rev = "0977d7a339e92ced0ebaac477a0f6b3c1104c680" }
+comline-conformance = { git = "https://github.com/ComlineProject/generation", rev = "cd63473e7029542ef1358accbc5fc61059824577" }
 # The tests compile schemas, so they need core's compiler.
-comline-core = { git = "https://github.com/ComlineProject/core", rev = "35ab4b801c9b35af591fb48972407468c8e8af24" }
+comline-core = { git = "https://github.com/ComlineProject/core", rev = "263e58378bb7efcaa466542ca644228ad14e2884" }

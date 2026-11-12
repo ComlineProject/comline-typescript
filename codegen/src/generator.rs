@@ -42,7 +42,7 @@ use std::path::PathBuf;
 use comline_core::schema::ir::frozen::types::{Literal, PrimitiveType, TypeRef};
 use comline_core::schema::ir::frozen::schema_ir_hash;
 use comline_core::schema::idl::annotations::{MethodNames, IMPLICIT_HANDSHAKE, FORMAT_JSON, FRAMING_JSONRPC, HANDSHAKE_NONE};
-use comline_core::schema::ir::frozen::unit::FrozenUnit;
+use comline_core::schema::ir::frozen::unit::{FrozenUnit, Guarantee};
 use comline_core::schema::ir::unverified;
 
 use eyre::Result;
@@ -1385,20 +1385,33 @@ fn no_handshake(parameters: &[FrozenUnit]) -> bool {
 
 /// A doc comment naming what an `@unverified` protocol gives up, and why,
 /// for its dispatcher and client. Empty for one that gives nothing up.
+///
+/// The reasons are the ones the protocol was frozen with
+/// ([`unverified::frozen_reasons`]); nothing is recomputed from the
+/// encodings, which a request doesn't carry.
 fn unverified_doc(parameters: &[FrozenUnit]) -> String {
     let set = unverified::frozen_set(parameters);
     if set.is_empty() {
         return String::new();
     }
-    let mut doc = format!(
-        "/**\n * **Unverified:** gives up {} ({}).\n",
-        unverified::describe(set),
-        // The request carries no encoding declarations, so this sees the
-        // official ones only: the handshake's cause, as the IR records it.
-        unverified::cause(parameters, &unverified::Encodings::default())
-    );
-    if let Some(reason) = unverified::reason(parameters) {
-        doc.push_str(&format!(" * Reason given: {reason}\n"));
+    let mut doc = format!("/**\n * **Unverified:** gives up {}.\n", unverified::describe(set));
+    // One reason for everything given up reads once; a keyed one, per
+    // guarantee that says something different.
+    let mut groups: Vec<(Vec<Guarantee>, String)> = vec![];
+    for (guarantee, reason) in unverified::frozen_reasons(parameters) {
+        let Some(reason) = reason else { continue };
+        match groups.iter_mut().find(|(_, r)| *r == reason) {
+            Some((guarantees, _)) => guarantees.push(guarantee),
+            None => groups.push((vec![guarantee], reason)),
+        }
+    }
+    let several = groups.len() > 1 || groups.iter().any(|(guarantees, _)| guarantees.len() < set.len());
+    for (guarantees, reason) in groups {
+        if several {
+            doc.push_str(&format!(" * Reason given for {}: {reason}\n", unverified::describe(&guarantees)));
+        } else {
+            doc.push_str(&format!(" * Reason given: {reason}\n"));
+        }
     }
     doc.push_str(" */\n");
     doc
