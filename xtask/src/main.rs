@@ -1,6 +1,6 @@
 //! Regenerates `std-extra/` — the `@comline/std` package — from Comline's
 //! real `std` schemas, by running the same `generate_typescript` every
-//! consumer's `comline generate -m lib` call goes through, so the package is
+//! consumer's `comline generation -m lib` call goes through, so the package is
 //! never hand-edited, only regenerated.
 //!
 //! `cargo run -p xtask` writes it; `cargo run -p xtask -- --check` diffs
