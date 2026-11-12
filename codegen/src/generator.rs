@@ -1093,7 +1093,7 @@ const PACKAGE_MODULE: &str = "connection";
 /// accepting side provides), `ClientServices` (what the dialling side does),
 /// and `accept` / `serve` / `connect`. `None` when no protocol this package
 /// emits is on a connection, or when its protocols don't share one
-/// (`comline generate` says why).
+/// (`comline generation` says why).
 fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<FrozenUnit>)], codec: &str) -> Option<String> {
     let package = connections::package_connection(&req.schemas).ok()??;
     // Only what this package emits: an external `std` provides nothing here.
