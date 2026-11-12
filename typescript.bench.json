@@ -1,23 +1,23 @@
 {
   "format": 2,
   "runtime": "typescript",
-  "commit": "d872625090745d94acd5637e2547769ef641d5c9",
+  "commit": "739d0874fa468e8886599868babfc7ed98536ab7",
   "toolchain": "node v22.23.4",
   "benches": {
     "format/encode/small-scalar/json@1": {
       "instructions": {
         "value": 40844,
-        "spread": 2e-06
+        "spread": 1.4e-05
       },
       "instructions-opt": {
-        "value": 21614,
-        "spread": 2e-06
+        "value": 21615,
+        "spread": 4e-06
       }
     },
     "format/encode/small-scalar/packed@1": {
       "instructions": {
         "value": 26182,
-        "spread": 3e-06
+        "spread": 1e-06
       },
       "instructions-opt": {
         "value": 6568,
@@ -27,71 +27,71 @@
     "format/encode/string-heavy/json@1": {
       "instructions": {
         "value": 83562,
-        "spread": 2e-06
+        "spread": 1e-06
       },
       "instructions-opt": {
-        "value": 53022,
-        "spread": 2e-06
+        "value": 53021,
+        "spread": 9e-06
       }
     },
     "format/encode/string-heavy/packed@1": {
       "instructions": {
         "value": 117204,
-        "spread": 2e-06
+        "spread": 1e-06
       },
       "instructions-opt": {
         "value": 60288,
-        "spread": 3e-06
+        "spread": 2e-06
       }
     },
     "format/encode/nested/json@1": {
       "instructions": {
-        "value": 188320,
-        "spread": 3e-06
+        "value": 188316,
+        "spread": 1e-06
       },
       "instructions-opt": {
-        "value": 88224,
-        "spread": 1e-06
+        "value": 88223,
+        "spread": 6e-06
       }
     },
     "format/encode/nested/packed@1": {
       "instructions": {
         "value": 141895,
-        "spread": 0.0
+        "spread": 2e-06
       },
       "instructions-opt": {
         "value": 42957,
-        "spread": 1e-06
+        "spread": 2e-06
       }
     },
     "format/encode/large-array/json@1": {
       "instructions": {
-        "value": 30348681,
-        "spread": 2e-06
+        "value": 30348686,
+        "spread": 0.0
       },
       "instructions-opt": {
-        "value": 14850960,
+        "value": 14850955,
         "spread": 1e-06
       }
     },
     "format/encode/large-array/packed@1": {
       "instructions": {
-        "value": 19258288,
-        "spread": 1e-06
+        "value": 19258277,
+        "spread": 0.0
       },
       "instructions-opt": {
-        "value": 3566077,
-        "spread": 0.0
+        "value": 3566050,
+        "spread": 1e-06
       }
     },
     "format/encode/enum-heavy/json@1": {
       "instructions": {
-        "value": 136535,
-        "spread": 4e-06
+        "value": 136536,
+        "spread": 5e-06
       },
       "instructions-opt": {
-        "value": 61962,
-        "spread": 1e-06
+        "value": 61963,
+        "spread": 2e-06
       }
     },
     "format/encode/enum-heavy/packed@1": {
@@ -101,23 +101,23 @@
       },
       "instructions-opt": {
         "value": 16274,
-        "spread": 4e-06
+        "spread": 6e-06
       }
     },
     "format/decode/small-scalar/json@1": {
       "instructions": {
         "value": 147881,
-        "spread": 1e-06
+        "spread": 3e-06
       },
       "instructions-opt": {
         "value": 64124,
-        "spread": 1e-06
+        "spread": 3e-06
       }
     },
     "format/decode/small-scalar/packed@1": {
       "instructions": {
         "value": 36376,
-        "spread": 0.0
+        "spread": 8e-06
       },
       "instructions-opt": {
         "value": 11508,
@@ -126,12 +126,12 @@
     },
     "format/decode/string-heavy/json@1": {
       "instructions": {
-        "value": 245755,
+        "value": 245753,
         "spread": 1e-06
       },
       "instructions-opt": {
         "value": 134972,
-        "spread": 4e-06
+        "spread": 2e-06
       }
     },
     "format/decode/string-heavy/packed@1": {
@@ -141,67 +141,67 @@
       },
       "instructions-opt": {
         "value": 40334,
-        "spread": 3e-06
+        "spread": 6e-06
       }
     },
     "format/decode/nested/json@1": {
       "instructions": {
-        "value": 666942,
+        "value": 666941,
         "spread": 2e-06
       },
       "instructions-opt": {
-        "value": 289372,
-        "spread": 6e-06
+        "value": 289371,
+        "spread": 3e-06
       }
     },
     "format/decode/nested/packed@1": {
       "instructions": {
         "value": 204040,
-        "spread": 2e-06
+        "spread": 0.0
       },
       "instructions-opt": {
         "value": 58803,
-        "spread": 2e-06
+        "spread": 3e-06
       }
     },
     "format/decode/large-array/json@1": {
       "instructions": {
-        "value": 94519214,
+        "value": 94519205,
         "spread": 0.0
       },
       "instructions-opt": {
-        "value": 38605983,
+        "value": 38605992,
         "spread": 0.0
       }
     },
     "format/decode/large-array/packed@1": {
       "instructions": {
-        "value": 29231383,
-        "spread": 1e-06
+        "value": 29231583,
+        "spread": 0.0
       },
       "instructions-opt": {
-        "value": 9621517,
-        "spread": 1e-06
+        "value": 9621584,
+        "spread": 3e-06
       }
     },
     "format/decode/enum-heavy/json@1": {
       "instructions": {
-        "value": 407774,
-        "spread": 2e-06
+        "value": 407777,
+        "spread": 1e-06
       },
       "instructions-opt": {
         "value": 182724,
-        "spread": 2e-06
+        "spread": 5e-06
       }
     },
     "format/decode/enum-heavy/packed@1": {
       "instructions": {
         "value": 181164,
-        "spread": 1e-06
+        "spread": 2e-06
       },
       "instructions-opt": {
         "value": 29409,
-        "spread": 1e-06
+        "spread": 3e-06
       }
     },
     "framing/encode/datagram@1/16": {
@@ -347,21 +347,21 @@
     "framing/encode/jsonrpc@1/4096": {
       "instructions": {
         "value": 24795,
-        "spread": 1.3e-05
+        "spread": 2.3e-05
       },
       "instructions-opt": {
-        "value": 22294,
-        "spread": 4e-06
+        "value": 22295,
+        "spread": 1.1e-05
       }
     },
     "framing/encode/jsonrpc@1/65536": {
       "instructions": {
-        "value": 443278,
-        "spread": 4e-06
+        "value": 443268,
+        "spread": 7e-06
       },
       "instructions-opt": {
-        "value": 443269,
-        "spread": 8e-06
+        "value": 443267,
+        "spread": 4e-06
       }
     },
     "framing/decode/datagram@1/16": {
@@ -487,41 +487,41 @@
     "framing/decode/jsonrpc@1/16": {
       "instructions": {
         "value": 55277,
-        "spread": 2e-06
+        "spread": 0.0
       },
       "instructions-opt": {
-        "value": 33959,
-        "spread": 1.4e-05
+        "value": 33958,
+        "spread": 1.5e-05
       }
     },
     "framing/decode/jsonrpc@1/256": {
       "instructions": {
-        "value": 58696,
-        "spread": 3e-06
+        "value": 58695,
+        "spread": 8e-06
       },
       "instructions-opt": {
         "value": 37325,
-        "spread": 2e-06
+        "spread": 3.5e-05
       }
     },
     "framing/decode/jsonrpc@1/4096": {
       "instructions": {
-        "value": 115521,
-        "spread": 1e-06
+        "value": 115520,
+        "spread": 2e-06
       },
       "instructions-opt": {
         "value": 93920,
-        "spread": 1e-06
+        "spread": 7e-06
       }
     },
     "framing/decode/jsonrpc@1/65536": {
       "instructions": {
-        "value": 1128449,
+        "value": 1128435,
         "spread": 2e-06
       },
       "instructions-opt": {
-        "value": 1105827,
-        "spread": 8e-06
+        "value": 1105826,
+        "spread": 5e-06
       }
     },
     "handshake/encode": {
@@ -557,11 +557,11 @@
     "connection/step": {
       "instructions": {
         "value": 41945,
-        "spread": 1.4e-05
+        "spread": 1e-06
       },
       "instructions-opt": {
         "value": 15305,
-        "spread": 5.6e-05
+        "spread": 5.3e-05
       }
     }
   }
