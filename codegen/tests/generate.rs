@@ -92,6 +92,7 @@ fn arg(name: &str, ty: TypeRef) -> FrozenArgument {
         name: name.into(),
         ty,
         span: (0, 0),
+        parameters: vec![],
     }
 }
 
