@@ -5,8 +5,9 @@
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-use comline_codegen::protocol::{decode, encode, FileOut, Request, Response};
-use comline_codegen::{GenerateRequest, PackageMeta, TargetLanguage};
+use comline_codegen::docs::Topic;
+use comline_codegen::protocol::{decode, describe, encode, FileOut, Request, Response};
+use comline_codegen::{GenerateRequest, PackageMeta, Registry, TargetLanguage};
 use comline_codegen_typescript::{generate_typescript, VERSIONS};
 use comline_conformance::{corpus, Fixture};
 use comline_core::schema::idl::annotations::DEFAULT_FORMAT;
@@ -71,6 +72,20 @@ fn the_binary_describes_the_typescript_generator() {
     ids.sort();
     assert_eq!(ids, ["ts", "typescript"]);
     assert!(d.languages.iter().all(|l| l.versions.floor == VERSIONS.floor));
+}
+
+#[test]
+fn every_registered_name_carries_the_connections_docs_link() {
+    let mut registry = Registry::new();
+    comline_codegen_typescript::register(&mut registry);
+    let languages = describe(&registry).languages;
+    assert_eq!(languages.len(), 2);
+    for language in &languages {
+        assert_eq!(
+            language.doc(Topic::Connections),
+            Some("https://comlineproject.github.io/docs/languages/typescript/connections/#when-theyre-generated")
+        );
+    }
 }
 
 #[test]
