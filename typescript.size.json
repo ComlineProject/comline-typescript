@@ -5,12 +5,12 @@
       "gzip_bytes": 792
     },
     "runtime/npm-tarball": {
-      "bytes": 354243,
-      "gzip_bytes": 353863
+      "bytes": 354398,
+      "gzip_bytes": 354035
     }
   },
-  "commit": "63532a3e9f193f8aab19a7eda494ddf73c4ecbde",
+  "commit": "c3c59de6d6621be03885b93de2bb7c20a76d2916",
   "format": 1,
-  "run": "https://github.com/ComlineProject/comline-typescript/actions/runs/43358754577",
+  "run": "https://github.com/ComlineProject/comline-typescript/actions/runs/43370474780",
   "toolchain": "node v22.23.5"
 }
