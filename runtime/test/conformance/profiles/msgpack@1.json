@@ -47,5 +47,205 @@
         "format-msgpack/struct"
       ]
     }
+  },
+  "sizes": {
+    "feature": "sizes-msgpack",
+    "scalars": {
+      "bool": {
+        "min": 1,
+        "max": 1,
+        "proven_by": [
+          "sizes-msgpack/bool"
+        ]
+      },
+      "u8": {
+        "min": 1,
+        "max": 2,
+        "proven_by": [
+          "sizes-msgpack/u8"
+        ]
+      },
+      "u16": {
+        "min": 1,
+        "max": 3,
+        "proven_by": [
+          "sizes-msgpack/u16"
+        ]
+      },
+      "u32": {
+        "min": 1,
+        "max": 5,
+        "proven_by": [
+          "sizes-msgpack/u32"
+        ]
+      },
+      "u64": {
+        "min": 1,
+        "max": 9,
+        "proven_by": [
+          "sizes-msgpack/u64"
+        ]
+      },
+      "u128": {
+        "min": 18,
+        "max": 18,
+        "proven_by": [
+          "sizes-msgpack/u128"
+        ]
+      },
+      "s8": {
+        "min": 1,
+        "max": 2,
+        "proven_by": [
+          "sizes-msgpack/i8"
+        ]
+      },
+      "s16": {
+        "min": 1,
+        "max": 3,
+        "proven_by": [
+          "sizes-msgpack/i16"
+        ]
+      },
+      "s32": {
+        "min": 1,
+        "max": 5,
+        "proven_by": [
+          "sizes-msgpack/i32"
+        ]
+      },
+      "s64": {
+        "min": 1,
+        "max": 9,
+        "proven_by": [
+          "sizes-msgpack/i64"
+        ]
+      },
+      "s128": {
+        "min": 18,
+        "max": 18,
+        "proven_by": [
+          "sizes-msgpack/i128"
+        ]
+      },
+      "f32": {
+        "min": 5,
+        "max": 5,
+        "proven_by": [
+          "sizes-msgpack/f32"
+        ]
+      },
+      "f64": {
+        "min": 9,
+        "max": 9,
+        "proven_by": [
+          "sizes-msgpack/f64"
+        ]
+      },
+      "char": {
+        "min": 2,
+        "max": 5,
+        "proven_by": [
+          "sizes-msgpack/char"
+        ]
+      },
+      "unit": {
+        "min": 1,
+        "max": 1,
+        "proven_by": [
+          "sizes-msgpack/unit"
+        ]
+      }
+    },
+    "string": {
+      "header": {
+        "kind": "msgpack_str"
+      },
+      "body": "utf8",
+      "proven_by": [
+        "sizes-msgpack/string-unbounded",
+        "sizes-msgpack/string-max-0",
+        "sizes-msgpack/string-max-1",
+        "sizes-msgpack/string-max-3",
+        "sizes-msgpack/string-max-7",
+        "sizes-msgpack/string-max-8",
+        "sizes-msgpack/string-max-31",
+        "sizes-msgpack/string-max-32",
+        "sizes-msgpack/string-max-63",
+        "sizes-msgpack/string-max-64",
+        "sizes-msgpack/string-max-16384",
+        "sizes-msgpack/string-fixed-3",
+        "sizes-msgpack/string-fixed-8",
+        "sizes-msgpack/string-fixed-32"
+      ]
+    },
+    "array": {
+      "header": {
+        "kind": "msgpack_array"
+      },
+      "proven_by": [
+        "sizes-msgpack/array-unbounded",
+        "sizes-msgpack/array-unbounded-strings",
+        "sizes-msgpack/array-max-3",
+        "sizes-msgpack/array-max-15",
+        "sizes-msgpack/array-max-16",
+        "sizes-msgpack/array-max-2-of-strings",
+        "sizes-msgpack/array-max-3-of-options",
+        "sizes-msgpack/recursive-tree-2"
+      ]
+    },
+    "fixed_array": {
+      "header": {
+        "kind": "msgpack_array"
+      },
+      "proven_by": [
+        "sizes-msgpack/fixed-4",
+        "sizes-msgpack/fixed-15",
+        "sizes-msgpack/fixed-16",
+        "sizes-msgpack/fixed-1",
+        "sizes-msgpack/fixed-2-of-strings",
+        "sizes-msgpack/fixed-3-of-options"
+      ]
+    },
+    "option": {
+      "none": 1,
+      "some": 0,
+      "proven_by": [
+        "sizes-msgpack/option-u8",
+        "sizes-msgpack/option-bool",
+        "sizes-msgpack/option-string",
+        "sizes-msgpack/option-max-3-chars",
+        "sizes-msgpack/option-struct",
+        "sizes-msgpack/recursive-chain-3"
+      ]
+    },
+    "struct": {
+      "header": {
+        "kind": "msgpack_array"
+      },
+      "proven_by": [
+        "sizes-msgpack/struct-point",
+        "sizes-msgpack/struct-empty",
+        "sizes-msgpack/struct-mixed",
+        "sizes-msgpack/struct-nested",
+        "sizes-msgpack/struct-15-fields",
+        "sizes-msgpack/struct-16-fields",
+        "sizes-msgpack/struct-long-names",
+        "sizes-msgpack/recursive-chain-3",
+        "sizes-msgpack/recursive-tree-2"
+      ]
+    },
+    "enum": {
+      "tag": "name",
+      "header": {
+        "kind": "msgpack_str"
+      },
+      "proven_by": [
+        "sizes-msgpack/enum-color",
+        "sizes-msgpack/enum-single",
+        "sizes-msgpack/enum-129-variants",
+        "sizes-msgpack/enum-long-names"
+      ]
+    }
   }
 }

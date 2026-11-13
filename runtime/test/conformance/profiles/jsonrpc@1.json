@@ -32,6 +32,13 @@
         "framing-jsonrpc/reject-request-params-msgpack",
         "framing-jsonrpc/reject-request-params-packed"
       ]
+    },
+    "protocol": {
+      "value": "unnamed",
+      "proven_by": [
+        "framing-jsonrpc/request",
+        "framing-jsonrpc/request-large-id"
+      ]
     }
   }
 }
