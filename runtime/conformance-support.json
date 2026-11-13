@@ -24,6 +24,21 @@
       "failing": ["format-json/decode-unknown-variant", "format-json/decode-wider-integer-overflow"]
     },
     "format-msgpack": { "state": "unsupported", "note": "JSON and packed@1 ship" },
-    "format-packed": { "state": "supported" }
+    "format-packed": { "state": "supported" },
+    "sizes-packed": {
+      "state": "unsupported",
+      "note": "no exact encoded size yet: the encoders don't report how many bytes a value takes",
+      "tracking": "comline-typescript#162"
+    },
+    "sizes-msgpack": {
+      "state": "unsupported",
+      "note": "no exact encoded size yet, and msgpack@1 itself doesn't ship",
+      "tracking": "comline-typescript#162"
+    },
+    "sizes-json": {
+      "state": "unsupported",
+      "note": "no exact encoded size or upper bound yet: the encoder doesn't report how many bytes a value takes",
+      "tracking": "comline-typescript#162"
+    }
   }
 }

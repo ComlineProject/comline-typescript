@@ -281,6 +281,7 @@
       "state": "supported",
       "proven_by": [
         "framing-datagram3/request",
+        "framing-datagram3/request-two-byte-protocol",
         "framing-datagram3/request-two-byte-numbers",
         "framing-datagram3/request-large-ids",
         "framing-datagram3/request-params-msgpack",
@@ -404,6 +405,24 @@
         "name-hash/jsonrpc@1",
         "name-hash/com.acme.custom-format"
       ]
+    },
+    "sizes-json": {
+      "state": "unsupported",
+      "note": "no exact encoded size or upper bound yet: the encoder doesn't report how many bytes a value takes",
+      "tracking": "comline-typescript#162",
+      "proven_by": []
+    },
+    "sizes-msgpack": {
+      "state": "unsupported",
+      "note": "no exact encoded size yet, and msgpack@1 itself doesn't ship",
+      "tracking": "comline-typescript#162",
+      "proven_by": []
+    },
+    "sizes-packed": {
+      "state": "unsupported",
+      "note": "no exact encoded size yet: the encoders don't report how many bytes a value takes",
+      "tracking": "comline-typescript#162",
+      "proven_by": []
     },
     "stream": {
       "state": "unsupported",

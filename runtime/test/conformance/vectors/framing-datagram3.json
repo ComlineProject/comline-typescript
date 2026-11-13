@@ -26,6 +26,22 @@
       "bytes": "0000032a000000000000005b372c2278225d"
     },
     {
+      "id": "framing-datagram3/request-two-byte-protocol",
+      "op": "request",
+      "input": {
+        "call_id": 1,
+        "format": "json@1",
+        "framing": "datagram@3",
+        "method": "ping",
+        "params": {
+          "array": []
+        },
+        "protocol": 300,
+        "request_id": "5"
+      },
+      "bytes": "00ac020105000000000000005b5d"
+    },
+    {
       "id": "framing-datagram3/request-two-byte-numbers",
       "op": "request",
       "input": {

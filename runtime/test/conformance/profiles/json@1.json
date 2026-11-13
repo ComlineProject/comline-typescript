@@ -50,5 +50,218 @@
         "format-json/unit"
       ]
     }
+  },
+  "sizes": {
+    "feature": "sizes-json",
+    "scalars": {
+      "bool": {
+        "min": 4,
+        "max": 5,
+        "proven_by": [
+          "sizes-json/bool"
+        ]
+      },
+      "u8": {
+        "min": 1,
+        "max": 3,
+        "proven_by": [
+          "sizes-json/u8"
+        ]
+      },
+      "u16": {
+        "min": 1,
+        "max": 5,
+        "proven_by": [
+          "sizes-json/u16"
+        ]
+      },
+      "u32": {
+        "min": 1,
+        "max": 10,
+        "proven_by": [
+          "sizes-json/u32"
+        ]
+      },
+      "u64": {
+        "min": 1,
+        "max": 20,
+        "proven_by": [
+          "sizes-json/u64"
+        ]
+      },
+      "u128": {
+        "min": 1,
+        "max": 39,
+        "proven_by": [
+          "sizes-json/u128"
+        ]
+      },
+      "s8": {
+        "min": 1,
+        "max": 4,
+        "proven_by": [
+          "sizes-json/i8"
+        ]
+      },
+      "s16": {
+        "min": 1,
+        "max": 6,
+        "proven_by": [
+          "sizes-json/i16"
+        ]
+      },
+      "s32": {
+        "min": 1,
+        "max": 11,
+        "proven_by": [
+          "sizes-json/i32"
+        ]
+      },
+      "s64": {
+        "min": 1,
+        "max": 20,
+        "proven_by": [
+          "sizes-json/i64"
+        ]
+      },
+      "s128": {
+        "min": 1,
+        "max": 40,
+        "proven_by": [
+          "sizes-json/i128"
+        ]
+      },
+      "f32": {
+        "min": 3,
+        "max": 16,
+        "proven_by": [
+          "sizes-json/f32"
+        ]
+      },
+      "f64": {
+        "min": 3,
+        "max": 24,
+        "proven_by": [
+          "sizes-json/f64"
+        ]
+      },
+      "char": {
+        "min": 3,
+        "max": 8,
+        "proven_by": [
+          "sizes-json/char"
+        ]
+      },
+      "unit": {
+        "min": 4,
+        "max": 4,
+        "proven_by": [
+          "sizes-json/unit"
+        ]
+      }
+    },
+    "string": {
+      "header": {
+        "kind": "delimited",
+        "before": 1,
+        "after": 1,
+        "between": 0
+      },
+      "body": "json_escaped",
+      "proven_by": [
+        "sizes-json/string-unbounded",
+        "sizes-json/string-max-0",
+        "sizes-json/string-max-1",
+        "sizes-json/string-max-3",
+        "sizes-json/string-max-7",
+        "sizes-json/string-max-8",
+        "sizes-json/string-max-31",
+        "sizes-json/string-max-32",
+        "sizes-json/string-max-63",
+        "sizes-json/string-max-64",
+        "sizes-json/string-fixed-3",
+        "sizes-json/string-fixed-8",
+        "sizes-json/string-fixed-32"
+      ]
+    },
+    "array": {
+      "header": {
+        "kind": "delimited",
+        "before": 1,
+        "after": 1,
+        "between": 1
+      },
+      "proven_by": [
+        "sizes-json/array-unbounded",
+        "sizes-json/array-unbounded-strings",
+        "sizes-json/array-max-0",
+        "sizes-json/array-max-1",
+        "sizes-json/array-max-3",
+        "sizes-json/array-max-2-of-strings",
+        "sizes-json/array-max-3-of-options",
+        "sizes-json/recursive-tree-2"
+      ]
+    },
+    "fixed_array": {
+      "header": {
+        "kind": "delimited",
+        "before": 1,
+        "after": 1,
+        "between": 1
+      },
+      "proven_by": [
+        "sizes-json/fixed-4",
+        "sizes-json/fixed-1",
+        "sizes-json/fixed-2-of-strings",
+        "sizes-json/fixed-3-of-options"
+      ]
+    },
+    "option": {
+      "none": 4,
+      "some": 0,
+      "proven_by": [
+        "sizes-json/option-u8",
+        "sizes-json/option-bool",
+        "sizes-json/option-string",
+        "sizes-json/option-max-3-chars",
+        "sizes-json/option-struct",
+        "sizes-json/recursive-chain-3"
+      ]
+    },
+    "struct": {
+      "header": {
+        "kind": "delimited",
+        "before": 1,
+        "after": 1,
+        "between": 1
+      },
+      "key_extra": 3,
+      "proven_by": [
+        "sizes-json/struct-point",
+        "sizes-json/struct-empty",
+        "sizes-json/struct-mixed",
+        "sizes-json/struct-nested",
+        "sizes-json/struct-15-fields",
+        "sizes-json/struct-16-fields",
+        "sizes-json/struct-long-names",
+        "sizes-json/recursive-chain-3",
+        "sizes-json/recursive-tree-2"
+      ]
+    },
+    "enum": {
+      "tag": "name",
+      "header": {
+        "kind": "delimited",
+        "before": 1,
+        "after": 1,
+        "between": 0
+      },
+      "proven_by": [
+        "sizes-json/enum-color",
+        "sizes-json/enum-single",
+        "sizes-json/enum-129-variants",
+        "sizes-json/enum-long-names"
+      ]
+    }
   }
 }

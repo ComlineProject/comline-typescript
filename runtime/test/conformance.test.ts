@@ -41,6 +41,9 @@ const readJson = <T>(url: URL): T => JSON.parse(readFileSync(url, "utf8")) as T;
 
 function run(c: Case): Outcome {
   try {
+    // A `size` case (spec 0.11) states witnesses, not one byte string, and the
+    // runtime reports no sizes yet (comline-typescript#162).
+    if ((c.op as string) === "size") throw new NotImplemented("op `size`");
     const bytes = unhex(c.bytes);
     // An `encode` rejection (spec 0.3) asks only to encode, which must fail.
     if (c.expect === "reject" && c.op === "encode") {

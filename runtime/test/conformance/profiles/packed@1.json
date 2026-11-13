@@ -47,5 +47,201 @@
         "format-packed/struct"
       ]
     }
+  },
+  "sizes": {
+    "feature": "sizes-packed",
+    "scalars": {
+      "bool": {
+        "min": 1,
+        "max": 1,
+        "proven_by": [
+          "sizes-packed/bool"
+        ]
+      },
+      "u8": {
+        "min": 1,
+        "max": 1,
+        "proven_by": [
+          "sizes-packed/u8"
+        ]
+      },
+      "u16": {
+        "min": 2,
+        "max": 2,
+        "proven_by": [
+          "sizes-packed/u16"
+        ]
+      },
+      "u32": {
+        "min": 4,
+        "max": 4,
+        "proven_by": [
+          "sizes-packed/u32"
+        ]
+      },
+      "u64": {
+        "min": 8,
+        "max": 8,
+        "proven_by": [
+          "sizes-packed/u64"
+        ]
+      },
+      "u128": {
+        "min": 16,
+        "max": 16,
+        "proven_by": [
+          "sizes-packed/u128"
+        ]
+      },
+      "s8": {
+        "min": 1,
+        "max": 1,
+        "proven_by": [
+          "sizes-packed/i8"
+        ]
+      },
+      "s16": {
+        "min": 2,
+        "max": 2,
+        "proven_by": [
+          "sizes-packed/i16"
+        ]
+      },
+      "s32": {
+        "min": 4,
+        "max": 4,
+        "proven_by": [
+          "sizes-packed/i32"
+        ]
+      },
+      "s64": {
+        "min": 8,
+        "max": 8,
+        "proven_by": [
+          "sizes-packed/i64"
+        ]
+      },
+      "s128": {
+        "min": 16,
+        "max": 16,
+        "proven_by": [
+          "sizes-packed/i128"
+        ]
+      },
+      "f32": {
+        "min": 4,
+        "max": 4,
+        "proven_by": [
+          "sizes-packed/f32"
+        ]
+      },
+      "f64": {
+        "min": 8,
+        "max": 8,
+        "proven_by": [
+          "sizes-packed/f64"
+        ]
+      },
+      "char": {
+        "min": 1,
+        "max": 4,
+        "proven_by": [
+          "sizes-packed/char"
+        ]
+      },
+      "unit": {
+        "min": 0,
+        "max": 0,
+        "proven_by": [
+          "sizes-packed/unit"
+        ]
+      }
+    },
+    "string": {
+      "header": {
+        "kind": "varint_leb128"
+      },
+      "body": "utf8",
+      "proven_by": [
+        "sizes-packed/string-unbounded",
+        "sizes-packed/string-max-0",
+        "sizes-packed/string-max-1",
+        "sizes-packed/string-max-3",
+        "sizes-packed/string-max-7",
+        "sizes-packed/string-max-8",
+        "sizes-packed/string-max-31",
+        "sizes-packed/string-max-32",
+        "sizes-packed/string-max-63",
+        "sizes-packed/string-max-64",
+        "sizes-packed/string-max-4095",
+        "sizes-packed/string-max-4096",
+        "sizes-packed/string-fixed-3",
+        "sizes-packed/string-fixed-8",
+        "sizes-packed/string-fixed-32"
+      ]
+    },
+    "array": {
+      "header": {
+        "kind": "varint_leb128"
+      },
+      "proven_by": [
+        "sizes-packed/array-unbounded",
+        "sizes-packed/array-unbounded-strings",
+        "sizes-packed/array-max-3",
+        "sizes-packed/array-max-127",
+        "sizes-packed/array-max-128",
+        "sizes-packed/array-max-2-of-strings",
+        "sizes-packed/array-max-3-of-options",
+        "sizes-packed/recursive-tree-2"
+      ]
+    },
+    "fixed_array": {
+      "header": {
+        "kind": "none"
+      },
+      "proven_by": [
+        "sizes-packed/fixed-4",
+        "sizes-packed/fixed-1",
+        "sizes-packed/fixed-2-of-strings",
+        "sizes-packed/fixed-3-of-options"
+      ]
+    },
+    "option": {
+      "none": 1,
+      "some": 1,
+      "proven_by": [
+        "sizes-packed/option-u8",
+        "sizes-packed/option-bool",
+        "sizes-packed/option-string",
+        "sizes-packed/option-max-3-chars",
+        "sizes-packed/option-struct",
+        "sizes-packed/recursive-chain-3"
+      ]
+    },
+    "struct": {
+      "header": {
+        "kind": "none"
+      },
+      "proven_by": [
+        "sizes-packed/struct-point",
+        "sizes-packed/struct-empty",
+        "sizes-packed/struct-mixed",
+        "sizes-packed/struct-nested",
+        "sizes-packed/struct-15-fields",
+        "sizes-packed/struct-16-fields",
+        "sizes-packed/struct-long-names",
+        "sizes-packed/recursive-chain-3",
+        "sizes-packed/recursive-tree-2"
+      ]
+    },
+    "enum": {
+      "tag": "varint_index",
+      "proven_by": [
+        "sizes-packed/enum-color",
+        "sizes-packed/enum-single",
+        "sizes-packed/enum-129-variants",
+        "sizes-packed/enum-long-names"
+      ]
+    }
   }
 }
