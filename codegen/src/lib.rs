@@ -12,6 +12,7 @@
 mod generator;
 mod ident;
 
+use comline_codegen::docs::{DocsTable, Topic};
 use comline_codegen::features::{Feature, Support, SupportTable};
 use comline_codegen::versions::Versions;
 use comline_codegen::Generator;
@@ -81,6 +82,12 @@ pub const SUPPORT: SupportTable = &[
     (Feature::Chars, Support::supported()),
 ];
 
+/// The documentation pages this generator points users at, by topic.
+pub const DOCS: DocsTable = &[(
+    Topic::Connections,
+    "https://comlineproject.github.io/docs/languages/typescript/connections/#when-theyre-generated",
+)];
+
 /// Contribute the TypeScript generator to a CLI's [`Registry`](comline_codegen::Registry),
 /// as `typescript` and `ts`.
 pub fn register(registry: &mut comline_codegen::Registry) {
@@ -91,6 +98,7 @@ pub fn register(registry: &mut comline_codegen::Registry) {
             generate: generate_typescript,
             support: SUPPORT,
             versions: VERSIONS,
+            docs: DOCS,
         });
     }
 }
