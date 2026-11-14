@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.generated.json",
+  "compilerOptions": {
+    "skipLibCheck": false,
+    "types": [],
+    "paths": {
+      "@comline/runtime": ["./dist/src/index.d.ts"],
+      "acme-encodings": ["./dist/stripped/test/generated/acme-encodings.d.ts"]
+    }
+  },
+  "exclude": [],
+  "include": ["dist/stripped/test/generated/**/*.d.ts"]
+}

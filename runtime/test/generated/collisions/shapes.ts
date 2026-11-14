@@ -7,7 +7,6 @@ import {
     RuntimeError as $RuntimeError,
     resolveKind,
     DatagramFraming as $DatagramFraming,
-    PackedCodec as $PackedCodec,
     type Codec as $Codec,
     type Connection as $Connection,
     type Dispatch as $Dispatch,
@@ -19,17 +18,11 @@ import {
     type Transport as $Transport,
 } from "@comline/runtime";
 
+import { Format } from "./wire.js";
+
 /** Canonical digest of the frozen IR this file was generated from — the
 *  two ends of a connection must agree on it. */
 export const IR_HASH = 0xe84d76dcf6442bd3n;
-
-/** Digest of every schema in the package — what a connection's handshake
-*  checks, so both ends agree on each protocol's number. */
-export const CONNECTION_IR_HASH = 0x9dffbf799cccf0f4n;
-
-/** The package's wire format (`wire.format`): what this file's helpers
-*  encode with, and what the peer has to speak too. */
-export const Format: $Codec = new $PackedCodec();
 
 export interface Layout {
     a: number;
@@ -131,24 +124,28 @@ export interface WireThenParams {
     l: Layout;
 }
 
+/** @internal */
 export const WireThenParamsLayout: $Layout = { struct: [["l", () => LayoutLayout]] };
 
 export interface WireConstructorParams {
     p: Peer;
 }
 
+/** @internal */
 export const WireConstructorParamsLayout: $Layout = { struct: [["p", () => PeerLayout]] };
 
 export interface WirePeerParams {
     c: Codec;
 }
 
+/** @internal */
 export const WirePeerParamsLayout: $Layout = { struct: [["c", () => CodecLayout]] };
 
 export interface WireClientParams {
     k: Kind;
 }
 
+/** @internal */
 export const WireClientParamsLayout: $Layout = { struct: [["k", () => KindLayout]] };
 
 export interface Wire {
@@ -158,8 +155,10 @@ export interface Wire {
     client_(peer: $Peer, params: WireClientParams): globalThis.Promise<Uint8Array>;
 }
 
+/** @internal */
 export const WIRE_CALLS = ["then", "constructor", "peer", "client"] as const;
 
+/** @internal */
 export class WireDispatcher implements $Dispatch {
     /** This protocol's number on a connection. */
     static readonly PROTOCOL = 0;
@@ -223,7 +222,7 @@ export class WireDispatcher implements $Dispatch {
         }
     }
 
-    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with `Connection.accept(transport, Format, CONNECTION_IR_HASH)`, or let the package's `serve` / `connect` do it. */
+    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with `Connection.accept(transport, Format, CONNECTION_IR_HASH)` (`Format` and `CONNECTION_IR_HASH` are in `./wire.js`), or let the package's `serve` / `connect` do it. */
     provideOn(conn: $Connection): void {
         conn.provide(WireDispatcher.PROTOCOL, this);
     }
@@ -273,12 +272,14 @@ export interface LockThenParams {
     c: Client;
 }
 
+/** @internal */
 export const LockThenParamsLayout: $Layout = { struct: [["c", () => ClientLayout]] };
 
 export interface LockClientParams {
     t: Transport;
 }
 
+/** @internal */
 export const LockClientParamsLayout: $Layout = { struct: [["t", () => TransportLayout]] };
 
 export interface LockPeerParams {
@@ -286,6 +287,7 @@ export interface LockPeerParams {
     p: PackedCodec;
 }
 
+/** @internal */
 export const LockPeerParamsLayout: $Layout = { struct: [["f", () => DatagramFramingLayout], ["p", () => PackedCodecLayout]] };
 
 export interface Lock {
@@ -294,6 +296,7 @@ export interface Lock {
     peer_(params: LockPeerParams): globalThis.Promise<RuntimeError>;
 }
 
+/** @internal */
 export const LOCK_CALLS = ["then", "client", "peer"] as const;
 
 export class LockDispatcher implements $Dispatch {

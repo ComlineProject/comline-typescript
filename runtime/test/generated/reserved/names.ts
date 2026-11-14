@@ -4,7 +4,6 @@
 import {
     RuntimeError,
     resolveKind,
-    PackedCodec,
     type Codec,
     type Connection,
     type Dispatch,
@@ -17,14 +16,6 @@ import {
 /** Canonical digest of the frozen IR this file was generated from — the
 *  two ends of a connection must agree on it. */
 export const IR_HASH = 0xc4c5bf4244cbec4an;
-
-/** Digest of every schema in the package — what a connection's handshake
-*  checks, so both ends agree on each protocol's number. */
-export const CONNECTION_IR_HASH = 0xc579d2e8df3a409bn;
-
-/** The package's wire format (`wire.format`): what this file's helpers
-*  encode with, and what the peer has to speak too. */
-export const Format: Codec = new PackedCodec();
 
 export const class_ = {
     delete: "delete",
@@ -69,6 +60,7 @@ export interface staticTypeofParams {
     new: function_;
 }
 
+/** @internal */
 export const staticTypeofParamsLayout: Layout = { struct: [["default", "u8"], ["new", () => functionLayout]] };
 
 export interface static_ {
@@ -76,8 +68,10 @@ export interface static_ {
     typeof(peer: Peer, params: staticTypeofParams): Promise<class_>;
 }
 
+/** @internal */
 export const STATIC_CALLS = ["typeof"] as const;
 
+/** @internal */
 export class staticDispatcher implements Dispatch {
     /** This protocol's number on a connection. */
     static readonly PROTOCOL = 0;
@@ -115,7 +109,7 @@ export class staticDispatcher implements Dispatch {
         }
     }
 
-    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with `Connection.accept(transport, Format, CONNECTION_IR_HASH)`, or let the package's `serve` / `connect` do it. */
+    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with `Connection.accept(transport, Format, CONNECTION_IR_HASH)` (`Format` and `CONNECTION_IR_HASH` are in `./wire.js`), or let the package's `serve` / `connect` do it. */
     provideOn(conn: Connection): void {
         conn.provide(staticDispatcher.PROTOCOL, this);
     }

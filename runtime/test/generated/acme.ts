@@ -52,18 +52,21 @@ export interface ChatSendParams {
     text: string;
 }
 
+/** @internal */
 export const ChatSendParamsLayout: Layout = { struct: [["text", "string"]] };
 
 export interface ChatHistoryParams {
     limit: number;
 }
 
+/** @internal */
 export const ChatHistoryParamsLayout: Layout = { struct: [["limit", "u32"]] };
 
 export interface ChatNoteParams {
     text: string;
 }
 
+/** @internal */
 export const ChatNoteParamsLayout: Layout = { struct: [["text", "string"]] };
 
 export interface Chat {
@@ -74,6 +77,7 @@ export interface Chat {
     note(params: ChatNoteParams): Promise<void>;
 }
 
+/** @internal */
 export const CHAT_CALLS = ["send", "history", "wipe", "note"] as const;
 
 export class ChatDispatcher implements Dispatch {

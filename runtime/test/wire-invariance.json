@@ -37,9 +37,9 @@
       "CborCodec"
     ]
   },
-  "bounds.ts": {
+  "bounds/": {
     "files": {
-      "bounds.ts": {
+      "bounds/account.ts": {
         "irHash": "0x17305ca8c4eea701",
         "protocolNumbers": [
           0,
@@ -441,9 +441,9 @@
       "PackedCodec"
     ]
   },
-  "link.ts": {
+  "link/": {
     "files": {
-      "link.ts": {
+      "link/link.ts": {
         "irHash": "0x9704f8e8a43acdbd",
         "protocolNumbers": [
           0,
@@ -483,9 +483,9 @@
       "PackedCodec"
     ]
   },
-  "link_jsonrpc.ts": {
+  "link_jsonrpc/": {
     "files": {
-      "link_jsonrpc.ts": {
+      "link_jsonrpc/link.ts": {
         "irHash": "0xb4520b20f67b5ccb",
         "protocolNumbers": [
           0,
@@ -521,7 +521,9 @@
       "0xb4520b20f67b5ccb"
     ],
     "hello": [],
-    "format": []
+    "format": [
+      "PackedCodec"
+    ]
   },
   "nested/": {
     "files": {

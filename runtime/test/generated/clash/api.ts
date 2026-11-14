@@ -21,10 +21,6 @@ import type { Greeting } from "./localdeps/greeting.js";
 *  two ends of a connection must agree on it. */
 export const IR_HASH = 0xa14195a41e817a01n;
 
-/** Digest of every schema in the package — what a connection's handshake
-*  checks, so both ends agree on each protocol's number. */
-export const CONNECTION_IR_HASH = 0xe9ca523b62a2c19fn;
-
 export interface Message {
     greeting: Greeting;
 }
@@ -35,14 +31,17 @@ export interface ChatGreetParams {
     n: number;
 }
 
+/** @internal */
 export const ChatGreetParamsLayout: Layout = { struct: [["n", "u32"]] };
 
 export interface Chat {
     greet(peer: Peer, params: ChatGreetParams): Promise<number>;
 }
 
+/** @internal */
 export const CHAT_CALLS = ["greet"] as const;
 
+/** @internal */
 export class ChatDispatcher implements Dispatch {
     /** This protocol's number on a connection. */
     static readonly PROTOCOL = 0;
@@ -109,14 +108,17 @@ export interface EventsNotifyParams {
     n: number;
 }
 
+/** @internal */
 export const EventsNotifyParamsLayout: Layout = { struct: [["n", "u32"]] };
 
 export interface Events {
     notify(peer: Peer, params: EventsNotifyParams): Promise<number>;
 }
 
+/** @internal */
 export const EVENTS_CALLS = ["notify"] as const;
 
+/** @internal */
 export class EventsDispatcher implements Dispatch {
     /** This protocol's number on a connection. */
     static readonly PROTOCOL = 1;

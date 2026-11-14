@@ -5,7 +5,6 @@ import {
     RuntimeError,
     resolveKind,
     checkCall,
-    PackedCodec,
     type Codec,
     type Connection,
     type Dispatch,
@@ -22,14 +21,6 @@ import type { Greeting } from "./localdeps/greeting.js";
 *  two ends of a connection must agree on it. */
 export const IR_HASH = 0x25f4c4d936e7aa90n;
 
-/** Digest of every schema in the package — what a connection's handshake
-*  checks, so both ends agree on each protocol's number. */
-export const CONNECTION_IR_HASH = 0x55e3b94344a9c775n;
-
-/** The package's wire format (`wire.format`): what this file's helpers
-*  encode with, and what the peer has to speak too. */
-export const Format: Codec = new PackedCodec();
-
 export interface Message {
     greeting: Greeting;
 }
@@ -40,14 +31,17 @@ export interface ChatGreetParams {
     n: number;
 }
 
+/** @internal */
 export const ChatGreetParamsLayout: Layout = { struct: [["n", "u32"]] };
 
 export interface Chat {
     greet(peer: Peer, params: ChatGreetParams): Promise<number>;
 }
 
+/** @internal */
 export const CHAT_CALLS = ["greet"] as const;
 
+/** @internal */
 export class ChatDispatcher implements Dispatch {
     /** This protocol's number on a connection. */
     static readonly PROTOCOL = 0;

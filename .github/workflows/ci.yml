@@ -107,6 +107,10 @@ jobs:
       # The generated fixtures, against the built runtime as a consumer sees
       # it, under the strictest flags and erasable syntax only.
       - run: npm run typecheck:generated
+      # What `/** @internal */` marks in that output is plumbing a consumer's
+      # `stripInternal` may drop from its declarations: their declarations,
+      # stripped, must still type-check on their own.
+      - run: npm run typecheck:stripped
       # The wire conformance vectors are vendored from
       # ComlineProject/specification at the commit in SPEC_REV; this fails if
       # the copy was edited.

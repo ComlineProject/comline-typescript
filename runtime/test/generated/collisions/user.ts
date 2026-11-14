@@ -4,7 +4,6 @@
 import {
     RuntimeError,
     resolveKind,
-    PackedCodec,
     type Codec,
     type Connection,
     type Dispatch,
@@ -21,14 +20,6 @@ import type { Layout, Promise } from "./shapes.js";
 *  two ends of a connection must agree on it. */
 export const IR_HASH = 0x2581145250fde0c6n;
 
-/** Digest of every schema in the package — what a connection's handshake
-*  checks, so both ends agree on each protocol's number. */
-export const CONNECTION_IR_HASH = 0x9dffbf799cccf0f4n;
-
-/** The package's wire format (`wire.format`): what this file's helpers
-*  encode with, and what the peer has to speak too. */
-export const Format: Codec = new PackedCodec();
-
 export interface Uses {
     l: Layout;
     p: Promise;
@@ -40,14 +31,17 @@ export interface AgainGetParams {
     u: Uses;
 }
 
+/** @internal */
 export const AgainGetParamsLayout: $Layout = { struct: [["u", () => UsesLayout]] };
 
 export interface Again {
     get(peer: Peer, params: AgainGetParams): globalThis.Promise<Layout>;
 }
 
+/** @internal */
 export const AGAIN_CALLS = ["get"] as const;
 
+/** @internal */
 export class AgainDispatcher implements Dispatch {
     /** This protocol's number on a connection. */
     static readonly PROTOCOL = 2;
@@ -84,7 +78,7 @@ export class AgainDispatcher implements Dispatch {
         }
     }
 
-    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with `Connection.accept(transport, Format, CONNECTION_IR_HASH)`, or let the package's `serve` / `connect` do it. */
+    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with `Connection.accept(transport, Format, CONNECTION_IR_HASH)` (`Format` and `CONNECTION_IR_HASH` are in `./wire.js`), or let the package's `serve` / `connect` do it. */
     provideOn(conn: Connection): void {
         conn.provide(AgainDispatcher.PROTOCOL, this);
     }

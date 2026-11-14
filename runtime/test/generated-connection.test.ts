@@ -1,4 +1,4 @@
-// Exercises real generator output on a `Connection`. `generated/link.ts` is
+// Exercises real generator output on a `Connection`. `generated/link/` is
 // written by `comline-codegen-typescript`'s `generated_link_matches_the_
 // runtime_test_fixture` test; this proves it type-checks and runs.
 
@@ -13,10 +13,10 @@ import {
   type EventsMessageParams,
   ChatDispatcher,
   ChatSender,
-  CONNECTION_IR_HASH,
   EventsDispatcher,
   EventsSender,
-} from "./generated/link.js";
+} from "./generated/link/link.js";
+import { CONNECTION_IR_HASH } from "./generated/link/wire.js";
 
 class Sent {
   constructor(public count: bigint) {}

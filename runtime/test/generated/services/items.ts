@@ -4,7 +4,6 @@
 import {
     RuntimeError,
     resolveKind,
-    PackedCodec,
     type Codec,
     type Connection,
     type Dispatch,
@@ -18,14 +17,6 @@ import {
 *  two ends of a connection must agree on it. */
 export const IR_HASH = 0x5c9c55a1bd9938afn;
 
-/** Digest of every schema in the package — what a connection's handshake
-*  checks, so both ends agree on each protocol's number. */
-export const CONNECTION_IR_HASH = 0x795ece8a736e83e2n;
-
-/** The package's wire format (`wire.format`): what this file's helpers
-*  encode with, and what the peer has to speak too. */
-export const Format: Codec = new PackedCodec();
-
 export interface Item {
     name: string;
     count: number;
@@ -37,14 +28,17 @@ export interface InventoryItemsParams {
     id: number;
 }
 
+/** @internal */
 export const InventoryItemsParamsLayout: Layout = { struct: [["id", "u32"]] };
 
 export interface Inventory {
     items(peer: Peer, params: InventoryItemsParams): Promise<Item[]>;
 }
 
+/** @internal */
 export const INVENTORY_CALLS = ["items"] as const;
 
+/** @internal */
 export class InventoryDispatcher implements Dispatch {
     /** This protocol's number on a connection. */
     static readonly PROTOCOL = 2;
@@ -81,7 +75,7 @@ export class InventoryDispatcher implements Dispatch {
         }
     }
 
-    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with `Connection.accept(transport, Format, CONNECTION_IR_HASH)`, or let the package's `serve` / `connect` do it. */
+    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with `Connection.accept(transport, Format, CONNECTION_IR_HASH)` (`Format` and `CONNECTION_IR_HASH` are in `./wire.js`), or let the package's `serve` / `connect` do it. */
     provideOn(conn: Connection): void {
         conn.provide(InventoryDispatcher.PROTOCOL, this);
     }
@@ -110,14 +104,17 @@ export interface EventsChangedParams {
     count: number;
 }
 
+/** @internal */
 export const EventsChangedParamsLayout: Layout = { struct: [["count", "u8"]] };
 
 export interface Events {
     changed(peer: Peer, params: EventsChangedParams): Promise<void>;
 }
 
+/** @internal */
 export const EVENTS_CALLS = ["changed"] as const;
 
+/** @internal */
 export class EventsDispatcher implements Dispatch {
     /** This protocol's number on a connection. */
     static readonly PROTOCOL = 3;
@@ -154,7 +151,7 @@ export class EventsDispatcher implements Dispatch {
         }
     }
 
-    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with `Connection.connect(transport, Format, CONNECTION_IR_HASH)`, or let the package's `serve` / `connect` do it. */
+    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with `Connection.connect(transport, Format, CONNECTION_IR_HASH)` (`Format` and `CONNECTION_IR_HASH` are in `./wire.js`), or let the package's `serve` / `connect` do it. */
     provideOn(conn: Connection): void {
         conn.provide(EventsDispatcher.PROTOCOL, this);
     }
