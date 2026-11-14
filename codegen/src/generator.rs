@@ -97,8 +97,8 @@ pub fn generate_typescript(req: &GenerateRequest) -> Result<Vec<GeneratedFile>> 
     comline_codegen::facts::check(req)?;
     let codec = type_of(&req.encodings, &req.wire_format);
     // JSON-RPC protocols sharing a connection whose bare method names one
-    // side couldn't tell apart.
-    connections::check(&req.schemas, &req.encodings)?;
+    // side couldn't tell apart; a dependency's protocols aren't on it.
+    connections::check_in(req)?;
     let external_std = req.external_std;
 
     // With `external_std`, std's schemas aren't this package's to emit - it
@@ -1284,6 +1284,17 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
     Some(s)
 }
 
+/// A protocol's path as the generated text shows it: `chat::admin::Admin`,
+/// every segment joined by `::` however the namespace is spelled (a request's
+/// is `/`-joined, the facts' `::`-joined). Display only; no number, order or
+/// hash is made from it.
+fn display_path(namespace: &str, name: &str) -> String {
+    let mut path = comline_codegen::facts::namespace_segments(namespace).collect::<Vec<_>>().join("::");
+    path.push_str("::");
+    path.push_str(name);
+    path
+}
+
 /// The package module's `comline@2` items: this end's Hello (the facts it was
 /// generated from), `handshake()` with the parameters the package states, and
 /// `negotiated` / `warnings` for what a connection agreed.
@@ -1307,10 +1318,9 @@ fn comline2_items(
             .map(|(f, n)| format!("`{f}` {n}"))
             .collect();
         s.push_str(&format!(
-            " * - {} `{}::{}`, line {}: {}\n",
+            " * - {} `{}`, line {}: {}\n",
             p.number,
-            p.namespace,
-            p.name,
+            display_path(&p.namespace, &p.name),
             p.line,
             functions.join(", ")
         ));
@@ -1339,7 +1349,7 @@ fn comline2_items(
     ));
     let paths: Vec<String> = protocols
         .iter()
-        .map(|p| format!("[{}, \"{}::{}\"]", p.number, p.namespace, p.name))
+        .map(|p| format!("[{}, \"{}\"]", p.number, display_path(&p.namespace, &p.name)))
         .collect();
     s.push_str(&format!(
         "/** The package's protocols on the connection, by wire number. */\n\
@@ -1769,14 +1779,15 @@ fn protocol(
             _ => None,
         })
         .collect();
+    let path = display_path(namespace, proto);
     for (i, f) in fns.iter().enumerate() {
         let id = calls[i];
         // Under `comline@2`, checked against what the connection agreed
         // before it's written.
         let check = match &checks {
             Some(c) => format!(
-                "        {check_call}(this.peer, {proto}Sender.PROTOCOL, {}, \"{namespace}::{proto}\", \"{}\");\n",
-                c[i], fn_names[i]
+                "        {check_call}(this.peer, {proto}Sender.PROTOCOL, {}, \"{}\", \"{}\");\n",
+                c[i], path, fn_names[i]
             ),
             None => String::new(),
         };
