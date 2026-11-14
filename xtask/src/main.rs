@@ -77,6 +77,7 @@ fn main() -> eyre::Result<()> {
         async_api: false,
         encodings: comline_codegen::encodings::official_for("typescript"),
         facts: None,
+        dependencies: vec![],
     };
 
     let files = generate_typescript(&req)?;
