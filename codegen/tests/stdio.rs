@@ -38,6 +38,7 @@ fn request(fx: &Fixture, version: &str) -> GenerateRequest {
         async_api: fx.async_api,
         encodings: comline_codegen::encodings::official_for("typescript"),
         facts: None,
+        dependencies: fx.dependencies.iter().map(|d| d.to_string()).collect(),
     }
 }
 

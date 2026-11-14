@@ -126,7 +126,7 @@ pub fn generate_typescript(req: &GenerateRequest) -> Result<Vec<GeneratedFile>> 
     // collision in the last one does not arrive after the earlier files are
     // already written.
     for (namespace, units) in emitted {
-        collisions::check(namespace, units, derived_names(units, &req.schemas, &req.encodings))?;
+        collisions::check(namespace, units, derived_names(units, &req.schemas, &req.dependencies, &req.encodings))?;
     }
     // Loose files or a `src/` tree, the package module has a file of its own,
     // which a schema of that name would be.
@@ -389,7 +389,12 @@ fn package_json(
 /// The shapes differ from Rust's - there is no per-function error type and no
 /// protocol-wide union here, but every `error` grows an `Error` suffix, which
 /// Rust has no equivalent of. Keep it in step with the emitters below.
-fn derived_names(units: &[FrozenUnit], schemas: &[(String, Vec<FrozenUnit>)], encodings: &Encodings) -> Vec<Derived> {
+fn derived_names(
+    units: &[FrozenUnit],
+    schemas: &[(String, Vec<FrozenUnit>)],
+    dependencies: &[String],
+    encodings: &Encodings,
+) -> Vec<Derived> {
     let mut derived = Vec::new();
     let mut any_protocol = false;
     let mut any_connection = false;
@@ -432,7 +437,7 @@ fn derived_names(units: &[FrozenUnit], schemas: &[(String, Vec<FrozenUnit>)], en
                     format!("{proto}Dispatcher"),
                     format!("protocol `{proto}`'s dispatcher"),
                 ));
-                if connections::on_connection(schemas, parameters) {
+                if connections::on_connection_among(schemas, dependencies, parameters) {
                     any_connection = true;
                     derived.push(Derived::new(
                         format!("{proto}Sender"),
@@ -551,12 +556,10 @@ fn schema_source(
                 ..
             } => {
                 // `facts::check` has vouched for every protocol that needs facts.
-                let addressing = connections::on_connection(schemas, parameters)
+                let addressing = connections::on_connection_among(schemas, &req.dependencies, parameters)
                     .then(|| {
-                        comline_codegen::facts::addressing(
-                            req.facts.as_ref(),
-                            schemas,
-                            encodings,
+                        comline_codegen::facts::addressing_in(
+                            req,
                             namespace,
                             name,
                             parameters,
@@ -590,7 +593,7 @@ fn schema_source(
 
     // Which framings the protocols in this file reach for: the lockstep ones
     // only, since a protocol on a connection names none of its own.
-    let on_connection = |parameters: &[FrozenUnit]| connections::on_connection(schemas, parameters);
+    let on_connection = |parameters: &[FrozenUnit]| connections::on_connection_among(schemas, &req.dependencies, parameters);
     let picks: Vec<FramingChoice> = units
         .iter()
         .filter_map(|u| match u {
@@ -621,9 +624,12 @@ fn schema_source(
             values.extend(["Client", "Server"]);
         }
         values.extend(["RuntimeError", "resolveKind"]);
+        // Only a protocol the package reaches is checked against its facts: a
+        // dependency's is addressed by position, so has nothing to check.
         if units.iter().any(|u| {
-            matches!(u, FrozenUnit::Protocol { parameters, .. }
+            matches!(u, FrozenUnit::Protocol { name, parameters, .. }
                 if on_connection(parameters)
+                    && connections::reached(&req.dependencies, namespace, name)
                     && connections::handshake_name(parameters) == comline_codegen::facts::HANDSHAKE_COMLINE2)
         }) {
             values.push("checkCall");
@@ -1095,7 +1101,7 @@ const PACKAGE_MODULE: &str = "connection";
 /// emits is on a connection, or when its protocols don't share one
 /// (`comline generation` says why).
 fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<FrozenUnit>)], codec: &str) -> Option<String> {
-    let package = connections::package_connection(&req.schemas).ok()??;
+    let package = connections::package_connection_among(&req.schemas, &req.dependencies).ok()??;
     // Only what this package emits: an external `std` provides nothing here.
     let emitted_only = |side: &[connections::Provided]| -> Vec<connections::Provided> {
         side.iter().filter(|p| emitted.iter().any(|(ns, _)| *ns == p.namespace)).cloned().collect()
