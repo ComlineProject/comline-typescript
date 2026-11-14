@@ -5,7 +5,6 @@ import {
     RuntimeError,
     resolveKind,
     checkCall,
-    PackedCodec,
     type Codec,
     type Connection,
     type Dispatch,
@@ -19,14 +18,6 @@ import {
 *  two ends of a connection must agree on it. */
 export const IR_HASH = 0xa6f61afefe65d74an;
 
-/** Digest of every schema in the package — what a connection's handshake
-*  checks, so both ends agree on each protocol's number. */
-export const CONNECTION_IR_HASH = 0xa6f61afefe65d74an;
-
-/** The package's wire format (`wire.format`): what this file's helpers
-*  encode with, and what the peer has to speak too. */
-export const Format: Codec = new PackedCodec();
-
 export interface Notice {
     text: string;
 }
@@ -37,14 +28,17 @@ export interface AdminGreetParams {
     n: number;
 }
 
+/** @internal */
 export const AdminGreetParamsLayout: Layout = { struct: [["n", "u32"]] };
 
 export interface Admin {
     greet(peer: Peer, params: AdminGreetParams): Promise<number>;
 }
 
+/** @internal */
 export const ADMIN_CALLS = ["greet"] as const;
 
+/** @internal */
 export class AdminDispatcher implements Dispatch {
     /** This protocol's number on a connection. */
     static readonly PROTOCOL = 0;

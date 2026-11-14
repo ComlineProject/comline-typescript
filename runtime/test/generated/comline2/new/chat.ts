@@ -5,7 +5,6 @@ import {
     RuntimeError,
     resolveKind,
     checkCall,
-    PackedCodec,
     type Codec,
     type Connection,
     type Dispatch,
@@ -19,30 +18,25 @@ import {
 *  two ends of a connection must agree on it. */
 export const IR_HASH = 0xe21c2f843f183318n;
 
-/** Digest of every schema in the package — what a connection's handshake
-*  checks, so both ends agree on each protocol's number. */
-export const CONNECTION_IR_HASH = 0xe21c2f843f183318n;
-
-/** The package's wire format (`wire.format`): what this file's helpers
-*  encode with, and what the peer has to speak too. */
-export const Format: Codec = new PackedCodec();
-
 export interface ChatShoutParams {
     text: string;
 }
 
+/** @internal */
 export const ChatShoutParamsLayout: Layout = { struct: [["text", "string"]] };
 
 export interface ChatWhisperParams {
     text: string;
 }
 
+/** @internal */
 export const ChatWhisperParamsLayout: Layout = { struct: [["text", "string"]] };
 
 export interface ChatHelloParams {
     name: string;
 }
 
+/** @internal */
 export const ChatHelloParamsLayout: Layout = { struct: [["name", "string"]] };
 
 export interface Chat {
@@ -51,8 +45,10 @@ export interface Chat {
     hello(peer: Peer, params: ChatHelloParams): Promise<number>;
 }
 
+/** @internal */
 export const CHAT_CALLS = ["shout", "whisper", "hello"] as const;
 
+/** @internal */
 export class ChatDispatcher implements Dispatch {
     /** This protocol's number on a connection. */
     static readonly PROTOCOL = 0;

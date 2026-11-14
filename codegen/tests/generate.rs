@@ -51,13 +51,33 @@ fn external_std_req(schemas: &[(String, Vec<FrozenUnit>)]) -> GenerateRequest {
 }
 
 /// The schema's own file; a protocol on a connection brings the package's
-/// `connection.ts` too.
+/// `connection.ts` too, and the `wire.ts` they share their constants in.
 fn one(units: Vec<FrozenUnit>) -> String {
     let schemas = vec![("account".to_string(), units)];
     let mut files = generate_typescript(&code_req(&schemas)).unwrap();
     assert_eq!(files[0].path.to_str().unwrap(), "account.ts");
-    assert!(files.iter().skip(1).all(|f| f.path.to_str() == Some("connection.ts")));
+    assert!(files.iter().skip(1).all(|f| matches!(f.path.to_str(), Some("connection.ts" | "wire.ts"))));
     files.remove(0).contents
+}
+
+/// Every file generated for a fixture, kept in `runtime/test/generated/<dir>/`
+/// so the Node job type-checks and runs them together. Regenerate with
+/// `TS_BLESS=1 cargo test -p comline-codegen-typescript`.
+fn bless_fixture(dir: &str, files: &[comline_codegen::GeneratedFile]) {
+    for file in files {
+        let path = format!("{}/../runtime/test/generated/{dir}/{}", env!("CARGO_MANIFEST_DIR"), file.path.display());
+        if std::env::var_os("TS_BLESS").is_some() {
+            std::fs::create_dir_all(std::path::Path::new(&path).parent().unwrap()).unwrap();
+            std::fs::write(&path, &file.contents).unwrap();
+            continue;
+        }
+        let committed = std::fs::read_to_string(&path).unwrap_or_default();
+        assert_eq!(
+            file.contents, committed,
+            "generated {dir}/{} drifted from {path} - re-bless with TS_BLESS=1 cargo test -p comline-codegen-typescript",
+            file.path.display()
+        );
+    }
 }
 
 /// The type a schema spells `written` - a primitive name, a named type, or
@@ -572,7 +592,7 @@ fn a_third_party_handshake_is_imported_and_run() {
     );
     let files = generate_typescript(&req).unwrap();
     let file = |name: &str| files.iter().find(|f| f.path.to_str() == Some(name)).unwrap().contents.clone();
-    let (hello, connection) = (file("hello.ts"), file("connection.ts"));
+    let (hello, connection, wire) = (file("hello.ts"), file("connection.ts"), file("wire.ts"));
     assert!(hello.contains("import { HelloHandshake } from \"acme-encodings\";\n"), "{hello}");
     assert!(hello.contains("await Client.connect(transport, codec, IR_HASH, framing, new HelloHandshake())"), "{hello}");
     assert!(hello.contains(".serve(transport, IR_HASH, new HelloHandshake());"), "{hello}");
@@ -581,7 +601,7 @@ fn a_third_party_handshake_is_imported_and_run() {
         connection.contains("await Connection.accept(transport, Format, CONNECTION_IR_HASH, undefined, new HelloHandshake())"),
         "{connection}"
     );
-    for (name, generated) in [("hello.ts", &hello), ("connection.ts", &connection)] {
+    for (name, generated) in [("hello.ts", &hello), ("connection.ts", &connection), ("wire.ts", &wire)] {
         let path = format!("{}/../runtime/test/generated/hello/{name}", env!("CARGO_MANIFEST_DIR"));
         if std::env::var_os("TS_BLESS").is_some() {
             std::fs::create_dir_all(std::path::Path::new(&path).parent().unwrap()).unwrap();
@@ -1641,7 +1661,8 @@ fn a_connection_protocol_gets_a_sender_and_peer_taking_handlers() {
     assert!(out.contains("export class EventsSender {"));
     assert!(out.contains("message(peer: Peer, params: EventsMessageParams): Promise<boolean>;"));
     assert!(out.contains("static readonly PROTOCOL = 1;"));
-    assert!(out.contains("export const CONNECTION_IR_HASH = "));
+    // The package's digest is defined once, in the module its files share.
+    assert!(!out.contains("export const CONNECTION_IR_HASH = "));
     assert!(!out.contains("ChatClient"), "no lockstep client for a connection protocol");
     assert!(!out.contains("serveChat"));
 }
@@ -1716,41 +1737,19 @@ fn bare_jsonrpc_names_that_would_clash_on_a_connection_are_refused() {
 }
 
 /// The generated connection protocols, kept in
-/// `runtime/test/generated/link.ts` so the Node job type-checks and runs
+/// `runtime/test/generated/link/` so the Node job type-checks and runs
 /// them. Regenerate with `TS_BLESS=1 cargo test -p comline-codegen-typescript`.
 #[test]
 fn generated_link_matches_the_runtime_test_fixture() {
     let schemas = vec![("link".to_string(), link_units())];
-    let generated = generate_typescript(&code_req(&schemas)).unwrap().remove(0).contents;
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../runtime/test/generated/link.ts");
-    if std::env::var_os("TS_BLESS").is_some() {
-        std::fs::write(path, &generated).unwrap();
-        return;
-    }
-    let committed = std::fs::read_to_string(path).unwrap_or_default();
-    assert_eq!(
-        generated, committed,
-        "generated link drifted from runtime/test/generated/link.ts — \
-         re-bless with TS_BLESS=1 cargo test -p comline-codegen-typescript"
-    );
+    bless_fixture("link", &generate_typescript(&code_req(&schemas)).unwrap());
 }
 
-/// The same over JSON-RPC, in `runtime/test/generated/link_jsonrpc.ts`.
+/// The same over JSON-RPC, in `runtime/test/generated/link_jsonrpc/`.
 #[test]
 fn generated_jsonrpc_link_matches_the_runtime_test_fixture() {
     let schemas = vec![("link".to_string(), link_jsonrpc_units())];
-    let generated = generate_typescript(&code_req(&schemas)).unwrap().remove(0).contents;
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../runtime/test/generated/link_jsonrpc.ts");
-    if std::env::var_os("TS_BLESS").is_some() {
-        std::fs::write(path, &generated).unwrap();
-        return;
-    }
-    let committed = std::fs::read_to_string(path).unwrap_or_default();
-    assert_eq!(
-        generated, committed,
-        "generated link drifted from runtime/test/generated/link_jsonrpc.ts — \
-         re-bless with TS_BLESS=1 cargo test -p comline-codegen-typescript"
-    );
+    bless_fixture("link_jsonrpc", &generate_typescript(&code_req(&schemas)).unwrap());
 }
 
 /// A package of protocols across schemas, none naming a framing: on one
@@ -1777,7 +1776,8 @@ fn the_package_connection_gets_services_and_serve() {
     let module = &files.iter().find(|f| f.path.to_str() == Some("connection.ts")).unwrap().contents;
     for expected in [
         "import * as ns_game from \"./game.js\";",
-        "export const Format: Codec = new PackedCodec();",
+        // The package's constants are defined once, in the module its files share.
+        "export { CONNECTION_IR_HASH, Format } from \"./wire.js\";",
         "export interface Services {\n    account: ns_game.Account;\n    player: ns_game.Player;\n    inventory: ns_items.Inventory;\n}",
         "export interface ClientServices {\n    events: ns_items.Events;\n}",
         "    new ns_items.InventoryDispatcher(services.inventory).provideOn(conn);",
@@ -1785,6 +1785,16 @@ fn the_package_connection_gets_services_and_serve() {
         "const conn = await Connection.connect(transport, Format, CONNECTION_IR_HASH);",
     ] {
         assert!(module.contains(expected), "missing `{expected}` in:\n{module}");
+    }
+
+    assert!(!module.contains("export const Format"), "{module}");
+    let wire = &files.iter().find(|f| f.path.to_str() == Some("wire.ts")).unwrap().contents;
+    for expected in ["export const Format: Codec = new PackedCodec();", "export const CONNECTION_IR_HASH = 0x"] {
+        assert!(wire.contains(expected), "missing `{expected}` in:\n{wire}");
+    }
+    for file in files.iter().filter(|f| matches!(f.path.to_str(), Some("game.ts" | "items.ts"))) {
+        assert!(!file.contents.contains("export const CONNECTION_IR_HASH"), "{}", file.contents);
+        assert!(!file.contents.contains("export const Format"), "{}", file.contents);
     }
 
     // In `lib` mode it's beside the schemas, its names at the root.
@@ -1937,7 +1947,8 @@ fn schema_names_the_generated_code_also_needs_are_kept() {
         "    private readonly client: $Client;",
         "    async client_(params: LockClientParams): globalThis.Promise<Framing> {",
         "export function serveLock(impl: Lock, transport: $Transport, codec: $Codec = Format, framing: $Framing = new $DatagramFraming()): globalThis.Promise<void> {",
-        "export const Format: $Codec = new $PackedCodec();",
+        // `Lock` is lockstep, so its helper's default codec is the package's.
+        "import { Format } from \"./wire.js\";",
         // The wire names are the schema's.
         "{ id: 0, name: \"then\" }",
     ] {
@@ -2019,24 +2030,14 @@ fn a_schema_without_bounds_imports_no_check() {
     assert!(!out.contains("max:"), "{out}");
 }
 
-/// The generated `Directory`, kept in `runtime/test/generated/bounds.ts` so
+/// The generated `Directory`, kept in `runtime/test/generated/bounds/` so
 /// the Node job type-checks it (also at the TypeScript 5.0 floor) and runs it
 /// against the codecs' bound checks. Regenerate with
 /// `TS_BLESS=1 cargo test -p comline-codegen-typescript`.
 #[test]
 fn generated_bounds_match_the_runtime_test_fixture() {
-    let generated = one(bounds_units());
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../runtime/test/generated/bounds.ts");
-    if std::env::var_os("TS_BLESS").is_some() {
-        std::fs::write(path, &generated).unwrap();
-        return;
-    }
-    let committed = std::fs::read_to_string(path).unwrap_or_default();
-    assert_eq!(
-        generated, committed,
-        "generated Directory drifted from runtime/test/generated/bounds.ts - \
-         re-bless with TS_BLESS=1 cargo test -p comline-codegen-typescript"
-    );
+    let schemas = vec![("account".to_string(), bounds_units())];
+    bless_fixture("bounds", &generate_typescript(&code_req(&schemas)).unwrap());
 }
 
 // ── datagram@3 + comline@2 ─────────────────────────────────────────────────
@@ -2183,4 +2184,162 @@ fn datagram3_without_its_facts_is_refused() {
     req.facts = None;
     let err = generate_typescript(&req).unwrap_err().to_string();
     assert!(err.contains("the request carries no facts"), "{err}");
+}
+
+// ── where to start, what is plumbing, what is shared ───────────────────────
+
+/// The package's header names what to implement, serve, dial and call: beside
+/// the connection, in the connection's own words; at the entry, by the
+/// namespaces the barrel exports.
+#[test]
+fn the_package_entry_points_are_named() {
+    let schemas = game_schemas();
+    let files = generate_typescript(&code_req(&schemas)).unwrap();
+    let module = &files.iter().find(|f| f.path.to_str() == Some("connection.ts")).unwrap().contents;
+    for expected in [
+        " * - Implement what you provide: `Account`, `Player` (in `./game.js`); `Inventory`, `Events` (in `./items.js`).\n",
+        " * - Serve with `serve(transport, { account, player, inventory })`; `accept(transport, { account, player, inventory })` takes the same and hands back the connection.\n",
+        " * - Dial with `connect(transport, { events })`.\n",
+        " * - Call the other end with `new AccountSender(conn).login(…)`,",
+    ] {
+        assert!(module.contains(expected), "missing `{expected}` in:\n{module}");
+    }
+    // The wording never says the marker itself, which a declaration file's
+    // `stripInternal` would act on.
+    assert!(!module[..module.find("import {").unwrap()].contains("@internal"), "{module}");
+
+    let files = generate_typescript(&lib_req(&schemas)).unwrap();
+    let index = &files.iter().find(|f| f.path.to_str() == Some("src/index.ts")).unwrap().contents;
+    assert!(index.contains(" * - Implement what you provide: `game.Account`, `game.Player`; `items.Inventory`, `items.Events`.\n"), "{index}");
+    assert!(index.contains(" * @packageDocumentation\n"), "{index}");
+    assert!(index.starts_with("// Generated by Comline\n"), "{index}");
+    assert!(index.ends_with("export * from \"./connection.js\";\n"), "{index}");
+}
+
+/// A lockstep protocol has no package module: the entry names its server
+/// helper and dispatcher, and its client.
+#[test]
+fn a_lockstep_protocols_entry_points_are_named_at_the_package_entry() {
+    let schemas = vec![("chat".to_string(), chat_units())];
+    let files = generate_typescript(&lib_req(&schemas)).unwrap();
+    let index = &files.iter().find(|f| f.path.to_str() == Some("src/index.ts")).unwrap().contents;
+    for expected in [
+        "`chat.Chat` has its own framing: implement it and run `chat.serveChat(impl, transport)` (which serves `chat.ChatDispatcher`), ",
+        "or dial with `await chat.ChatClient.connect(transport)` and call `client.send(…)`.",
+        " * @packageDocumentation\n",
+    ] {
+        assert!(index.contains(expected), "missing `{expected}` in:\n{index}");
+    }
+    // Nothing to start from, nothing said: types alone have no entry.
+    let files = generate_typescript(&lib_req(&[("shapes".to_string(), vec![])])).unwrap();
+    let index = &files.iter().find(|f| f.path.to_str() == Some("src/index.ts")).unwrap().contents;
+    assert!(!index.contains("Where to start"), "{index}");
+}
+
+/// The wire plumbing is marked `@internal`, and what a declaration file's
+/// `stripInternal` would take from the public signatures is not: a params
+/// interface is named by the interface the user implements, and a type's
+/// `Layout` by every package that uses the type.
+#[test]
+fn the_wire_plumbing_is_marked_internal_and_the_api_is_not() {
+    let schemas = game_schemas();
+    let files = generate_typescript(&code_req(&schemas)).unwrap();
+    let game = &files.iter().find(|f| f.path.to_str() == Some("game.ts")).unwrap().contents;
+    let items = &files.iter().find(|f| f.path.to_str() == Some("items.ts")).unwrap().contents;
+    let connection = &files.iter().find(|f| f.path.to_str() == Some("connection.ts")).unwrap().contents;
+    for (file, marked) in [
+        (game, "/** @internal */\nexport const AccountLoginParamsLayout"),
+        (game, "/** @internal */\nexport const ACCOUNT_CALLS"),
+        // `Services` builds its dispatcher.
+        (game, "/** @internal */\nexport class AccountDispatcher"),
+        (items, "/** @internal */\nexport class EventsDispatcher"),
+        (connection, " * @internal\n */\nexport function provideServices"),
+        (connection, " * @internal\n */\nexport function provideClientServices"),
+    ] {
+        assert!(file.contains(marked), "missing `{marked}` in:\n{file}");
+    }
+    for (file, plain) in [
+        (game, "\nexport interface AccountLoginParams {"),
+        (game, "\nexport interface Account {"),
+        (game, "\nexport class AccountSender {"),
+        (items, "\nexport interface Item {"),
+        (items, "\nexport const ItemLayout: Layout"),
+        (connection, "\nexport interface Services {"),
+        (connection, "\nexport async function serve("),
+    ] {
+        assert!(file.contains(plain), "missing `{plain}` in:\n{file}");
+        let before = &file[..file.find(plain).unwrap()];
+        assert!(!before.ends_with("/** @internal */"), "`{plain}` must not be internal:\n{file}");
+    }
+}
+
+/// A lockstep protocol's dispatcher is what its server helper builds, and a
+/// user may build it too: nothing covers it.
+#[test]
+fn a_dispatcher_nothing_provides_stays_public() {
+    let out = one(chat_units());
+    assert!(out.contains("\nexport class ChatDispatcher implements Dispatch {"), "{out}");
+    assert!(!out.contains("/** @internal */\nexport class ChatDispatcher"), "{out}");
+}
+
+/// `Format` and `CONNECTION_IR_HASH` are defined once for the package: in
+/// the module its files share when more than one would, which the package
+/// module re-exports. The protocol files define neither, and import `Format`
+/// only where a lockstep helper uses it.
+#[test]
+fn the_shared_constants_are_defined_once() {
+    let schemas = game_schemas();
+    let files = generate_typescript(&code_req(&schemas)).unwrap();
+    let paths: Vec<_> = files.iter().map(|f| f.path.to_str().unwrap()).collect();
+    assert_eq!(paths, ["game.ts", "items.ts", "connection.ts", "wire.ts"]);
+    let defined = |text: &str| text.matches("export const Format").count() + text.matches("export const CONNECTION_IR_HASH").count();
+    assert_eq!(files.iter().map(|f| defined(&f.contents)).sum::<usize>(), 2, "one each");
+    assert_eq!(defined(&files[3].contents), 2);
+    assert!(files[..2].iter().all(|f| !f.contents.contains("import { Format }")), "a connection protocol uses neither");
+
+    // In `lib` mode the module is beside the others; the package module's
+    // re-export carries its names to the root.
+    let files = generate_typescript(&lib_req(&schemas)).unwrap();
+    assert!(files.iter().any(|f| f.path.to_str() == Some("src/wire.ts")));
+    let index = &files.iter().find(|f| f.path.to_str() == Some("src/index.ts")).unwrap().contents;
+    assert!(!index.contains("wire.js"), "{index}");
+
+    // A lone file keeps its own: nothing is repeated, so nothing is moved.
+    let schemas = vec![("chat".to_string(), chat_units())];
+    let files = generate_typescript(&code_req(&schemas)).unwrap();
+    assert_eq!(files.len(), 1);
+    assert!(files[0].contents.contains("export const Format: Codec = new PackedCodec();"));
+}
+
+/// Lockstep protocols in more than one file share the codec too, and have no
+/// package module to re-export it, so the entry does.
+#[test]
+fn lockstep_files_share_one_format() {
+    use comline_core::schema::ir::compiler::interpreter::incremental::IncrementalInterpreter;
+    use comline_core::schema::ir::compiler::Compile;
+    let source = |name: &str| format!("@framing = \"datagram\"\nprotocol {name} {{\n    function ping() -> u8;\n}}\n");
+    let schemas = vec![
+        ("one".to_string(), IncrementalInterpreter::from_source(&source("One"))),
+        ("two".to_string(), IncrementalInterpreter::from_source(&source("Two"))),
+    ];
+    let files = generate_typescript(&lib_req(&schemas)).unwrap();
+    let file = |path: &str| files.iter().find(|f| f.path.to_str() == Some(path)).unwrap().contents.clone();
+    for name in ["src/one.ts", "src/two.ts"] {
+        let text = file(name);
+        assert!(text.contains("import { Format } from \"./wire.js\";\n"), "{text}");
+        assert!(!text.contains("export const Format"), "{text}");
+        assert!(!text.contains("PackedCodec"), "{text}");
+    }
+    let wire = file("src/wire.ts");
+    assert!(wire.contains("export const Format: Codec = new PackedCodec();"), "{wire}");
+    assert!(!wire.contains("CONNECTION_IR_HASH"), "no connection, no digest: {wire}");
+    assert!(file("src/index.ts").ends_with("export * from \"./wire.js\";\n"));
+}
+
+#[test]
+fn a_schema_named_like_the_shared_module_is_refused() {
+    let mut schemas = game_schemas();
+    schemas.push(("wire".to_string(), vec![]));
+    let error = generate_typescript(&code_req(&schemas)).unwrap_err().to_string();
+    assert!(error.contains("a schema named `wire` would be overwritten"), "{error}");
 }

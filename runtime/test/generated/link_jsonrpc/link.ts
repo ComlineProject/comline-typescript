@@ -17,14 +17,11 @@ import {
 *  two ends of a connection must agree on it. */
 export const IR_HASH = 0xb4520b20f67b5ccbn;
 
-/** Digest of every schema in the package — what a connection's handshake
-*  checks, so both ends agree on each protocol's number. */
-export const CONNECTION_IR_HASH = 0xb4520b20f67b5ccbn;
-
 export interface ChatSendParams {
     text: string;
 }
 
+/** @internal */
 export const ChatSendParamsLayout: Layout = { struct: [["text", "string"]] };
 
 export interface Chat {
@@ -32,8 +29,10 @@ export interface Chat {
     count(peer: Peer): Promise<bigint>;
 }
 
+/** @internal */
 export const CHAT_CALLS = ["send", "count"] as const;
 
+/** @internal */
 export class ChatDispatcher implements Dispatch {
     /** This protocol's number on a connection. */
     static readonly PROTOCOL = 0;
@@ -78,7 +77,7 @@ export class ChatDispatcher implements Dispatch {
         }
     }
 
-    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with `Connection.accept(transport, new JsonCodec(), CONNECTION_IR_HASH, new JsonRpcConnectionFraming())`, or let the package's `serve` / `connect` do it. */
+    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with `Connection.accept(transport, new JsonCodec(), CONNECTION_IR_HASH, new JsonRpcConnectionFraming())` (`Format` and `CONNECTION_IR_HASH` are in `./wire.js`), or let the package's `serve` / `connect` do it. */
     provideOn(conn: Connection): void {
         conn.provide(ChatDispatcher.PROTOCOL, this);
     }
@@ -114,6 +113,7 @@ export interface EventsMessageParams {
     text: string;
 }
 
+/** @internal */
 export const EventsMessageParamsLayout: Layout = { struct: [["text", "string"]] };
 
 export interface Events {
@@ -121,8 +121,10 @@ export interface Events {
     ping(peer: Peer): Promise<void>;
 }
 
+/** @internal */
 export const EVENTS_CALLS = ["link.Events/message", "link.Events/ping"] as const;
 
+/** @internal */
 export class EventsDispatcher implements Dispatch {
     /** This protocol's number on a connection. */
     static readonly PROTOCOL = 1;
@@ -167,7 +169,7 @@ export class EventsDispatcher implements Dispatch {
         }
     }
 
-    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with `Connection.connect(transport, new JsonCodec(), CONNECTION_IR_HASH, new JsonRpcConnectionFraming())`, or let the package's `serve` / `connect` do it. */
+    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with `Connection.connect(transport, new JsonCodec(), CONNECTION_IR_HASH, new JsonRpcConnectionFraming())` (`Format` and `CONNECTION_IR_HASH` are in `./wire.js`), or let the package's `serve` / `connect` do it. */
     provideOn(conn: Connection): void {
         conn.provide(EventsDispatcher.PROTOCOL, this);
     }

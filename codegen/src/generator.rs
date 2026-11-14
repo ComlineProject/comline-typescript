@@ -128,13 +128,31 @@ pub fn generate_typescript(req: &GenerateRequest) -> Result<Vec<GeneratedFile>> 
     for (namespace, units) in emitted {
         collisions::check(namespace, units, derived_names(units, &req.schemas, &req.dependencies, &req.encodings))?;
     }
+    let connection = package_connection(req, emitted);
+    // The constants every file of the package would otherwise define for
+    // itself, in a module of their own when more than one would.
+    let wire = shared_constants(req, emitted, connection.is_some());
+    let facts = PackageFacts {
+        wire,
+        covered: connection
+            .iter()
+            .flat_map(|c| c.server.iter().chain(&c.client))
+            .map(|p| (p.namespace.clone(), p.name.clone()))
+            .collect(),
+    };
+    let package = connection.as_ref().and_then(|c| package_module(&header, req, c, codec, &facts));
     // Loose files or a `src/` tree, the package module has a file of its own,
     // which a schema of that name would be.
-    let package = package_module(&header, req, emitted, codec);
     if package.is_some() && emitted.iter().any(|(namespace, _)| namespace == PACKAGE_MODULE) {
         return Err(eyre::eyre!(
             "a schema named `{PACKAGE_MODULE}` would be overwritten by the package's \
              `{PACKAGE_MODULE}.ts` (its `Services` and `serve`) - rename the schema"
+        ));
+    }
+    if facts.wire.is_some() && emitted.iter().any(|(namespace, _)| namespace == WIRE_MODULE) {
+        return Err(eyre::eyre!(
+            "a schema named `{WIRE_MODULE}` would be overwritten by the package's \
+             `{WIRE_MODULE}.ts` (its `Format` and `CONNECTION_IR_HASH`) - rename the schema"
         ));
     }
 
@@ -142,7 +160,7 @@ pub fn generate_typescript(req: &GenerateRequest) -> Result<Vec<GeneratedFile>> 
         Mode::Code => Ok(emitted
             .iter()
             .map(|(namespace, units)| {
-                let source = schema_source(&header, namespace, units, req, external_std);
+                let source = schema_source(&header, namespace, units, req, external_std, &facts);
                 // `code` mode has no manifest to add the dependency to, so
                 // the file says what it needs - the same courtesy the Rust
                 // generator extends for `Cargo.toml`.
@@ -163,6 +181,10 @@ pub fn generate_typescript(req: &GenerateRequest) -> Result<Vec<GeneratedFile>> 
                 path: PathBuf::from(format!("{PACKAGE_MODULE}.ts")),
                 contents,
             }))
+            .chain(facts.wire.map(|constants| GeneratedFile {
+                path: PathBuf::from(format!("{WIRE_MODULE}.ts")),
+                contents: wire_module(&header, req, constants, codec),
+            }))
             .collect()),
 
         Mode::Lib => {
@@ -173,7 +195,7 @@ pub fn generate_typescript(req: &GenerateRequest) -> Result<Vec<GeneratedFile>> 
             // them, including an external `std` this package emits no file
             // for.
             let mut sources = tree.emit("src", &TsLayout, &|namespace, units| {
-                schema_source(&header, namespace, units, req, external_std)
+                schema_source(&header, namespace, units, req, external_std, &facts)
             });
             // The package module beside the schemas, its names at the root.
             if let Some(contents) = package {
@@ -183,6 +205,31 @@ pub fn generate_typescript(req: &GenerateRequest) -> Result<Vec<GeneratedFile>> 
                     .ok_or_else(|| eyre::eyre!("no root barrel to export the package's `serve` from"))?;
                 root.contents.push_str(&format!("export * from \"./{PACKAGE_MODULE}.js\";\n"));
                 sources.push(GeneratedFile { path: PathBuf::from(format!("src/{PACKAGE_MODULE}.ts")), contents });
+            }
+            // The shared constants beside it, at the root too: through the
+            // package module where there is one, which re-exports them.
+            if let Some(constants) = facts.wire {
+                if connection.is_none() {
+                    let root = sources
+                        .iter_mut()
+                        .find(|f| f.path == std::path::Path::new("src/index.ts"))
+                        .ok_or_else(|| eyre::eyre!("no root barrel to export the package's `Format` from"))?;
+                    root.contents.push_str(&format!("export * from \"./{WIRE_MODULE}.js\";\n"));
+                }
+                sources.push(GeneratedFile {
+                    path: PathBuf::from(format!("src/{WIRE_MODULE}.ts")),
+                    contents: wire_module(&header, req, constants, codec),
+                });
+            }
+            // What the package's entry says to start from.
+            if let Some(entry) = entry_points(req, emitted, connection.as_ref()) {
+                let root = sources
+                    .iter_mut()
+                    .find(|f| f.path == std::path::Path::new("src/index.ts"))
+                    .ok_or_else(|| eyre::eyre!("no root barrel to name the package's entry points in"))?;
+                // After the generated header's own lines, before the exports.
+                let at = root.contents.find("\n\n").map_or(0, |i| i + 2);
+                root.contents.insert_str(at, &format!("{entry}\n"));
             }
             // A protocol needs the runtime. A type's `Layout` only names it
             // in an erased `import type`, so types alone make it an optional
@@ -498,6 +545,7 @@ fn schema_source(
     units: &[FrozenUnit],
     req: &GenerateRequest,
     external_std: bool,
+    package: &PackageFacts,
 ) -> String {
     let schemas = &req.schemas;
     let encodings = &req.encodings;
@@ -581,6 +629,9 @@ fn schema_source(
                     addressing,
                     &errors,
                     &types,
+                    // Built by the package's `provideServices`, not by a user.
+                    package.covered.contains(&(namespace.to_string(), name.clone())),
+                    package.wire.map(|_| relative_specifier(namespace, WIRE_MODULE)),
                 ));
             }
             _ => {}
@@ -641,7 +692,8 @@ fn schema_source(
         for pick in picks.iter().filter(|p| !p.jsonrpc).chain(picks.iter().filter(|p| p.jsonrpc)) {
             import_class(encodings, &pick.name, &mut values, &mut external);
         }
-        if formatted {
+        // The package's codec, where this file defines `Format` itself.
+        if formatted && package.wire.is_none() {
             import_class(encodings, &req.wire_format, &mut values, &mut external);
         }
         if picks.iter().any(|p| p.json) {
@@ -685,6 +737,13 @@ fn schema_source(
         }
         runtime_import.push_str("} from \"@comline/runtime\";\n\n");
         runtime_import.push_str(&external_imports(&external, |name| types.binding(name)));
+        // Its helpers' default codec, from where the package defines it.
+        if package.wire.is_some() && picks.iter().any(|p| !p.json) {
+            runtime_import.push_str(&format!(
+                "import {{ Format }} from \"{}\";\n\n",
+                relative_specifier(namespace, WIRE_MODULE)
+            ));
+        }
 
         ir_hash.push_str(&format!(
             "/** Canonical digest of the frozen IR this file was generated from — the\n\
@@ -692,7 +751,8 @@ fn schema_source(
              export const IR_HASH = {:#018x}n;\n\n",
             schema_ir_hash(units)
         ));
-        if has_connection {
+        // Defined here unless the package keeps them in a module of their own.
+        if has_connection && package.wire.is_none() {
             ir_hash.push_str(&format!(
                 "/** Digest of every schema in the package — what a connection's handshake\n\
                  *  checks, so both ends agree on each protocol's number. */\n\
@@ -700,7 +760,7 @@ fn schema_source(
                 connections::connection_ir_hash(schemas)
             ));
         }
-        if formatted {
+        if formatted && package.wire.is_none() {
             ir_hash.push_str(&format!(
                 "/** The package's wire format (`wire.format`): what this file's helpers\n\
                  *  encode with, and what the peer has to speak too. */\n\
@@ -1095,14 +1155,22 @@ fn annotation<'a>(parameters: &'a [FrozenUnit], key: &str) -> Option<Cow<'a, str
 /// The package module's file, beside the schemas: `connection.ts`.
 const PACKAGE_MODULE: &str = "connection";
 
-/// The package's one connection, set up in one call: `Services` (what the
-/// accepting side provides), `ClientServices` (what the dialling side does),
-/// and `accept` / `serve` / `connect`. `None` when no protocol this package
+/// The shared constants' module, beside the package module: `wire.ts`.
+const WIRE_MODULE: &str = "wire";
+
+/// The package's one connection as this package emits it: what each side
+/// provides is narrowed to the protocols whose schemas are emitted here (an
+/// external `std` provides nothing). `None` when no protocol this package
 /// emits is on a connection, or when its protocols don't share one
 /// (`comline generation` says why).
-fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<FrozenUnit>)], codec: &str) -> Option<String> {
+struct EmittedConnection {
+    package: connections::PackageConnection,
+    server: Vec<connections::Provided>,
+    client: Vec<connections::Provided>,
+}
+
+fn package_connection(req: &GenerateRequest, emitted: &[(String, Vec<FrozenUnit>)]) -> Option<EmittedConnection> {
     let package = connections::package_connection_among(&req.schemas, &req.dependencies).ok()??;
-    // Only what this package emits: an external `std` provides nothing here.
     let emitted_only = |side: &[connections::Provided]| -> Vec<connections::Provided> {
         side.iter().filter(|p| emitted.iter().any(|(ns, _)| *ns == p.namespace)).cloned().collect()
     };
@@ -1110,6 +1178,110 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
     if server.is_empty() && client.is_empty() {
         return None;
     }
+    Some(EmittedConnection { package, server, client })
+}
+
+/// Which of the package-wide constants a file defines for itself.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+struct Constants {
+    /// `Format`, the package's codec.
+    format: bool,
+    /// `CONNECTION_IR_HASH`, the digest of every schema in the package.
+    connection_hash: bool,
+}
+
+/// What a schema file defines of them when nothing is shared: `Format` for a
+/// protocol that encodes with the package's format, `CONNECTION_IR_HASH` for
+/// one on a connection.
+fn constants_of(units: &[FrozenUnit], req: &GenerateRequest) -> Constants {
+    let mut constants = Constants::default();
+    for unit in units {
+        if let FrozenUnit::Protocol { parameters, .. } = unit {
+            constants.format |= !writes_json(parameters, &req.encodings);
+            constants.connection_hash |=
+                connections::on_connection_among(&req.schemas, &req.dependencies, parameters);
+        }
+    }
+    constants
+}
+
+/// What the files of the package would each define for themselves - every
+/// protocol file that needs them, and the package module, which defines both -
+/// when it is more than one file: those go in a module of their own, which
+/// they import from. A lone file keeps its own, so a package of one protocol
+/// file reads as it always did.
+///
+/// A module of their own rather than `connection.ts`: the package module
+/// imports every protocol's file (it builds their dispatchers), so a protocol
+/// file importing it back would be an import cycle.
+fn shared_constants(req: &GenerateRequest, emitted: &[(String, Vec<FrozenUnit>)], has_package_module: bool) -> Option<Constants> {
+    let mut formats = usize::from(has_package_module);
+    let mut hashes = usize::from(has_package_module);
+    for (_, units) in emitted {
+        let constants = constants_of(units, req);
+        formats += usize::from(constants.format);
+        hashes += usize::from(constants.connection_hash);
+    }
+    // One digest is defined once whoever needs it, and so is the format.
+    (formats > 1 || hashes > 1).then_some(Constants { format: formats > 0, connection_hash: hashes > 0 })
+}
+
+/// What a schema file needs to know about the package it is part of.
+struct PackageFacts {
+    /// The constants defined in the module of their own, when there is one.
+    wire: Option<Constants>,
+    /// The protocols (namespace, name) the package's `Services` and
+    /// `ClientServices` provide: their dispatchers are built by
+    /// `provideServices`, not by a user.
+    covered: BTreeSet<(String, String)>,
+}
+
+/// The module of shared constants: the package's wire format and the digest
+/// of every schema in it.
+fn wire_module(header: &str, req: &GenerateRequest, constants: Constants, codec: &str) -> String {
+    let encodings = &req.encodings;
+    let mut values: Vec<&str> = Vec::new();
+    let mut external: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    if constants.format {
+        import_class(encodings, &req.wire_format, &mut values, &mut external);
+    }
+    let mut s = format!("{header}\n");
+    if constants.format {
+        s.push_str("import {\n");
+        for v in &values {
+            s.push_str(&format!("    {v},\n"));
+        }
+        s.push_str("    type Codec,\n} from \"@comline/runtime\";\n");
+        s.push_str(&external_imports(&external, str::to_string));
+        if external.is_empty() {
+            s.push('\n');
+        }
+        s.push_str(&format!(
+            "/** The package's wire format (`wire.format`). */\n\
+             export const Format: Codec = new {codec}();\n\n"
+        ));
+    }
+    if constants.connection_hash {
+        s.push_str(&format!(
+            "/** Digest of every schema in the package — what a connection's handshake\n\
+             *  checks, so both ends agree on each protocol's number. */\n\
+             export const CONNECTION_IR_HASH = {:#018x}n;\n",
+            connections::connection_ir_hash(&req.schemas)
+        ));
+    }
+    s
+}
+
+/// The package module's source: `connection.ts`.
+fn package_module(
+    header: &str,
+    req: &GenerateRequest,
+    connection: &EmittedConnection,
+    codec: &str,
+    facts: &PackageFacts,
+) -> Option<String> {
+    let package = &connection.package;
+    let (server, client) = (&connection.server, &connection.client);
     let jsonrpc = package.framing == FRAMING_JSONRPC;
     let datagram3 = package.framing == comline_codegen::facts::FRAMING_DATAGRAM3;
     let unverified = package.handshake == HANDSHAKE_NONE;
@@ -1133,7 +1305,10 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
     if datagram3 {
         import_class(encodings, &package.framing, &mut values, &mut external);
     }
-    import_class(encodings, &req.wire_format, &mut values, &mut external);
+    // The format's class, unless the shared module holds the constant.
+    if facts.wire.is_none() {
+        import_class(encodings, &req.wire_format, &mut values, &mut external);
+    }
     if unverified {
         values.push("NoHandshake");
     }
@@ -1147,11 +1322,13 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
     if comline2 {
         values.push("Negotiated");
     }
-    let mut s = format!("{header}\nimport {{\n");
+    let mut s = format!("{header}\n{}\nimport {{\n", entry_doc(&connection_entry(req, connection, Spelling::Beside), false));
     for v in &values {
         s.push_str(&format!("    {v},\n"));
     }
-    s.push_str("    type Codec,\n");
+    if facts.wire.is_none() {
+        s.push_str("    type Codec,\n");
+    }
     if comline2 {
         s.push_str("    type Peer,\n");
     }
@@ -1160,7 +1337,7 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
     if !external.is_empty() {
         s.push('\n');
     }
-    let namespaces: BTreeSet<&str> = server.iter().chain(&client).map(|p| p.namespace.as_str()).collect();
+    let namespaces: BTreeSet<&str> = server.iter().chain(client.iter()).map(|p| p.namespace.as_str()).collect();
     for namespace in &namespaces {
         s.push_str(&format!(
             "import * as {} from \"{}\";\n",
@@ -1168,17 +1345,29 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
             relative_specifier(PACKAGE_MODULE, namespace)
         ));
     }
-    s.push_str(&format!(
-        "\n/** The package's wire format (`wire.format`). */\n\
-         export const Format: Codec = new {codec}();\n\n\
-         /** Digest of every schema in the package — what a connection's handshake\n\
-         *  checks, so both ends agree on each protocol's number. */\n\
-         export const CONNECTION_IR_HASH = {:#018x}n;\n\n",
-        connections::connection_ir_hash(&req.schemas)
-    ));
+    if facts.wire.is_some() {
+        // Defined once for every file of the package, and still found here.
+        let used = if json { "CONNECTION_IR_HASH" } else { "CONNECTION_IR_HASH, Format" };
+        s.push_str(&format!(
+            "import {{ {used} }} from \"{}\";\n\n\
+             /** The package's wire format and the digest of every schema in it, which every file of the package shares. */\n\
+             export {{ CONNECTION_IR_HASH, Format }} from \"{}\";\n\n",
+            relative_specifier(PACKAGE_MODULE, WIRE_MODULE),
+            relative_specifier(PACKAGE_MODULE, WIRE_MODULE),
+        ));
+    } else {
+        s.push_str(&format!(
+            "\n/** The package's wire format (`wire.format`). */\n\
+             export const Format: Codec = new {codec}();\n\n\
+             /** Digest of every schema in the package — what a connection's handshake\n\
+             *  checks, so both ends agree on each protocol's number. */\n\
+             export const CONNECTION_IR_HASH = {:#018x}n;\n\n",
+            connections::connection_ir_hash(&req.schemas)
+        ));
+    }
     if comline2 {
         // `facts::check` has vouched for the facts.
-        let items = comline2_items(req, &package, type_of(encodings, &package.handshake)).ok()?;
+        let items = comline2_items(req, package, type_of(encodings, &package.handshake)).ok()?;
         s.push_str(&items);
     }
 
@@ -1195,7 +1384,10 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
         }
         s.push_str("}\n\n");
         s.push_str(&format!(
-            "/** Provide every protocol in `services` on `conn`: the peer's calls to them come here. */\n\
+            "/**\n\
+             \x20* Provide every protocol in `services` on `conn`: the peer's calls to them come here.\n\
+             \x20* @internal\n\
+             \x20*/\n\
              export function {provide}(conn: Connection, services: {ty}): void {{\n"
         ));
         for p in provided {
@@ -1209,8 +1401,8 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
         s.push_str("}\n\n");
         true
     };
-    let has_server = side("Services", "provideServices", &server, "the accepting side");
-    let has_client = side("ClientServices", "provideClientServices", &client, "the dialling side");
+    let has_server = side("Services", "provideServices", server, "the accepting side");
+    let has_client = side("ClientServices", "provideClientServices", client, "the dialling side");
 
     let datagram3_framing = format!(", new {}()", type_of(encodings, &package.framing));
     let framing_arg = if jsonrpc {
@@ -1251,6 +1443,19 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
         ("transport: Transport", "")
     };
     let pass = if has_server { "transport, services" } else { "transport" };
+    // Only a package whose dialling side provides something takes `services`.
+    let dial_doc = if has_client {
+        "/**\n\
+         * Dial over `transport`: run the handshake, then provide every protocol in\n\
+         * `services`, which the server calls. Call the server's protocols through\n\
+         * their senders.\n\
+         */\n"
+    } else {
+        "/**\n\
+         * Dial over `transport`: run the handshake. Call the server's protocols\n\
+         * through their senders.\n\
+         */\n"
+    };
     s.push_str(&format!(
         "/**\n\
          * Accept a connection over `transport`: run the handshake, then provide\n\
@@ -1267,11 +1472,7 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
          export async function serve({server_params}): Promise<void> {{\n\
          \x20   await (await accept({pass})).closed;\n\
          }}\n\n\
-         /**\n\
-         * Dial over `transport`: run the handshake, then provide every protocol in\n\
-         * `services`, which the server calls. Call the server's protocols through\n\
-         * their senders.\n\
-         */\n\
+         {dial_doc}\
          export async function connect({client_params}): Promise<Connection> {{\n\
          {opening}\
          \x20   const conn = {};\n\
@@ -1282,6 +1483,139 @@ fn package_module(header: &str, req: &GenerateRequest, emitted: &[(String, Vec<F
         open("connect"),
     ));
     Some(s)
+}
+
+// ── where to start ─────────────────────────────────────────────────────────
+
+/// How a header names what a protocol's schema file declares: bare, where the
+/// reader is looking at the package module beside it (which says which file),
+/// or through the namespace the package's root barrel exports it under.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Spelling {
+    Beside,
+    Barrel,
+}
+
+fn spelled(namespace: &str, name: &str, spelling: Spelling) -> String {
+    match spelling {
+        Spelling::Beside => name.to_string(),
+        Spelling::Barrel => format!("{}.{name}", namespace.split('/').collect::<Vec<_>>().join(".")),
+    }
+}
+
+/// The first call a protocol declares, to show a call in the header.
+fn first_call(req: &GenerateRequest, namespace: &str, name: &str) -> Option<String> {
+    let (_, units) = req.schemas.iter().find(|(ns, _)| ns == namespace)?;
+    units.iter().find_map(|unit| match unit {
+        FrozenUnit::Protocol { name: n, functions, .. } if n == name => functions.iter().find_map(|f| match f {
+            FrozenUnit::Function { name, .. } => Some(method_ident(name)),
+            _ => None,
+        }),
+        _ => None,
+    })
+}
+
+/// What a reader of the package's connection starts from, one line each: what
+/// to implement, how to serve and dial, and how to call.
+fn connection_entry(req: &GenerateRequest, connection: &EmittedConnection, spelling: Spelling) -> Vec<String> {
+    let (server, client) = (&connection.server, &connection.client);
+    // Each protocol once, in the order the package lists them, under the
+    // schema it is declared in.
+    let mut by_namespace: Vec<(&str, Vec<&str>)> = Vec::new();
+    for p in server.iter().chain(client) {
+        match by_namespace.iter_mut().find(|(ns, _)| *ns == p.namespace) {
+            Some((_, names)) if names.contains(&p.name.as_str()) => {}
+            Some((_, names)) => names.push(&p.name),
+            None => by_namespace.push((&p.namespace, vec![&p.name])),
+        }
+    }
+    let implement = by_namespace
+        .iter()
+        .map(|(namespace, names)| {
+            let names = names
+                .iter()
+                .map(|n| format!("`{}`", spelled(namespace, &ident(n), spelling)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            match spelling {
+                Spelling::Beside => format!("{names} (in `{}`)", relative_specifier(PACKAGE_MODULE, namespace)),
+                Spelling::Barrel => names,
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("; ");
+    let fields = |provided: &[connections::Provided]| {
+        let fields = provided.iter().map(|p| camel(&p.field)).collect::<Vec<_>>().join(", ");
+        if provided.is_empty() { "transport".to_string() } else { format!("transport, {{ {fields} }}") }
+    };
+    let mut lines = vec![format!("Implement what you provide: {implement}.")];
+    lines.push(format!(
+        "Serve with `serve({0})`; `accept({0})` takes the same and hands back the connection.",
+        fields(server)
+    ));
+    lines.push(format!("Dial with `connect({})`.", fields(client)));
+    // What the other end provides is what a caller reaches: the server's
+    // protocols from the dialling side, the client's from the serving one.
+    if let Some(p) = server.first().or_else(|| client.first()) {
+        let sender = spelled(&p.namespace, &format!("{}Sender", p.name), spelling);
+        let call = first_call(req, &p.namespace, &p.name).map(|f| format!(".{f}(…)")).unwrap_or_default();
+        lines.push(format!(
+            "Call the other end with `new {}(conn){call}`, on the connection `connect` returns or the peer a handler is given.",
+            sender
+        ));
+    }
+    lines
+}
+
+/// A comment block of bullet lines, ending with what the plumbing is.
+fn entry_doc(lines: &[String], package_documentation: bool) -> String {
+    let mut doc = String::from("/**\n * Where to start:\n *\n");
+    for line in lines {
+        doc.push_str(&format!(" * - {line}\n"));
+    }
+    doc.push_str(
+        " *\n * What is marked internal is wire plumbing: exported for hand-written use, and not what\n * a user calls.\n",
+    );
+    if package_documentation {
+        doc.push_str(" *\n * @packageDocumentation\n");
+    }
+    doc.push_str(" */\n");
+    doc
+}
+
+/// The package entry's header (`src/index.ts`, in `lib` mode): the
+/// connection's entry points where the package has one, and each lockstep
+/// protocol's. `None` when no protocol is emitted at all.
+fn entry_points(
+    req: &GenerateRequest,
+    emitted: &[(String, Vec<FrozenUnit>)],
+    connection: Option<&EmittedConnection>,
+) -> Option<String> {
+    let mut lines = connection.map(|c| connection_entry(req, c, Spelling::Barrel)).unwrap_or_default();
+    for (namespace, units) in emitted {
+        for unit in units {
+            let FrozenUnit::Protocol { name, parameters, functions, .. } = unit else { continue };
+            let lockstep = !connections::on_connection_among(&req.schemas, &req.dependencies, parameters);
+            if !lockstep || !functions.iter().any(|f| matches!(f, FrozenUnit::Function { .. })) {
+                continue;
+            }
+            let (interface, client, serve, dispatcher) = (
+                spelled(namespace, &ident(name), Spelling::Barrel),
+                spelled(namespace, &format!("{name}Client"), Spelling::Barrel),
+                spelled(namespace, &format!("serve{name}"), Spelling::Barrel),
+                spelled(namespace, &format!("{name}Dispatcher"), Spelling::Barrel),
+            );
+            let call = first_call(req, namespace, name).map(|f| format!(" and call `client.{f}(…)`")).unwrap_or_default();
+            lines.push(format!(
+                "`{interface}` has its own framing: implement it and run `{serve}(impl, transport)` (which serves `{dispatcher}`), \
+                 or dial with `await {client}.connect(transport)`{call}.",
+            ));
+        }
+    }
+    if lines.is_empty() {
+        return None;
+    }
+    Some(entry_doc(&lines, true))
 }
 
 /// A protocol's path as the generated text shows it: `chat::admin::Admin`,
@@ -1325,7 +1659,7 @@ fn comline2_items(
             functions.join(", ")
         ));
     }
-    s.push_str(" */\nexport const HELLO = new Uint8Array([\n");
+    s.push_str(" *\n * @internal\n */\nexport const HELLO = new Uint8Array([\n");
     for chunk in hello.chunks(12) {
         let bytes: Vec<String> = chunk.iter().map(|b| format!("{b:#04x}")).collect();
         s.push_str(&format!("    {},\n", bytes.join(", ")));
@@ -1333,7 +1667,10 @@ fn comline2_items(
     s.push_str("]);\n\n");
     let camel_value = |v: &str| v.to_string();
     s.push_str(&format!(
-        "/** The `comline@2` handshake, with {{@link HELLO}} and the parameters the package states. */\n\
+        "/**\n\
+         \x20* The `comline@2` handshake, with {{@link HELLO}} and the parameters the package states.\n\
+         \x20* @internal\n\
+         \x20*/\n\
          export function handshake(): {class} {{\n\
          \x20   return new {class}(HELLO, {{\n\
          \x20       scope: \"{}\",\n\
@@ -1433,6 +1770,17 @@ fn unverified_doc(parameters: &[FrozenUnit]) -> String {
     doc
 }
 
+/// The doc comment of a dispatcher: the `@unverified` one, if it has one,
+/// and `@internal` where the package's `Services` builds it, so that a user
+/// never needs to.
+fn dispatcher_doc(unverified: &str, internal: bool) -> String {
+    match (unverified.strip_suffix(" */\n"), internal) {
+        (_, false) => unverified.to_string(),
+        (Some(open), true) => format!("{open} *\n * @internal\n */\n"),
+        (None, true) => "/** @internal */\n".to_string(),
+    }
+}
+
 /// `number` is the protocol's number on a connection, for a protocol that
 /// runs on one: its handlers take the peer, its dispatcher is provided on a
 /// `Connection`, and a `<Proto>Sender` calls it through any `Peer`.
@@ -1447,6 +1795,8 @@ fn protocol(
     addressing: Option<comline_codegen::facts::Addressing>,
     errors: &HashMap<u16, String>,
     types: &TypeMapper,
+    internal: bool,
+    wire: Option<String>,
 ) -> String {
     let number = addressing.as_ref().map(|a| a.protocol);
     let by_id = addressing.as_ref().is_some_and(|a| a.by_id);
@@ -1481,7 +1831,7 @@ fn protocol(
                 let params_layout = params_ty.as_ref().map(|ty| {
                     let fields: Vec<(&str, &TypeRef, bool)> =
                         arguments.iter().map(|a| (a.name.as_str(), &a.ty, false)).collect();
-                    args_layout(ty, &fields, types)
+                    format!("/** @internal */\n{}", args_layout(ty, &fields, types))
                 });
                 let (ret, ret_layout) = match _return {
                     None | Some(TypeRef::Unit) => ("void".to_string(), "\"unit\"".to_string()),
@@ -1567,7 +1917,7 @@ fn protocol(
         .collect::<Vec<_>>()
         .join(", ");
     s.push_str(&format!(
-        "export const {calls_const} = [{call_names}] as const;\n\n"
+        "/** @internal */\nexport const {calls_const} = [{call_names}] as const;\n\n"
     ));
 
     let doc = unverified_doc(parameters);
@@ -1580,7 +1930,7 @@ fn protocol(
     };
 
     // 4. the dispatcher
-    s.push_str(&doc);
+    s.push_str(&dispatcher_doc(&doc, internal));
     s.push_str(&format!(
         "export class {proto}Dispatcher implements {dispatch_t} {{\n"
     ));
@@ -1727,7 +2077,11 @@ fn protocol(
         let open = if addressing.as_ref().is_some_and(|a| a.checks.is_some()) {
             "the package's `accept` / `connect`, which run `comline@2` with this package's facts".to_string()
         } else {
-            open
+            match &wire {
+                // `Format` and `CONNECTION_IR_HASH` aren't defined in this file.
+                Some(specifier) => format!("{open} (`Format` and `CONNECTION_IR_HASH` are in `{specifier}`)"),
+                None => open,
+            }
         };
         s.push_str(&format!(
             "\n    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with {open}, or let the package's `serve` / `connect` do it. */\n\

@@ -1,4 +1,4 @@
-// Exercises generated bounds (core#98) against the runtime. `generated/bounds.ts`
+// Exercises generated bounds (core#98) against the runtime. `generated/bounds/`
 // is written by `comline-codegen-typescript`'s `generated_bounds_match_the_
 // runtime_test_fixture` test; this proves it type-checks and that every
 // bound it declares is checked, both ways, in both formats.
@@ -11,14 +11,14 @@ import {
   type Customer,
   type Directory,
   type Folder,
-  CONNECTION_IR_HASH,
   CountryCode,
   CustomerLayout,
   DirectoryDispatcher,
   DirectorySender,
   FolderLayout,
   Name,
-} from "./generated/bounds.js";
+} from "./generated/bounds/account.js";
+import { CONNECTION_IR_HASH } from "./generated/bounds/wire.js";
 
 const bound = (measure: Measure) => (e: unknown) =>
   e instanceof RuntimeError && e.is("boundExceeded") && e.measure === measure;

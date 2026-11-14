@@ -1,0 +1,649 @@
+{
+  "acme-encodings.ts": {
+    "files": {},
+    "connectionIrHash": [],
+    "hello": [],
+    "format": []
+  },
+  "acme.ts": {
+    "files": {
+      "acme.ts": {
+        "irHash": "0x5d4d4284d465589e",
+        "callTables": {
+          "CHAT_CALLS": [
+            "send",
+            "history",
+            "wipe",
+            "note"
+          ]
+        },
+        "callsWritten": [
+          "0 send",
+          "1 history",
+          "2 wipe",
+          "3 note"
+        ],
+        "callsTaken": [
+          0,
+          1,
+          2,
+          3
+        ]
+      }
+    },
+    "connectionIrHash": [],
+    "hello": [],
+    "format": [
+      "CborCodec"
+    ]
+  },
+  "bounds/": {
+    "files": {
+      "bounds/account.ts": {
+        "irHash": "0x17305ca8c4eea701",
+        "protocolNumbers": [
+          0,
+          0
+        ],
+        "callTables": {
+          "DIRECTORY_CALLS": [
+            "find",
+            "tree"
+          ]
+        },
+        "callsWritten": [
+          "0 find",
+          "1 tree"
+        ],
+        "callsTaken": [
+          0,
+          1
+        ]
+      }
+    },
+    "connectionIrHash": [
+      "0x17305ca8c4eea701"
+    ],
+    "hello": [],
+    "format": [
+      "PackedCodec"
+    ]
+  },
+  "chat.ts": {
+    "files": {
+      "chat.ts": {
+        "irHash": "0xed1189b980d9a3f8",
+        "callTables": {
+          "CHAT_CALLS": [
+            "send",
+            "history",
+            "wipe",
+            "note"
+          ]
+        },
+        "callsWritten": [
+          "0 send",
+          "1 history",
+          "2 wipe",
+          "3 note"
+        ],
+        "callsTaken": [
+          0,
+          1,
+          2,
+          3
+        ]
+      }
+    },
+    "connectionIrHash": [],
+    "hello": [],
+    "format": [
+      "PackedCodec"
+    ]
+  },
+  "clash/": {
+    "files": {
+      "clash/api.ts": {
+        "irHash": "0xa14195a41e817a01",
+        "protocolNumbers": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "callTables": {
+          "CHAT_CALLS": [
+            "greet"
+          ],
+          "EVENTS_CALLS": [
+            "notify"
+          ]
+        },
+        "callsWritten": [
+          "0 greet",
+          "0 notify"
+        ],
+        "callsTaken": [
+          0,
+          0
+        ]
+      },
+      "clash/localdeps/greeting.ts": {
+        "irHash": "0x3c4249f5704f3397",
+        "protocolNumbers": [
+          0,
+          0
+        ],
+        "callTables": {
+          "FOO_CALLS": [
+            "greet"
+          ]
+        },
+        "callsWritten": [
+          "0 greet"
+        ],
+        "callsTaken": [
+          0
+        ]
+      }
+    },
+    "connectionIrHash": [
+      "0xe9ca523b62a2c19f"
+    ],
+    "hello": [
+      "434f0201000123456789abcdef0123456789abcdef00010000030052185fd60992ad43029cc29962b3afb401ffa14eb2bc0ae6184d69b5acc570917e0258809aaf4b47d56c69b2c1fc9d4330c102000001005a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a0100010001005a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a0100"
+    ],
+    "format": [
+      "PackedCodec"
+    ]
+  },
+  "collisions/": {
+    "files": {
+      "collisions/shapes.ts": {
+        "irHash": "0xe84d76dcf6442bd3",
+        "protocolNumbers": [
+          0,
+          0
+        ],
+        "callTables": {
+          "WIRE_CALLS": [
+            "then",
+            "constructor",
+            "peer",
+            "client"
+          ],
+          "LOCK_CALLS": [
+            "then",
+            "client",
+            "peer"
+          ]
+        },
+        "callsWritten": [
+          "0 then",
+          "1 constructor",
+          "2 peer",
+          "3 client",
+          "0 then",
+          "1 client",
+          "2 peer"
+        ],
+        "callsTaken": [
+          0,
+          1,
+          2,
+          3,
+          0,
+          1,
+          2
+        ]
+      },
+      "collisions/user.ts": {
+        "irHash": "0x2581145250fde0c6",
+        "protocolNumbers": [
+          2,
+          2
+        ],
+        "callTables": {
+          "AGAIN_CALLS": [
+            "get"
+          ]
+        },
+        "callsWritten": [
+          "0 get"
+        ],
+        "callsTaken": [
+          0
+        ]
+      }
+    },
+    "connectionIrHash": [
+      "0x9dffbf799cccf0f4"
+    ],
+    "hello": [],
+    "format": [
+      "PackedCodec"
+    ]
+  },
+  "comline2/alien/": {
+    "files": {
+      "comline2/alien/chat.ts": {
+        "irHash": "0x70132e163503db63",
+        "protocolNumbers": [
+          0,
+          0
+        ],
+        "callTables": {
+          "CHAT_CALLS": [
+            "hello",
+            "shout"
+          ]
+        },
+        "callsWritten": [
+          "0 hello",
+          "1 shout"
+        ],
+        "callsTaken": [
+          0,
+          1
+        ]
+      }
+    },
+    "connectionIrHash": [
+      "0x70132e163503db63"
+    ],
+    "hello": [
+      "434f020100fedcba9876543210fedcba987654321000010000030052185fd60992ad43029cc29962b3afb4014e6ede7cc8f5aa52ce169f9e656740e20258809aaf4b47d56c69b2c1fc9d4330c10100000100aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa020001"
+    ],
+    "format": [
+      "PackedCodec"
+    ]
+  },
+  "comline2/new/": {
+    "files": {
+      "comline2/new/chat.ts": {
+        "irHash": "0xe21c2f843f183318",
+        "protocolNumbers": [
+          0,
+          0
+        ],
+        "callTables": {
+          "CHAT_CALLS": [
+            "shout",
+            "whisper",
+            "hello"
+          ]
+        },
+        "callsWritten": [
+          "1 shout",
+          "2 whisper",
+          "0 hello"
+        ],
+        "callsTaken": [
+          1,
+          2,
+          0
+        ]
+      }
+    },
+    "connectionIrHash": [
+      "0xe21c2f843f183318"
+    ],
+    "hello": [
+      "434f0201000123456789abcdef0123456789abcdef00020000030052185fd60992ad43029cc29962b3afb4014e6ede7cc8f5aa52ce169f9e656740e20258809aaf4b47d56c69b2c1fc9d4330c10100000100bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb03000102"
+    ],
+    "format": [
+      "PackedCodec"
+    ]
+  },
+  "comline2/old/": {
+    "files": {
+      "comline2/old/chat.ts": {
+        "irHash": "0x70132e163503db63",
+        "protocolNumbers": [
+          0,
+          0
+        ],
+        "callTables": {
+          "CHAT_CALLS": [
+            "hello",
+            "shout"
+          ]
+        },
+        "callsWritten": [
+          "0 hello",
+          "1 shout"
+        ],
+        "callsTaken": [
+          0,
+          1
+        ]
+      }
+    },
+    "connectionIrHash": [
+      "0x70132e163503db63"
+    ],
+    "hello": [
+      "434f0201000123456789abcdef0123456789abcdef00010000030052185fd60992ad43029cc29962b3afb4014e6ede7cc8f5aa52ce169f9e656740e20258809aaf4b47d56c69b2c1fc9d4330c10100000100aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa020001"
+    ],
+    "format": [
+      "PackedCodec"
+    ]
+  },
+  "dependency": {
+    "files": {
+      "dependency/only/localdeps/greeting.ts": {
+        "irHash": "0x653ed335b8ab7ba0",
+        "protocolNumbers": [
+          0,
+          0
+        ],
+        "callTables": {
+          "FOO_CALLS": [
+            "greet"
+          ]
+        },
+        "callsWritten": [
+          "0 greet"
+        ],
+        "callsTaken": [
+          0
+        ]
+      }
+    },
+    "connectionIrHash": [
+      "0xc1fed94bf808faea"
+    ],
+    "hello": [],
+    "format": [
+      "PackedCodec"
+    ]
+  },
+  "dependency/own/": {
+    "files": {
+      "dependency/own/api.ts": {
+        "irHash": "0x25f4c4d936e7aa90",
+        "protocolNumbers": [
+          0,
+          0
+        ],
+        "callTables": {
+          "CHAT_CALLS": [
+            "greet"
+          ]
+        },
+        "callsWritten": [
+          "0 greet"
+        ],
+        "callsTaken": [
+          0
+        ]
+      },
+      "dependency/own/localdeps/greeting.ts": {
+        "irHash": "0x653ed335b8ab7ba0",
+        "protocolNumbers": [
+          0,
+          0
+        ],
+        "callTables": {
+          "FOO_CALLS": [
+            "greet"
+          ]
+        },
+        "callsWritten": [
+          "0 greet"
+        ],
+        "callsTaken": [
+          0
+        ]
+      }
+    },
+    "connectionIrHash": [
+      "0x55e3b94344a9c775"
+    ],
+    "hello": [
+      "434f0201000123456789abcdef0123456789abcdef00010000030052185fd60992ad43029cc29962b3afb4014e6ede7cc8f5aa52ce169f9e656740e20258809aaf4b47d56c69b2c1fc9d4330c101000001005a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a0100"
+    ],
+    "format": [
+      "PackedCodec"
+    ]
+  },
+  "hello/": {
+    "files": {
+      "hello/hello.ts": {
+        "irHash": "0xe3d09136af39a1c1",
+        "protocolNumbers": [
+          1,
+          1
+        ],
+        "callTables": {
+          "CLOCK_CALLS": [
+            "now"
+          ],
+          "LINK_CALLS": [
+            "now"
+          ]
+        },
+        "callsWritten": [
+          "0 now",
+          "0 now"
+        ],
+        "callsTaken": [
+          0,
+          0
+        ]
+      }
+    },
+    "connectionIrHash": [
+      "0xe3d09136af39a1c1"
+    ],
+    "hello": [],
+    "format": [
+      "PackedCodec"
+    ]
+  },
+  "link/": {
+    "files": {
+      "link/link.ts": {
+        "irHash": "0x9704f8e8a43acdbd",
+        "protocolNumbers": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "callTables": {
+          "CHAT_CALLS": [
+            "send",
+            "count"
+          ],
+          "EVENTS_CALLS": [
+            "message",
+            "ping"
+          ]
+        },
+        "callsWritten": [
+          "0 send",
+          "1 count",
+          "0 message",
+          "1 ping"
+        ],
+        "callsTaken": [
+          0,
+          1,
+          0,
+          1
+        ]
+      }
+    },
+    "connectionIrHash": [
+      "0x9704f8e8a43acdbd"
+    ],
+    "hello": [],
+    "format": [
+      "PackedCodec"
+    ]
+  },
+  "link_jsonrpc/": {
+    "files": {
+      "link_jsonrpc/link.ts": {
+        "irHash": "0xb4520b20f67b5ccb",
+        "protocolNumbers": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "callTables": {
+          "CHAT_CALLS": [
+            "send",
+            "count"
+          ],
+          "EVENTS_CALLS": [
+            "link.Events/message",
+            "link.Events/ping"
+          ]
+        },
+        "callsWritten": [
+          "0 send",
+          "1 count",
+          "0 link.Events/message",
+          "1 link.Events/ping"
+        ],
+        "callsTaken": [
+          0,
+          1,
+          0,
+          1
+        ]
+      }
+    },
+    "connectionIrHash": [
+      "0xb4520b20f67b5ccb"
+    ],
+    "hello": [],
+    "format": [
+      "PackedCodec"
+    ]
+  },
+  "nested/": {
+    "files": {
+      "nested/chat/admin.ts": {
+        "irHash": "0xa6f61afefe65d74a",
+        "protocolNumbers": [
+          0,
+          0
+        ],
+        "callTables": {
+          "ADMIN_CALLS": [
+            "greet"
+          ]
+        },
+        "callsWritten": [
+          "0 greet"
+        ],
+        "callsTaken": [
+          0
+        ]
+      }
+    },
+    "connectionIrHash": [
+      "0xa6f61afefe65d74a"
+    ],
+    "hello": [
+      "434f0201000123456789abcdef0123456789abcdef00010000030052185fd60992ad43029cc29962b3afb4014e6ede7cc8f5aa52ce169f9e656740e20258809aaf4b47d56c69b2c1fc9d4330c101000001005a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a0100"
+    ],
+    "format": [
+      "PackedCodec"
+    ]
+  },
+  "reserved/": {
+    "files": {
+      "reserved/names.ts": {
+        "irHash": "0xc4c5bf4244cbec4a",
+        "protocolNumbers": [
+          0,
+          0
+        ],
+        "callTables": {
+          "STATIC_CALLS": [
+            "typeof"
+          ]
+        },
+        "callsWritten": [
+          "0 typeof"
+        ],
+        "callsTaken": [
+          0
+        ]
+      }
+    },
+    "connectionIrHash": [
+      "0xc579d2e8df3a409b"
+    ],
+    "hello": [],
+    "format": [
+      "PackedCodec"
+    ]
+  },
+  "services/": {
+    "files": {
+      "services/game.ts": {
+        "irHash": "0x0e7319ed91fcea68",
+        "protocolNumbers": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "callTables": {
+          "ACCOUNT_CALLS": [
+            "login"
+          ],
+          "PLAYER_CALLS": [
+            "level"
+          ]
+        },
+        "callsWritten": [
+          "0 login",
+          "0 level"
+        ],
+        "callsTaken": [
+          0,
+          0
+        ]
+      },
+      "services/items.ts": {
+        "irHash": "0x5c9c55a1bd9938af",
+        "protocolNumbers": [
+          2,
+          2,
+          3,
+          3
+        ],
+        "callTables": {
+          "INVENTORY_CALLS": [
+            "items"
+          ],
+          "EVENTS_CALLS": [
+            "changed"
+          ]
+        },
+        "callsWritten": [
+          "0 items",
+          "0 changed"
+        ],
+        "callsTaken": [
+          0,
+          0
+        ]
+      }
+    },
+    "connectionIrHash": [
+      "0x795ece8a736e83e2"
+    ],
+    "hello": [],
+    "format": [
+      "PackedCodec"
+    ]
+  }
+}

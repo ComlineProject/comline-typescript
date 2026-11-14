@@ -102,9 +102,13 @@ fn a_nested_protocols_path_is_spelled_with_colons() {
 fn the_display_path_changes_no_number_or_hash() {
     let req = request(&nested_protocol());
     let files = generated(&req, "nested");
-    let connection = file(&files, "connection.ts");
+    // The package's digest is defined once, in the module its files share,
+    // and the package module re-exports it.
+    let wire = file(&files, "wire.ts");
     let hash = format!("CONNECTION_IR_HASH = {:#018x}n;", connections::connection_ir_hash(&req.schemas));
-    assert!(connection.contains(&hash), "{connection}");
+    assert!(wire.contains(&hash), "{wire}");
+    let connection = file(&files, "connection.ts");
+    assert!(connection.contains("export { CONNECTION_IR_HASH, Format } from \"./wire.js\";"), "{connection}");
     let admin = file(&files, "chat/admin.ts");
     assert!(admin.contains("checkCall(this.peer, AdminSender.PROTOCOL, 0, "), "{admin}");
 }

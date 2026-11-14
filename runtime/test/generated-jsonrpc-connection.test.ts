@@ -1,4 +1,4 @@
-// Exercises real generator output on a JSON-RPC `Connection`. `generated/link_jsonrpc.ts` is
+// Exercises real generator output on a JSON-RPC `Connection`. `generated/link_jsonrpc/` is
 // written by `comline-codegen-typescript`'s `generated_jsonrpc_link_matches_the_
 // runtime_test_fixture` test; this proves it type-checks and runs.
 
@@ -13,10 +13,10 @@ import {
   type EventsMessageParams,
   ChatDispatcher,
   ChatSender,
-  CONNECTION_IR_HASH,
   EventsDispatcher,
   EventsSender,
-} from "./generated/link_jsonrpc.js";
+} from "./generated/link_jsonrpc/link.js";
+import { CONNECTION_IR_HASH } from "./generated/link_jsonrpc/wire.js";
 
 class Sent {
   constructor(public count: bigint) {}

@@ -22,7 +22,8 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsc -p tsconfig.json && node --test dist/test/*.test.js dist/test/prop/*.test.js",
-    "typecheck:generated": "tsc -p tsconfig.generated.json --erasableSyntaxOnly"
+    "typecheck:generated": "tsc -p tsconfig.generated.json --erasableSyntaxOnly",
+    "typecheck:stripped": "node -e \"require('node:fs').rmSync('dist/stripped', { recursive: true, force: true })\" && tsc -p tsconfig.generated.json --declaration --emitDeclarationOnly --noEmit false --stripInternal --outDir dist/stripped && tsc -p tsconfig.stripped.json"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

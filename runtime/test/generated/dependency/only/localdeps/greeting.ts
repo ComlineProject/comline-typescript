@@ -36,12 +36,14 @@ export interface FooGreetParams {
     n: number;
 }
 
+/** @internal */
 export const FooGreetParamsLayout: Layout = { struct: [["n", "u32"]] };
 
 export interface Foo {
     greet(peer: Peer, params: FooGreetParams): Promise<number>;
 }
 
+/** @internal */
 export const FOO_CALLS = ["greet"] as const;
 
 export class FooDispatcher implements Dispatch {

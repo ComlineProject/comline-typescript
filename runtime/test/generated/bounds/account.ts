@@ -6,7 +6,6 @@ import {
     resolveKind,
     checkChars,
     checkCharsExact,
-    PackedCodec,
     type Codec,
     type Connection,
     type Dispatch,
@@ -19,14 +18,6 @@ import {
 /** Canonical digest of the frozen IR this file was generated from — the
 *  two ends of a connection must agree on it. */
 export const IR_HASH = 0x17305ca8c4eea701n;
-
-/** Digest of every schema in the package — what a connection's handshake
-*  checks, so both ends agree on each protocol's number. */
-export const CONNECTION_IR_HASH = 0x17305ca8c4eea701n;
-
-/** The package's wire format (`wire.format`): what this file's helpers
-*  encode with, and what the peer has to speak too. */
-export const Format: Codec = new PackedCodec();
 
 /** A string of exactly 2 characters: make one with `CountryCode.from`. */
 export type CountryCode = string & { readonly __brand: "CountryCode" };
@@ -76,12 +67,14 @@ export interface DirectoryFindParams {
     query: string;
 }
 
+/** @internal */
 export const DirectoryFindParamsLayout: Layout = { struct: [["query", { chars: { max: 8 } }]] };
 
 export interface DirectoryTreeParams {
     root: Folder;
 }
 
+/** @internal */
 export const DirectoryTreeParamsLayout: Layout = { struct: [["root", () => FolderLayout]] };
 
 export interface Directory {
@@ -89,8 +82,10 @@ export interface Directory {
     tree(peer: Peer, params: DirectoryTreeParams): Promise<number>;
 }
 
+/** @internal */
 export const DIRECTORY_CALLS = ["find", "tree"] as const;
 
+/** @internal */
 export class DirectoryDispatcher implements Dispatch {
     /** This protocol's number on a connection. */
     static readonly PROTOCOL = 0;
@@ -136,7 +131,7 @@ export class DirectoryDispatcher implements Dispatch {
         }
     }
 
-    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with `Connection.accept(transport, Format, CONNECTION_IR_HASH)`, or let the package's `serve` / `connect` do it. */
+    /** Provide this protocol on `conn`: the peer's calls to it come here. Open `conn` with `Connection.accept(transport, Format, CONNECTION_IR_HASH)` (`Format` and `CONNECTION_IR_HASH` are in `./wire.js`), or let the package's `serve` / `connect` do it. */
     provideOn(conn: Connection): void {
         conn.provide(DirectoryDispatcher.PROTOCOL, this);
     }
