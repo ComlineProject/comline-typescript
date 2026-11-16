@@ -83,10 +83,10 @@ test("every protocol provided is the package's whole Hello", async () => {
 test("dialling with nothing provided takes no services", async () => {
   const [dialler, acceptor] = duplex();
   const served = accept(acceptor, { chat });
-  const conn = await connect(dialler);
-  assert.ok(await served);
+  await connect(dialler);
+  const server = await served;
   dialler.close();
-  await conn.closed;
+  await server.closed;
 });
 
 test("provide refuses a protocol the Hello didn't list", async () => {
