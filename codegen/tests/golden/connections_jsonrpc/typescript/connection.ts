@@ -25,35 +25,39 @@ import { CONNECTION_IR_HASH } from "./wire.js";
 /** The package's wire format and the digest of every schema in it, which every file of the package shares. */
 export { CONNECTION_IR_HASH, Format } from "./wire.js";
 
-/** What the accepting side provides: one field per protocol, so leaving one out doesn't type-check. */
+/**
+ * What the accepting side provides, a field per protocol: leave one out to not provide it.
+ */
 export interface Services {
-    chat: ns_conformance.Chat;
+    chat?: ns_conformance.Chat;
 }
 
 /**
- * Provide every protocol in `services` on `conn`: the peer's calls to them come here.
+ * Provide each protocol `services` holds on `conn`: the peer's calls to them come here.
  * @internal
  */
 export function provideServices(conn: Connection, services: Services): void {
-    new ns_conformance.ChatDispatcher(services.chat).provideOn(conn);
-}
-
-/** What the dialling side provides: one field per protocol, so leaving one out doesn't type-check. */
-export interface ClientServices {
-    events: ns_conformance.Events;
+    if (services.chat !== undefined) new ns_conformance.ChatDispatcher(services.chat).provideOn(conn);
 }
 
 /**
- * Provide every protocol in `services` on `conn`: the peer's calls to them come here.
+ * What the dialling side provides, a field per protocol: leave one out to not provide it.
+ */
+export interface ClientServices {
+    events?: ns_conformance.Events;
+}
+
+/**
+ * Provide each protocol `services` holds on `conn`: the peer's calls to them come here.
  * @internal
  */
 export function provideClientServices(conn: Connection, services: ClientServices): void {
-    new ns_conformance.EventsDispatcher(services.events).provideOn(conn);
+    if (services.events !== undefined) new ns_conformance.EventsDispatcher(services.events).provideOn(conn);
 }
 
 /**
 * Accept a connection over `transport`: run the handshake, then provide
-* every protocol in `services` on it. The connection comes back serving,
+* the protocols in `services` on it. The connection comes back serving,
 * so the server can call the client through it.
 */
 export async function accept(transport: Transport, services: Services): Promise<Connection> {
@@ -68,11 +72,11 @@ export async function serve(transport: Transport, services: Services): Promise<v
 }
 
 /**
-* Dial over `transport`: run the handshake, then provide every protocol in
+* Dial over `transport`: run the handshake, then provide the protocols in
 * `services`, which the server calls. Call the server's protocols through
 * their senders.
 */
-export async function connect(transport: Transport, services: ClientServices): Promise<Connection> {
+export async function connect(transport: Transport, services: ClientServices = {}): Promise<Connection> {
     const conn = await Connection.connect(transport, new JsonCodec(), CONNECTION_IR_HASH, new JsonRpcConnectionFraming());
     provideClientServices(conn, services);
     return conn;

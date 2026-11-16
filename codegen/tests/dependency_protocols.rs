@@ -95,13 +95,13 @@ fn a_package_using_only_a_dependencys_types_has_no_connection() {
 fn a_dependencys_protocol_is_not_in_services_or_the_hello() {
     let files = generated(&dependency_and_own_protocols(), "own");
     let connection = file(&files, "connection.ts");
-    assert!(connection.contains("export interface Services {\n    chat: ns_api.Chat;\n}"), "{connection}");
+    assert!(connection.contains("export interface Services {\n    chat?: ns_api.Chat;\n}"), "{connection}");
     assert!(!connection.contains("Foo"), "{connection}");
     assert!(!connection.contains("localdeps"), "{connection}");
     assert!(!connection.contains("ns_localdeps"), "{connection}");
 
     // The Hello and the protocols by number name only `Chat`.
-    assert!(connection.contains(" * - 0 `api::Chat`, line 0.1.0: `greet` 0\n"), "{connection}");
+    assert!(connection.contains(" * - `chat`: 0 `api::Chat`, line 0.1.0: `greet` 0\n"), "{connection}");
     assert!(connection.contains("new Map<number, string>([[0, \"api::Chat\"]])"), "{connection}");
 
     // The dependency's protocol is still generated, with no wire numbers of the

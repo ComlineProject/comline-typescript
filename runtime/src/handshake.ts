@@ -11,6 +11,7 @@
  */
 
 import { RuntimeError } from "./contract.js";
+import type { Negotiated } from "./comline2.js";
 import { currentCore } from "./core/core.js";
 import type { Transport } from "./transport.js";
 
@@ -241,6 +242,15 @@ export interface Handshake {
   initiate(transport: Transport, local: Facts): Promise<void>;
   /** Run the provider's side over `transport`. */
   respond(transport: Transport, local: Facts): Promise<void>;
+  /**
+   * What the handshake agreed protocol by protocol, once it has run and
+   * succeeded: only `comline@2` negotiates that way, so a handshake without
+   * this has nothing to give. A connection opened with this handshake
+   * (`Connection.connect`, `accept`) keeps it, and its `provide` refuses a
+   * protocol the handshake didn't accept. Without one there is nothing to
+   * check against, and `provide` takes any protocol.
+   */
+  agreed?(): Negotiated | undefined;
 }
 
 /**

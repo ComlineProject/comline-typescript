@@ -14,6 +14,7 @@ import type {
   Peer,
 } from "./contract.js";
 import { Extensions, Reply, RuntimeError, resolveKind } from "./contract.js";
+import type { Negotiated } from "./comline2.js";
 import { ComlineHandshake, type Handshake } from "./handshake.js";
 import type { Transport } from "./transport.js";
 import { Datagram2Framing } from "./framing/datagram2.js";
@@ -57,6 +58,11 @@ export class Connection implements Peer {
   readonly closed: Promise<void>;
 
   private readonly providers = new Map<number, Dispatch>();
+  /**
+   * What the connection's handshake agreed, when it negotiated protocol by
+   * protocol (`comline@2`): what {@link provide} checks against.
+   */
+  private agreed: Negotiated | undefined;
   private readonly waiting = new Map<bigint, Waiting>();
   private readonly queue: { protocol: number | undefined; request: DecodedRequest; oneWay: boolean }[] = [];
   private nextId = 0n;
@@ -104,7 +110,9 @@ export class Connection implements Peer {
   ): Promise<Connection> {
     const core = await coreFor(framing);
     await handshake.initiate(transport, { irHash, wireFormat: codec.name, framing: framing.name });
-    return new Connection(transport, codec, framing, core);
+    const conn = new Connection(transport, codec, framing, core);
+    conn.agreed = handshake.agreed?.();
+    return conn;
   }
 
   /** Answer: run `handshake`'s provider side (`comline@1` unless given). */
@@ -117,11 +125,28 @@ export class Connection implements Peer {
   ): Promise<Connection> {
     const core = await coreFor(framing);
     await handshake.respond(transport, { irHash, wireFormat: codec.name, framing: framing.name });
-    return new Connection(transport, codec, framing, core);
+    const conn = new Connection(transport, codec, framing, core);
+    conn.agreed = handshake.agreed?.();
+    return conn;
   }
 
-  /** Provide `protocol` on this connection: the peer's requests to it go to `dispatcher`. */
+  /**
+   * Provide `protocol` on this connection: the peer's requests to it go to `dispatcher`.
+   *
+   * On a connection whose handshake ran `comline@2`, a protocol the handshake
+   * didn't accept is refused with `RuntimeError("unavailable")`, and nothing is
+   * registered: one this end's Hello didn't list (a Hello for a subset leaves
+   * protocols out), or one the peer refused ({@link Negotiated.checkProvide}).
+   * A connection with no such handshake (`comline@1`, `none`, or
+   * {@link Connection.unverified}) has nothing to check against and takes any
+   * protocol.
+   *
+   * Direction isn't checked here: a Hello entry says nothing about who
+   * implements a protocol, so the generated code checks that a side provides
+   * only what it provides.
+   */
   provide(protocol: number, dispatcher: Dispatch): void {
+    this.agreed?.checkProvide(protocol);
     this.providers.set(protocol, dispatcher);
   }
 

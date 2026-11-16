@@ -1321,7 +1321,12 @@ fn package_module(
     }
     if comline2 {
         values.push("Negotiated");
+        values.push("buildHello");
+        values.push("providedEntries");
     }
+    // What `hello_parts` has vouched for: every protocol the package's `Services`
+    // provide has its entry, from which each end's Hello is built.
+    let parts = if comline2 { Some(comline_codegen::facts::hello_parts(req, package).ok()?) } else { None };
     let mut s = format!("{header}\n{}\nimport {{\n", entry_doc(&connection_entry(req, connection, Spelling::Beside), false));
     for v in &values {
         s.push_str(&format!("    {v},\n"));
@@ -1330,7 +1335,7 @@ fn package_module(
         s.push_str("    type Codec,\n");
     }
     if comline2 {
-        s.push_str("    type Peer,\n");
+        s.push_str("    type Peer,\n    type ProtocolEntry,\n");
     }
     s.push_str("    type Transport,\n} from \"@comline/runtime\";\n");
     s.push_str(external_imports(&external, str::to_string).trim_end_matches('\n'));
@@ -1365,44 +1370,53 @@ fn package_module(
             connections::connection_ir_hash(&req.schemas)
         ));
     }
-    if comline2 {
-        // `facts::check` has vouched for the facts.
-        let items = comline2_items(req, package, type_of(encodings, &package.handshake)).ok()?;
-        s.push_str(&items);
+    if let Some(parts) = &parts {
+        s.push_str(&comline2_items(req, parts, package, type_of(encodings, &package.handshake)));
     }
 
-    let mut side = |ty: &str, provide: &str, provided: &[connections::Provided], who: &str| {
+    let mut side = |ty: &str, provide: &str, table: &str, provided: &[connections::Provided], who: &str| -> Option<bool> {
         if provided.is_empty() {
-            return false;
+            return Some(false);
         }
+        let hello = if comline2 {
+            format!(
+                " * The Hello lists the ones given, and the protocols the {other} provides, which this side calls.\n",
+                other = if ty == "Services" { "dialling side" } else { "accepting side" }
+            )
+        } else {
+            String::new()
+        };
         s.push_str(&format!(
-            "/** What {who} provides: one field per protocol, so leaving one out doesn't type-check. */\n\
+            "/**\n * What {who} provides, a field per protocol: leave one out to not provide it.\n{hello} */\n\
              export interface {ty} {{\n"
         ));
         for p in provided {
-            s.push_str(&format!("    {}: {}.{};\n", camel(&p.field), module(&p.namespace), ident(&p.name)));
+            s.push_str(&format!("    {}?: {}.{};\n", camel(&p.field), module(&p.namespace), ident(&p.name)));
         }
         s.push_str("}\n\n");
+        if let Some(parts) = &parts {
+            s.push_str(&hello_table(table, ty, who, provided, parts)?);
+        }
         s.push_str(&format!(
             "/**\n\
-             \x20* Provide every protocol in `services` on `conn`: the peer's calls to them come here.\n\
+             \x20* Provide each protocol `services` holds on `conn`: the peer's calls to them come here.\n\
              \x20* @internal\n\
              \x20*/\n\
              export function {provide}(conn: Connection, services: {ty}): void {{\n"
         ));
         for p in provided {
             s.push_str(&format!(
-                "    new {}.{}Dispatcher(services.{}).provideOn(conn);\n",
+                "    if (services.{field} !== undefined) new {}.{}Dispatcher(services.{field}).provideOn(conn);\n",
                 module(&p.namespace),
                 p.name,
-                camel(&p.field)
+                field = camel(&p.field)
             ));
         }
         s.push_str("}\n\n");
-        true
+        Some(true)
     };
-    let has_server = side("Services", "provideServices", server, "the accepting side");
-    let has_client = side("ClientServices", "provideClientServices", client, "the dialling side");
+    let has_server = side("Services", "provideServices", "SERVICES_HELLO", server, "the accepting side")?;
+    let has_client = side("ClientServices", "provideClientServices", "CLIENT_SERVICES_HELLO", client, "the dialling side")?;
 
     let datagram3_framing = format!(", new {}()", type_of(encodings, &package.framing));
     let framing_arg = if jsonrpc {
@@ -1431,14 +1445,29 @@ fn package_module(
             open
         }
     };
-    let opening = if comline2 { "    const agreed = handshake();\n" } else { "" };
+    // The Hello lists what this end provides, given in `services`, and every
+    // protocol of the other side, which it may call.
+    let hello = |provides: bool, table: &str, called: bool, called_table: &str| {
+        let provided = if provides { format!("providedEntries({table}, services)") } else { "[]".to_string() };
+        let called = if called { format!("Object.values({called_table})") } else { "[]".to_string() };
+        format!("    const agreed = handshake({provided}, {called});\n")
+    };
+    let (accept_opening, connect_opening) = if comline2 {
+        (
+            hello(has_server, "SERVICES_HELLO", has_client, "CLIENT_SERVICES_HELLO"),
+            hello(has_client, "CLIENT_SERVICES_HELLO", has_server, "SERVICES_HELLO"),
+        )
+    } else {
+        (String::new(), String::new())
+    };
     let (server_params, server_provide) = if has_server {
         ("transport: Transport, services: Services", "    provideServices(conn, services);\n")
     } else {
         ("transport: Transport", "")
     };
+    // Dialling without providing anything is a subset too, and the usual one.
     let (client_params, client_provide) = if has_client {
-        ("transport: Transport, services: ClientServices", "    provideClientServices(conn, services);\n")
+        ("transport: Transport, services: ClientServices = {}", "    provideClientServices(conn, services);\n")
     } else {
         ("transport: Transport", "")
     };
@@ -1446,7 +1475,7 @@ fn package_module(
     // Only a package whose dialling side provides something takes `services`.
     let dial_doc = if has_client {
         "/**\n\
-         * Dial over `transport`: run the handshake, then provide every protocol in\n\
+         * Dial over `transport`: run the handshake, then provide the protocols in\n\
          * `services`, which the server calls. Call the server's protocols through\n\
          * their senders.\n\
          */\n"
@@ -1459,11 +1488,11 @@ fn package_module(
     s.push_str(&format!(
         "/**\n\
          * Accept a connection over `transport`: run the handshake, then provide\n\
-         * every protocol in `services` on it. The connection comes back serving,\n\
+         * the protocols in `services` on it. The connection comes back serving,\n\
          * so the server can call the client through it.\n\
          */\n\
          export async function accept({server_params}): Promise<Connection> {{\n\
-         {opening}\
+         {accept_opening}\
          \x20   const conn = {};\n\
          {server_provide}\
          \x20   return conn;\n\
@@ -1474,7 +1503,7 @@ fn package_module(
          }}\n\n\
          {dial_doc}\
          export async function connect({client_params}): Promise<Connection> {{\n\
-         {opening}\
+         {connect_opening}\
          \x20   const conn = {};\n\
          {client_provide}\
          \x20   return conn;\n\
@@ -1629,62 +1658,103 @@ fn display_path(namespace: &str, name: &str) -> String {
     path
 }
 
-/// The package module's `comline@2` items: this end's Hello (the facts it was
-/// generated from), `handshake()` with the parameters the package states, and
-/// `negotiated` / `warnings` for what a connection agreed.
+/// A Hello entry's line in a doc comment: its wire number, path, line and
+/// the numbers of its functions.
+fn hello_entry_doc(p: &comline_codegen::facts::HelloEntry) -> String {
+    let functions: Vec<String> = p.functions.iter().map(|(f, n)| format!("`{f}` {n}")).collect();
+    format!("{} `{}`, line {}: {}", p.number, display_path(&p.namespace, &p.name), p.line, functions.join(", "))
+}
+
+/// `bytes` as the rows of a `Uint8Array` literal, twelve to a row.
+fn byte_rows(bytes: &[u8], indent: &str) -> String {
+    let mut s = String::new();
+    for chunk in bytes.chunks(12) {
+        let row: Vec<String> = chunk.iter().map(|b| format!("{b:#04x}")).collect();
+        s.push_str(&format!("{indent}{},\n", row.join(", ")));
+    }
+    s
+}
+
+/// What a Hello holds whichever protocols it lists, as the runtime's
+/// `buildHello` takes it: the bytes up to the list of protocols.
+fn hello_header(parts: &comline_codegen::facts::HelloParts) -> Vec<u8> {
+    // The Hello of no protocol ends with its count, a single zero byte.
+    let mut header = parts.assemble([]);
+    assert_eq!(header.pop(), Some(0), "an empty protocol list is the byte 0");
+    header
+}
+
+/// A side's protocols as a Hello lists each, by the `Services` field that
+/// provides it: `name` is the constant, `interface` the `Services` type its
+/// keys are the fields of. `None` where a protocol has no entry on the package's
+/// connection, which `hello_parts` says is every one it provides.
+fn hello_table(
+    name: &str,
+    interface: &str,
+    who: &str,
+    provided: &[connections::Provided],
+    parts: &comline_codegen::facts::HelloParts,
+) -> Option<String> {
+    let mut doc = format!(
+        "/**\n * The protocols {who} provides, as a Hello lists each, by their field in `{interface}`:\n *\n"
+    );
+    let mut rows = String::new();
+    for p in provided {
+        let entry = parts.protocols.iter().find(|e| e.namespace == p.namespace && e.name == p.name)?;
+        doc.push_str(&format!(" * - `{}`: {}\n", camel(&p.field), hello_entry_doc(entry)));
+        let mut bytes = vec![];
+        entry.encode(&mut bytes);
+        rows.push_str(&format!(
+            "    {}: {{\n        number: {},\n        bytes: new Uint8Array([\n{}        ]),\n    }},\n",
+            camel(&p.field),
+            entry.number,
+            byte_rows(&bytes, "            ")
+        ));
+    }
+    Some(format!(
+        "{doc} *\n * @internal\n */\nexport const {name}: Record<keyof {interface}, ProtocolEntry> = {{\n{rows}}};\n\n"
+    ))
+}
+
+/// The package module's `comline@2` items: the Hello's header (the facts it
+/// was generated from, which every end shares), `handshake()` with the
+/// protocols an end provides and calls and the parameters the package states,
+/// and `negotiated` / `warnings` for what a connection agreed. Each side's
+/// protocols, as a Hello lists them, are emitted with its `Services`.
 fn comline2_items(
     req: &GenerateRequest,
+    parts: &comline_codegen::facts::HelloParts,
     package: &connections::PackageConnection,
     class: &str,
-) -> Result<String> {
-    let (hello, protocols) = comline_codegen::facts::hello(req, package)?;
+) -> String {
+    // `hello_parts` had facts.
+    let facts = req.facts.as_ref().expect("hello_parts had facts");
     let params = comline_codegen::facts::Comline2Params::of(&package.handshake_value);
-    let facts = req.facts.as_ref().expect("hello() had facts");
     let mut s = format!(
-        "/**\n * This end's `comline@2` Hello: version {} of package `{}`, as its history\n * records it. Its protocols, by wire number:\n *\n",
+        "/**\n * This package's `comline@2` Hello up to its list of protocols: version {} of package\n * `{}`, as its history records it. {{@link buildHello}} adds the protocols an end\n * provides and calls.\n *\n * @internal\n */\nexport const HELLO_HEADER = new Uint8Array([\n",
         facts.version,
         facts.id.as_deref().unwrap_or_default()
     );
-    for p in &protocols {
-        let functions: Vec<String> = p
-            .functions
-            .iter()
-            .map(|(f, n)| format!("`{f}` {n}"))
-            .collect();
-        s.push_str(&format!(
-            " * - {} `{}`, line {}: {}\n",
-            p.number,
-            display_path(&p.namespace, &p.name),
-            p.line,
-            functions.join(", ")
-        ));
-    }
-    s.push_str(" *\n * @internal\n */\nexport const HELLO = new Uint8Array([\n");
-    for chunk in hello.chunks(12) {
-        let bytes: Vec<String> = chunk.iter().map(|b| format!("{b:#04x}")).collect();
-        s.push_str(&format!("    {},\n", bytes.join(", ")));
-    }
+    s.push_str(&byte_rows(&hello_header(parts), "    "));
     s.push_str("]);\n\n");
-    let camel_value = |v: &str| v.to_string();
     s.push_str(&format!(
         "/**\n\
-         \x20* The `comline@2` handshake, with {{@link HELLO}} and the parameters the package states.\n\
+         \x20* The `comline@2` handshake of an end that provides `provided` and calls `called`, with their\n\
+         \x20* Hello ({{@link HELLO_HEADER}}, then those protocols) and the parameters the package states.\n\
          \x20* @internal\n\
          \x20*/\n\
-         export function handshake(): {class} {{\n\
-         \x20   return new {class}(HELLO, {{\n\
+         export function handshake(provided: readonly ProtocolEntry[], called: readonly ProtocolEntry[]): {class} {{\n\
+         \x20   return new {class}(buildHello(HELLO_HEADER, provided, called), {{\n\
          \x20       scope: \"{}\",\n\
          \x20       newerConsumer: \"{}\",\n\
          \x20       sameVersionDiffers: \"{}\",\n\
          \x20       exchange: \"{}\",\n\
          \x20   }});\n\
          }}\n\n",
-        camel_value(&params.scope),
-        camel_value(&params.newer_consumer),
-        camel_value(&params.same_version_differs),
-        camel_value(&params.exchange),
+        params.scope, params.newer_consumer, params.same_version_differs, params.exchange,
     ));
-    let paths: Vec<String> = protocols
+    let paths: Vec<String> = parts
+        .protocols
         .iter()
         .map(|p| format!("[{}, \"{}\"]", p.number, display_path(&p.namespace, &p.name)))
         .collect();
@@ -1704,7 +1774,7 @@ fn comline2_items(
          }}\n\n",
         paths.join(", ")
     ));
-    Ok(s)
+    s
 }
 
 // ── protocol ───────────────────────────────────────────────────────────────
