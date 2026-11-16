@@ -55,12 +55,14 @@ cd runtime && npm ci && npm test
 ## Features
 
 What this generator implements, feature by feature. Each claim is checked by
-the conformance suite in [`ComlineProject/generation`](https://github.com/ComlineProject/generation):
+`codegen/tests/conformance.rs`, which runs the conformance corpus of
+[`ComlineProject/generation`](https://github.com/ComlineProject/generation)
+over this generator, against the goldens in `codegen/tests/golden/`:
 a supported feature has a fixture that generates and matches its golden output,
 an ignored one generates exactly what it would without the feature, and an
 unsupported one is refused with an error naming every use. The full matrix,
-with the fixtures that prove each claim, is in
-[`FEATURES.md`](https://github.com/ComlineProject/generation/blob/master/FEATURES.md).
+with the fixtures that prove each claim, is in [`FEATURES.md`](FEATURES.md)
+(also as [`features.json`](features.json)), which that run writes.
 
 <!-- features:start -->
 <!-- Generated from `SUPPORT` in `codegen/src/lib.rs` - don't edit by hand. -->

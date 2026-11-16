@@ -1,0 +1,541 @@
+{
+  "features": [
+    {
+      "description": "`struct` declarations",
+      "id": "structs",
+      "title": "structs"
+    },
+    {
+      "description": "`enum` declarations",
+      "id": "enums",
+      "title": "enums"
+    },
+    {
+      "description": "fields marked `optional`",
+      "id": "optional-fields",
+      "title": "optional fields"
+    },
+    {
+      "description": "variable-length arrays, `T[]`",
+      "id": "arrays",
+      "title": "arrays"
+    },
+    {
+      "description": "fixed-length arrays, `T[N]`",
+      "id": "fixed-arrays",
+      "title": "fixed-length arrays"
+    },
+    {
+      "description": "a `T[N]` with N over 32 anywhere but a field's own, non-optional type: inside another array, optional, an alias, an argument or a return",
+      "id": "large-fixed-arrays-nested",
+      "title": "fixed arrays over 32 elements, nested"
+    },
+    {
+      "description": "`union(A B ...)` types",
+      "id": "unions",
+      "title": "unions"
+    },
+    {
+      "description": "`type Name = ...` declarations",
+      "id": "type-aliases",
+      "title": "type aliases"
+    },
+    {
+      "description": "`const` declarations",
+      "id": "constants",
+      "title": "constants"
+    },
+    {
+      "description": "`protocol` declarations and their functions",
+      "id": "protocols",
+      "title": "protocols"
+    },
+    {
+      "description": "`error` declarations",
+      "id": "errors",
+      "title": "errors"
+    },
+    {
+      "description": "functions declared with `! Error`",
+      "id": "throws",
+      "title": "functions that throw"
+    },
+    {
+      "description": "`@validators` on fields and type aliases, checked in generated code",
+      "id": "validators",
+      "title": "validators"
+    },
+    {
+      "description": "`use` of another schema's declarations",
+      "id": "imports",
+      "title": "imports between schemas"
+    },
+    {
+      "description": "schemas in subdirectories (`chat::admin`)",
+      "id": "nested-namespaces",
+      "title": "nested namespaces"
+    },
+    {
+      "description": "`--mode lib`: a buildable package, not bare source files",
+      "id": "lib-mode",
+      "title": "`lib` mode"
+    },
+    {
+      "description": "`[generate] external_std`: `std` referenced as its own package",
+      "id": "external-std",
+      "title": "`external_std`"
+    },
+    {
+      "description": "`[generate] validate_on_decode`: decoding runs the checks",
+      "id": "validate-on-decode",
+      "title": "`validate_on_decode`"
+    },
+    {
+      "description": "`@framing = \"jsonrpc\"` (or as the package default)",
+      "id": "framing-jsonrpc",
+      "title": "JSON-RPC framing"
+    },
+    {
+      "description": "`@handshake = \"none\"` (or as the package default)",
+      "id": "handshake-none",
+      "title": "no handshake"
+    },
+    {
+      "description": "`@framing = \"datagram@3\"` (or as the package default): calls addressed by wire numbers",
+      "id": "framing-datagram3",
+      "title": "`datagram@3` framing"
+    },
+    {
+      "description": "`@handshake = \"comline@2\"` (or as the package default): compatibility checked by each version's facts, calls the peer lacks failing locally",
+      "id": "handshake-comline2",
+      "title": "`comline@2` handshake"
+    },
+    {
+      "description": "protocols on a connection, with calls in both directions: `datagram@3` (the default) or `datagram@2`, or `@provider = Client` / `Multiple`",
+      "id": "connections",
+      "title": "connections"
+    },
+    {
+      "description": "`[generate] async`: connection protocols get async handlers and senders",
+      "id": "async",
+      "title": "`async`"
+    },
+    {
+      "description": "`wire.format = \"packed@1\"`, the default: fixed-width fields, no tags",
+      "id": "format-packed",
+      "title": "the `packed@1` format"
+    },
+    {
+      "description": "`wire.format = \"json@1\"`",
+      "id": "format-json",
+      "title": "the `json@1` format"
+    },
+    {
+      "description": "`wire.format = \"msgpack@1\"`",
+      "id": "format-msgpack",
+      "title": "the `msgpack@1` format"
+    },
+    {
+      "description": "a maximum or exact length on a string or list (`char[max 64]`, `char[8]`, `T[max N]`), or a depth limit (`@max_depth`): checked while decoding and encoding",
+      "id": "bounds",
+      "title": "bounds"
+    },
+    {
+      "description": "`char`: one Unicode scalar value",
+      "id": "chars",
+      "title": "single characters"
+    }
+  ],
+  "generators": [
+    {
+      "name": "typescript",
+      "support": {
+        "arrays": {
+          "note": null,
+          "proven_by": [
+            "optional_and_arrays",
+            "type_refs",
+            "shapes",
+            "cross_schema",
+            "validators",
+            "validators_on_decode",
+            "large_fixed_arrays_nested",
+            "lockstep",
+            "bounds"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "async": {
+          "note": "handlers and senders always return Promises: the output is async either way",
+          "proven_by": [
+            "connections_async"
+          ],
+          "since": null,
+          "state": "ignored",
+          "tracking": null
+        },
+        "bounds": {
+          "note": null,
+          "proven_by": [
+            "bounds"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "chars": {
+          "note": null,
+          "proven_by": [
+            "chars"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "connections": {
+          "note": null,
+          "proven_by": [
+            "protocol",
+            "error_shapes",
+            "validators",
+            "validators_on_decode",
+            "handshake_none",
+            "framing_datagram3",
+            "handshake_comline2",
+            "connections",
+            "connections_async",
+            "connections_jsonrpc",
+            "connections_default",
+            "format_json",
+            "dependency_protocol",
+            "dependency_and_own_protocols",
+            "nested_protocol"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "constants": {
+          "note": null,
+          "proven_by": [
+            "constant",
+            "shapes",
+            "validators",
+            "validators_on_decode"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "enums": {
+          "note": null,
+          "proven_by": [
+            "enum_basic"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "errors": {
+          "note": null,
+          "proven_by": [
+            "protocol",
+            "error_shapes",
+            "lockstep",
+            "format_json"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "external-std": {
+          "note": null,
+          "proven_by": [
+            "external_std"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "fixed-arrays": {
+          "note": "rendered as `T[]`: the length isn't part of the type",
+          "proven_by": [
+            "shapes",
+            "large_fixed_arrays_nested"
+          ],
+          "since": null,
+          "state": "partial",
+          "tracking": null
+        },
+        "format-json": {
+          "note": null,
+          "proven_by": [
+            "format_json"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "format-msgpack": {
+          "note": "`@comline/runtime` has no MessagePack codec yet",
+          "proven_by": [
+            "format_msgpack"
+          ],
+          "since": null,
+          "state": "unsupported",
+          "tracking": null
+        },
+        "format-packed": {
+          "note": null,
+          "proven_by": [
+            "protocol",
+            "error_shapes",
+            "validators",
+            "validators_on_decode",
+            "handshake_none",
+            "framing_datagram3",
+            "handshake_comline2",
+            "lockstep",
+            "connections",
+            "connections_async",
+            "connections_default",
+            "dependency_protocol",
+            "dependency_and_own_protocols",
+            "nested_protocol"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "framing-datagram3": {
+          "note": null,
+          "proven_by": [
+            "framing_datagram3",
+            "handshake_comline2",
+            "connections_default",
+            "dependency_protocol",
+            "dependency_and_own_protocols",
+            "nested_protocol"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "framing-jsonrpc": {
+          "note": null,
+          "proven_by": [
+            "framing_jsonrpc",
+            "connections_jsonrpc"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "handshake-comline2": {
+          "note": null,
+          "proven_by": [
+            "handshake_comline2",
+            "connections_default",
+            "dependency_protocol",
+            "dependency_and_own_protocols",
+            "nested_protocol"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "handshake-none": {
+          "note": null,
+          "proven_by": [
+            "handshake_none"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "imports": {
+          "note": null,
+          "proven_by": [
+            "cross_schema",
+            "import_alias",
+            "import_glob",
+            "nested_namespace",
+            "external_std",
+            "validators",
+            "validators_on_decode",
+            "dependency_protocol",
+            "dependency_and_own_protocols"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "large-fixed-arrays-nested": {
+          "note": "rendered as `T[]`: the length isn't part of the type",
+          "proven_by": [
+            "large_fixed_arrays_nested"
+          ],
+          "since": null,
+          "state": "partial",
+          "tracking": null
+        },
+        "lib-mode": {
+          "note": null,
+          "proven_by": [
+            "nested_namespace",
+            "external_std"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "nested-namespaces": {
+          "note": null,
+          "proven_by": [
+            "nested_namespace",
+            "external_std",
+            "validators",
+            "validators_on_decode",
+            "dependency_protocol",
+            "dependency_and_own_protocols",
+            "nested_protocol"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "optional-fields": {
+          "note": null,
+          "proven_by": [
+            "optional_and_arrays",
+            "type_refs",
+            "shapes",
+            "cross_schema",
+            "validators",
+            "validators_on_decode",
+            "large_fixed_arrays_nested",
+            "bounds"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "protocols": {
+          "note": null,
+          "proven_by": [
+            "protocol",
+            "error_shapes",
+            "validators",
+            "validators_on_decode",
+            "framing_jsonrpc",
+            "handshake_none",
+            "framing_datagram3",
+            "handshake_comline2",
+            "lockstep",
+            "connections",
+            "connections_async",
+            "connections_jsonrpc",
+            "connections_default",
+            "format_json",
+            "dependency_protocol",
+            "dependency_and_own_protocols",
+            "nested_protocol"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "structs": {
+          "note": null,
+          "proven_by": [
+            "primitives",
+            "optional_and_arrays",
+            "type_refs",
+            "protocol",
+            "shapes",
+            "cross_schema",
+            "import_alias",
+            "import_glob",
+            "nested_namespace",
+            "external_std",
+            "validators",
+            "validators_on_decode",
+            "unions",
+            "large_fixed_arrays_nested",
+            "lockstep",
+            "format_json",
+            "bounds",
+            "chars",
+            "dependency_protocol",
+            "dependency_and_own_protocols",
+            "nested_protocol"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "throws": {
+          "note": null,
+          "proven_by": [
+            "protocol",
+            "error_shapes",
+            "lockstep",
+            "format_json"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "type-aliases": {
+          "note": null,
+          "proven_by": [
+            "validators",
+            "validators_on_decode",
+            "unions",
+            "bounds"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "unions": {
+          "note": null,
+          "proven_by": [
+            "unions"
+          ],
+          "since": null,
+          "state": "supported",
+          "tracking": null
+        },
+        "validate-on-decode": {
+          "note": "no checks are generated to run on decode yet",
+          "proven_by": [
+            "validators_on_decode"
+          ],
+          "since": null,
+          "state": "ignored",
+          "tracking": "core#96"
+        },
+        "validators": {
+          "note": "the types are generated; the checks aren't run yet",
+          "proven_by": [
+            "validators",
+            "validators_on_decode"
+          ],
+          "since": null,
+          "state": "ignored",
+          "tracking": "core#96"
+        }
+      },
+      "version": "5.0",
+      "versions": {
+        "changes": [],
+        "floor": "5.0",
+        "forward_compatible": false,
+        "verified_up_to": "5.9"
+      }
+    }
+  ]
+}
