@@ -1778,9 +1778,9 @@ fn the_package_connection_gets_services_and_serve() {
         "import * as ns_game from \"./game.js\";",
         // The package's constants are defined once, in the module its files share.
         "export { CONNECTION_IR_HASH, Format } from \"./wire.js\";",
-        "export interface Services {\n    account: ns_game.Account;\n    player: ns_game.Player;\n    inventory: ns_items.Inventory;\n}",
-        "export interface ClientServices {\n    events: ns_items.Events;\n}",
-        "    new ns_items.InventoryDispatcher(services.inventory).provideOn(conn);",
+        "export interface Services {\n    account?: ns_game.Account;\n    player?: ns_game.Player;\n    inventory?: ns_items.Inventory;\n}",
+        "export interface ClientServices {\n    events?: ns_items.Events;\n}",
+        "    if (services.inventory !== undefined) new ns_items.InventoryDispatcher(services.inventory).provideOn(conn);",
         "export async function serve(transport: Transport, services: Services): Promise<void> {",
         "const conn = await Connection.connect(transport, Format, CONNECTION_IR_HASH);",
     ] {
@@ -2167,6 +2167,80 @@ fn generated_comline2_matches_the_runtime_test_fixture() {
         chat.contains("checkCall(this.peer, ChatSender.PROTOCOL, 2, \"chat::Chat\", \"whisper\");"),
         "{chat}"
     );
+}
+
+/// Two applications in one package, a protocol per side in each: `Chat` and
+/// `Events` in `public`, `Admin` and `Alerts` in `admin`.
+const PUBLIC: &str = "@framing = \"datagram@3\"\n@handshake = \"comline@2\"\n\
+    protocol Chat {\n    function send(text: string) -> u32;\n}\n\n\
+    @framing = \"datagram@3\"\n@handshake = \"comline@2\"\n@provider = Client\n\
+    protocol Events {\n    function shown(n: u32) -> bool;\n}\n";
+const ADMIN: &str = "@framing = \"datagram@3\"\n@handshake = \"comline@2\"\n\
+    protocol Admin {\n    function kick(user: u32);\n}\n\n\
+    @framing = \"datagram@3\"\n@handshake = \"comline@2\"\n@provider = Client\n\
+    protocol Alerts {\n    function raised(code: u32);\n}\n";
+
+/// The request for the two applications, with the facts core's history would
+/// give: four protocols, wire numbers 0 to 3, one function each.
+fn subset_req() -> GenerateRequest {
+    use comline_codegen::facts::{EncodingFacts, FunctionFacts, PackageFacts, ProtocolFacts};
+    use comline_core::schema::ir::compiler::interpreter::incremental::IncrementalInterpreter;
+    use comline_core::schema::ir::compiler::Compile;
+    let encoding = |kind: &str, name: &str| {
+        let e = comline_core::compat::encoding(kind, name, Default::default());
+        EncodingFacts { kind: e.kind, name: e.name, params: e.params, param_hash: e.param_hash }
+    };
+    let protocol = |namespace: &str, name: &str, number: u16, shape: &str, function: &str| ProtocolFacts {
+        path: format!("{namespace}::{name}"),
+        namespace: namespace.into(),
+        name: name.into(),
+        line: "0.1.0".into(),
+        number,
+        shape_hash: shape.repeat(32),
+        functions: vec![FunctionFacts { name: function.into(), since: "0.1.0".into(), number: 0 }],
+    };
+    let facts = PackageFacts {
+        id: Some("0123456789abcdef0123456789abcdef".into()),
+        version: "0.1.0".into(),
+        protocols: vec![
+            protocol("public", "Chat", 0, "aa", "send"),
+            protocol("public", "Events", 1, "bb", "shown"),
+            protocol("admin", "Admin", 2, "cc", "kick"),
+            protocol("admin", "Alerts", 3, "dd", "raised"),
+        ],
+        encodings: vec![
+            encoding("format", "packed@1"),
+            encoding("framing", "datagram@3"),
+            encoding("handshake", "comline@2"),
+        ],
+    };
+    let mut req = code_req(&[
+        ("public".to_string(), IncrementalInterpreter::from_source(PUBLIC)),
+        ("admin".to_string(), IncrementalInterpreter::from_source(ADMIN)),
+    ]);
+    req.package.version = facts.version.clone();
+    req.facts = Some(facts);
+    req
+}
+
+/// A side takes a subset of the protocols it provides, and the Hello lists
+/// that and what the side calls. Kept in `runtime/test/generated/subset/` so
+/// the Node job runs it (`generated-subset.test.ts`). Regenerate with
+/// `TS_BLESS=1`.
+#[test]
+fn generated_subset_matches_the_runtime_test_fixture() {
+    let files = generate_typescript(&subset_req()).unwrap();
+    bless_fixture("subset", &files);
+    let module = &files.iter().find(|f| f.path.to_str() == Some("connection.ts")).unwrap().contents;
+    for expected in [
+        "export interface Services {\n    chat?: ns_public.Chat;\n    admin?: ns_admin.Admin;\n}",
+        "export interface ClientServices {\n    events?: ns_public.Events;\n    alerts?: ns_admin.Alerts;\n}",
+        "    const agreed = handshake(providedEntries(SERVICES_HELLO, services), Object.values(CLIENT_SERVICES_HELLO));",
+        "    const agreed = handshake(providedEntries(CLIENT_SERVICES_HELLO, services), Object.values(SERVICES_HELLO));",
+        "export async function connect(transport: Transport, services: ClientServices = {}): Promise<Connection> {",
+    ] {
+        assert!(module.contains(expected), "missing `{expected}` in:\n{module}");
+    }
 }
 
 /// Wire numbers come from the facts or not at all.

@@ -16,6 +16,8 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { test } from "node:test";
 
+import { buildHello } from "../src/index.js";
+
 const RUNTIME = new URL("../../", import.meta.url);
 const GENERATED = new URL("test/generated/", RUNTIME);
 const RECORD = new URL("test/wire-invariance.json", RUNTIME);
@@ -39,7 +41,7 @@ interface ShapeFacts {
   files: Record<string, FileFacts>;
   /** Every distinct `CONNECTION_IR_HASH` the shape defines: one, the package's. */
   connectionIrHash: string[];
-  /** Every distinct `HELLO`, as hex. */
+  /** Every distinct Hello of the package's whole connection, as hex: its header with every protocol's entry. */
   hello: string[];
   /** Every distinct codec `Format` is built from. */
   format: string[];
@@ -78,8 +80,18 @@ function factsOf(text: string): { file: FileFacts; connectionIrHash: string[]; h
   const taken = all(text, /^\s+case (\d+): \{$/gm).map((m) => Number(m[1]));
   if (taken.length) file.callsTaken = taken;
 
-  const hello = all(text, /export const HELLO = new Uint8Array\(\[([^\]]*)\]\);/g).map((m) =>
-    [...m[1]!.matchAll(/0x([0-9a-f]{2})/g)].map((b) => b[1]).join(""),
+  // The Hello is emitted as parts, a header and an entry per protocol, which an
+  // end puts together from what it provides and calls; with every protocol it
+  // is the whole connection's Hello, the one the package used to embed.
+  const bytesOf = (list: string): Uint8Array =>
+    Uint8Array.from([...list.matchAll(/0x([0-9a-f]{2})/g)].map((b) => parseInt(b[1]!, 16)));
+  const headers = all(text, /export const HELLO_HEADER = new Uint8Array\(\[([^\]]*)\]\);/g).map((m) => bytesOf(m[1]!));
+  const entries = all(text, /number: (\d+),\s+bytes: new Uint8Array\(\[([^\]]*)\]\),/g).map((m) => ({
+    number: Number(m[1]),
+    bytes: bytesOf(m[2]!),
+  }));
+  const hello = headers.map((header) =>
+    [...buildHello(header, entries, [])].map((b) => b.toString(16).padStart(2, "0")).join(""),
   );
   return {
     file,

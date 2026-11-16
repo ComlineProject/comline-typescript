@@ -645,5 +645,68 @@
     "format": [
       "PackedCodec"
     ]
+  },
+  "subset/": {
+    "files": {
+      "subset/admin.ts": {
+        "irHash": "0x3bc15e97071208ea",
+        "protocolNumbers": [
+          2,
+          2,
+          3,
+          3
+        ],
+        "callTables": {
+          "ADMIN_CALLS": [
+            "kick"
+          ],
+          "ALERTS_CALLS": [
+            "raised"
+          ]
+        },
+        "callsWritten": [
+          "0 kick",
+          "0 raised"
+        ],
+        "callsTaken": [
+          0,
+          0
+        ]
+      },
+      "subset/public.ts": {
+        "irHash": "0x73062149064e1beb",
+        "protocolNumbers": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "callTables": {
+          "CHAT_CALLS": [
+            "send"
+          ],
+          "EVENTS_CALLS": [
+            "shown"
+          ]
+        },
+        "callsWritten": [
+          "0 send",
+          "0 shown"
+        ],
+        "callsTaken": [
+          0,
+          0
+        ]
+      }
+    },
+    "connectionIrHash": [
+      "0x572df8ce2206ff29"
+    ],
+    "hello": [
+      "434f0201000123456789abcdef0123456789abcdef00010000030052185fd60992ad43029cc29962b3afb4014e6ede7cc8f5aa52ce169f9e656740e20258809aaf4b47d56c69b2c1fc9d4330c10400000100aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa010001000100bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb010002000100cccccccccccccccccccccccccccccccc010003000100dddddddddddddddddddddddddddddddd0100"
+    ],
+    "format": [
+      "PackedCodec"
+    ]
   }
 }

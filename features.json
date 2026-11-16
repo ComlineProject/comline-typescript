@@ -211,7 +211,8 @@
             "format_json",
             "dependency_protocol",
             "dependency_and_own_protocols",
-            "nested_protocol"
+            "nested_protocol",
+            "connections_subset"
           ],
           "since": null,
           "state": "supported",
@@ -303,7 +304,8 @@
             "connections_default",
             "dependency_protocol",
             "dependency_and_own_protocols",
-            "nested_protocol"
+            "nested_protocol",
+            "connections_subset"
           ],
           "since": null,
           "state": "supported",
@@ -317,7 +319,8 @@
             "connections_default",
             "dependency_protocol",
             "dependency_and_own_protocols",
-            "nested_protocol"
+            "nested_protocol",
+            "connections_subset"
           ],
           "since": null,
           "state": "supported",
@@ -340,7 +343,8 @@
             "connections_default",
             "dependency_protocol",
             "dependency_and_own_protocols",
-            "nested_protocol"
+            "nested_protocol",
+            "connections_subset"
           ],
           "since": null,
           "state": "supported",
@@ -400,7 +404,8 @@
             "validators_on_decode",
             "dependency_protocol",
             "dependency_and_own_protocols",
-            "nested_protocol"
+            "nested_protocol",
+            "connections_subset"
           ],
           "since": null,
           "state": "supported",
@@ -441,7 +446,8 @@
             "format_json",
             "dependency_protocol",
             "dependency_and_own_protocols",
-            "nested_protocol"
+            "nested_protocol",
+            "connections_subset"
           ],
           "since": null,
           "state": "supported",

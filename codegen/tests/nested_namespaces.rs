@@ -83,7 +83,7 @@ fn a_nested_protocols_path_is_spelled_with_colons() {
     let files = generated(&request(&nested_protocol()), "nested");
 
     let connection = file(&files, "connection.ts");
-    assert!(connection.contains(" * - 0 `chat::admin::Admin`, line 0.1.0: `greet` 0\n"), "{connection}");
+    assert!(connection.contains(" * - `admin`: 0 `chat::admin::Admin`, line 0.1.0: `greet` 0\n"), "{connection}");
     assert!(connection.contains("new Map<number, string>([[0, \"chat::admin::Admin\"]])"), "{connection}");
 
     let admin = file(&files, "chat/admin.ts");
@@ -153,8 +153,8 @@ fn a_dependencys_jsonrpc_method_name_does_not_refuse_generation() {
     let files = generated(&req, "clash");
     assert!(file(&files, "localdeps/greeting.ts").contains("export interface Foo"));
     let connection = file(&files, "connection.ts");
-    assert!(connection.contains("chat: ns_api.Chat;"), "{connection}");
-    assert!(connection.contains("events: ns_api.Events;"), "{connection}");
+    assert!(connection.contains("chat?: ns_api.Chat;"), "{connection}");
+    assert!(connection.contains("events?: ns_api.Events;"), "{connection}");
     assert!(!connection.contains("Foo"), "{connection}");
 
     // Two of the package's own still clash, the dependency or not.
