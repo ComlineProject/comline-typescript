@@ -2,8 +2,8 @@
   "runtime": "typescript",
   "commit": "5aa9d9ea0ba752baf078b06b7b3d4974a83539c6",
   "toolchain": "node v22.23.5",
-  "date": "2026-11-24T13:43:57Z",
-  "run": "https://github.com/ComlineProject/comline-typescript/actions/runs/45406235628",
+  "date": "2026-11-25T12:55:52Z",
+  "run": "https://github.com/ComlineProject/comline-typescript/actions/runs/45618273814",
   "targets": {},
   "proptest": {
     "cases": 20000,
