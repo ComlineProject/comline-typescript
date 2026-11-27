@@ -88,6 +88,7 @@ export {
   type ProtocolEntry,
   buildHello,
   providedEntries,
+  accepts,
   checkCall,
 } from "./comline2.js";
 export { JsonRpcConnectionFraming, JsonRpcFraming } from "./framing/jsonrpc.js";

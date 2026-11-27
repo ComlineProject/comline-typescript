@@ -197,6 +197,18 @@ export function providedEntries<Field extends string>(
   return (Object.keys(table) as Field[]).flatMap((field) => (services[field] === undefined ? [] : [table[field]]));
 }
 
+/**
+ * Whether generated code should provide `protocol` on the connection `peer`
+ * is on: the handshake accepted it, or there's no `comline@2` result to check
+ * against (`comline@1`, `none`, a connection opened by hand), where everything
+ * is provided as before. What generated `provideServices` asks, so a protocol
+ * the peer refused is skipped, not an error; `Connection.provide` itself still
+ * throws for it, for code that wires a connection by hand.
+ */
+export function accepts(peer: Peer, protocol: number): boolean {
+  return peer.extensions.get(Negotiated)?.accepts(protocol) ?? true;
+}
+
 const CAP = 1 << 16;
 
 /**

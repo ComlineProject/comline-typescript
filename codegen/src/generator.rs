@@ -1323,6 +1323,7 @@ fn package_module(
         values.push("Negotiated");
         values.push("buildHello");
         values.push("providedEntries");
+        values.push("accepts");
     }
     // What `hello_parts` has vouched for: every protocol the package's `Services`
     // provide has its entry, from which each end's Hello is built.
@@ -1397,18 +1398,26 @@ fn package_module(
         if let Some(parts) = &parts {
             s.push_str(&hello_table(table, ty, who, provided, parts)?);
         }
+        let refused = if comline2 {
+            "\n * Except any the handshake didn't accept (one the peer refused): its calls can't come, so it's skipped."
+        } else {
+            ""
+        };
         s.push_str(&format!(
             "/**\n\
-             \x20* Provide each protocol `services` holds on `conn`: the peer's calls to them come here.\n\
+             \x20* Provide each protocol `services` holds on `conn`: the peer's calls to them come here.{refused}\n\
              \x20* @internal\n\
              \x20*/\n\
              export function {provide}(conn: Connection, services: {ty}): void {{\n"
         ));
         for p in provided {
+            // Under `comline@2`, a protocol the peer refused isn't provided: its
+            // calls would never come, and that is not a reason to fail the connection.
+            let (ns, name) = (module(&p.namespace), &p.name);
+            let accepted =
+                if comline2 { format!(" && accepts(conn, {ns}.{name}Dispatcher.PROTOCOL)") } else { String::new() };
             s.push_str(&format!(
-                "    if (services.{field} !== undefined) new {}.{}Dispatcher(services.{field}).provideOn(conn);\n",
-                module(&p.namespace),
-                p.name,
+                "    if (services.{field} !== undefined{accepted}) new {ns}.{name}Dispatcher(services.{field}).provideOn(conn);\n",
                 field = camel(&p.field)
             ));
         }

@@ -111,20 +111,30 @@ test("provide refuses a protocol the Hello didn't list", async () => {
   dialler.close();
 });
 
-test("provide refuses a protocol the peer refused", async () => {
-  // The client's Hello leaves `Admin` out, so the server's `Admin` is refused.
+test("a protocol the peer refused is skipped, and calling it fails locally", async () => {
+  // An older client: its Hello leaves `Admin` out, so the server's `Admin` is refused.
   const [dialler, acceptor] = duplex();
-  const dialled = Connection.connect(dialler, Format, CONNECTION_IR_HASH, framing(), handshake([], [SERVICES_HELLO.chat]));
+  const agreed = handshake([], [SERVICES_HELLO.chat]);
+  const dialled = Connection.connect(dialler, Format, CONNECTION_IR_HASH, framing(), agreed);
   const served = accept(acceptor, { chat, admin });
-  // Settled as it rejects, which may be before the client is done.
-  const refused = assert.rejects(served, (e: unknown) => {
+  const [client, server] = await Promise.all([dialled, served]);
+  client.extensions.set(agreed.negotiated!);
+
+  // The connection is up, with `Chat` provided and `Admin` skipped, not failed.
+  assert.deepEqual(negotiated(server)?.protocols.get(2), { accepted: false, reason: "unknown_protocol" });
+  assert.equal(await new ChatSender(client).send({ text: "hey" }), 3);
+  await assert.rejects(new AdminSender(client).kick({ user: 1 }), (e: unknown) => {
     assert.ok(e instanceof RuntimeError && e.is("unavailable"));
-    assert.deepEqual(e.unavailable, { protocol: "#2", refused: "unknown_protocol" });
+    assert.deepEqual(e.unavailable, { protocol: "admin::Admin", function: "kick", refused: "unknown_protocol" });
     return true;
   });
-  await dialled;
-  await refused;
+  // Wired by hand, `provide` still refuses it.
+  assert.throws(
+    () => new AdminDispatcher(admin).provideOn(server),
+    (e: unknown) => e instanceof RuntimeError && e.is("unavailable"),
+  );
   dialler.close();
+  await server.closed;
 });
 
 test("a connection with no Hello provides anything", async () => {

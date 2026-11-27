@@ -20,6 +20,7 @@ import {
     Negotiated,
     buildHello,
     providedEntries,
+    accepts,
     type Peer,
     type ProtocolEntry,
     type Transport,
@@ -104,10 +105,11 @@ export const SERVICES_HELLO: Record<keyof Services, ProtocolEntry> = {
 
 /**
  * Provide each protocol `services` holds on `conn`: the peer's calls to them come here.
+ * Except any the handshake didn't accept (one the peer refused): its calls can't come, so it's skipped.
  * @internal
  */
 export function provideServices(conn: Connection, services: Services): void {
-    if (services.chat !== undefined) new ns_conformance.ChatDispatcher(services.chat).provideOn(conn);
+    if (services.chat !== undefined && accepts(conn, ns_conformance.ChatDispatcher.PROTOCOL)) new ns_conformance.ChatDispatcher(services.chat).provideOn(conn);
 }
 
 /**
