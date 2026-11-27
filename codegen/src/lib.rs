@@ -40,8 +40,16 @@ pub const SUPPORT: SupportTable = &[
     (Feature::Enums, Support::supported()),
     (Feature::OptionalFields, Support::supported()),
     (Feature::Arrays, Support::supported()),
-    (Feature::FixedArrays, Support::partial("rendered as `T[]`: the length isn't part of the type")),
-    (Feature::LargeFixedArraysNested, Support::partial("rendered as `T[]`: the length isn't part of the type")),
+    (
+        Feature::FixedArrays,
+        Support::partial("rendered as `T[]`: the length isn't part of the type")
+            .tracked("comline-typescript#184"),
+    ),
+    (
+        Feature::LargeFixedArraysNested,
+        Support::partial("rendered as `T[]`: the length isn't part of the type")
+            .tracked("comline-typescript#184"),
+    ),
     (Feature::Unions, Support::supported()),
     (Feature::TypeAliases, Support::supported()),
     (Feature::Constants, Support::supported()),

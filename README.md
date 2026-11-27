@@ -73,8 +73,8 @@ with the fixtures that prove each claim, is in [`FEATURES.md`](FEATURES.md)
 | enums <br><sub>`enums`</sub> | ✅ supported |
 | optional fields <br><sub>`optional-fields`</sub> | ✅ supported |
 | arrays <br><sub>`arrays`</sub> | ✅ supported |
-| fixed-length arrays <br><sub>`fixed-arrays`</sub> | 🟡 partial: rendered as `T[]`: the length isn't part of the type |
-| fixed arrays over 32 elements, nested <br><sub>`large-fixed-arrays-nested`</sub> | 🟡 partial: rendered as `T[]`: the length isn't part of the type |
+| fixed-length arrays <br><sub>`fixed-arrays`</sub> | 🟡 partial: rendered as `T[]`: the length isn't part of the type (comline-typescript#184) |
+| fixed arrays over 32 elements, nested <br><sub>`large-fixed-arrays-nested`</sub> | 🟡 partial: rendered as `T[]`: the length isn't part of the type (comline-typescript#184) |
 | unions <br><sub>`unions`</sub> | ✅ supported |
 | type aliases <br><sub>`type-aliases`</sub> | ✅ supported |
 | constants <br><sub>`constants`</sub> | ✅ supported |
