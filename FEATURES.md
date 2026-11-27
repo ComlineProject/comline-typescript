@@ -10,8 +10,8 @@ What the typescript generator implements, and the conformance fixtures that prov
 | enums <br><sub>`enums`</sub> | ✅ supported <br><sub>proven by `enum_basic`</sub> |
 | optional fields <br><sub>`optional-fields`</sub> | ✅ supported <br><sub>proven by `optional_and_arrays`, `type_refs`, `shapes` +5 more</sub> |
 | arrays <br><sub>`arrays`</sub> | ✅ supported <br><sub>proven by `optional_and_arrays`, `type_refs`, `shapes` +6 more</sub> |
-| fixed-length arrays <br><sub>`fixed-arrays`</sub> | 🟡 partial: rendered as `T[]`: the length isn't part of the type <br><sub>proven by `shapes`, `large_fixed_arrays_nested`</sub> |
-| fixed arrays over 32 elements, nested <br><sub>`large-fixed-arrays-nested`</sub> | 🟡 partial: rendered as `T[]`: the length isn't part of the type <br><sub>proven by `large_fixed_arrays_nested`</sub> |
+| fixed-length arrays <br><sub>`fixed-arrays`</sub> | 🟡 partial: rendered as `T[]`: the length isn't part of the type (comline-typescript#184) <br><sub>proven by `shapes`, `large_fixed_arrays_nested`</sub> |
+| fixed arrays over 32 elements, nested <br><sub>`large-fixed-arrays-nested`</sub> | 🟡 partial: rendered as `T[]`: the length isn't part of the type (comline-typescript#184) <br><sub>proven by `large_fixed_arrays_nested`</sub> |
 | unions <br><sub>`unions`</sub> | ✅ supported <br><sub>proven by `unions`</sub> |
 | type aliases <br><sub>`type-aliases`</sub> | ✅ supported <br><sub>proven by `validators`, `validators_on_decode`, `unions` +1 more</sub> |
 | constants <br><sub>`constants`</sub> | ✅ supported <br><sub>proven by `constant`, `shapes`, `validators` +1 more</sub> |
