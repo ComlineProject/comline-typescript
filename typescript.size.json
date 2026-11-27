@@ -9,8 +9,8 @@
       "gzip_bytes": 380721
     }
   },
-  "commit": "d13f4bdaa07d958ffcceb77420de366d16952863",
+  "commit": "57e94b9d6a81ac0c514c698c4b901ab8473991a6",
   "format": 1,
-  "run": "https://github.com/ComlineProject/comline-typescript/actions/runs/45960550843",
+  "run": "https://github.com/ComlineProject/comline-typescript/actions/runs/46048313051",
   "toolchain": "node v22.23.5"
 }
