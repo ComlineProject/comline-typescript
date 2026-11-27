@@ -32,6 +32,6 @@ What the typescript generator implements, and the conformance fixtures that prov
 | `async` <br><sub>`async`</sub> | ⚪ ignored: handlers and senders always return Promises: the output is async either way <br><sub>proven by `connections_async`</sub> |
 | the `packed@1` format <br><sub>`format-packed`</sub> | ✅ supported <br><sub>proven by `protocol`, `error_shapes`, `validators` +12 more</sub> |
 | the `json@1` format <br><sub>`format-json`</sub> | ✅ supported <br><sub>proven by `format_json`</sub> |
-| the `msgpack@1` format <br><sub>`format-msgpack`</sub> | ❌ unsupported: `@comline/runtime` has no MessagePack codec yet <br><sub>proven by `format_msgpack`</sub> |
+| the `msgpack@1` format <br><sub>`format-msgpack`</sub> | ❌ unsupported: `@comline/runtime` has no MessagePack codec yet (comline-typescript#182) <br><sub>proven by `format_msgpack`</sub> |
 | bounds <br><sub>`bounds`</sub> | ✅ supported <br><sub>proven by `bounds`</sub> |
 | single characters <br><sub>`chars`</sub> | ✅ supported <br><sub>proven by `chars`</sub> |

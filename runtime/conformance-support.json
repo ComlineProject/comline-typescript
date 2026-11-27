@@ -10,7 +10,8 @@
     "framing-jsonrpc": { "state": "supported" },
     "handshake-comline2": {
       "state": "unsupported",
-      "note": "Comline2Handshake runs on the Comline core (ABI 0.2), whose C and Node replays in the runtime repo prove these vectors; this harness doesn't drive the core's steps itself yet"
+      "note": "Comline2Handshake runs on the Comline core (ABI 0.2), whose C and Node replays in the runtime repo prove these vectors; this harness doesn't drive the core's steps itself yet",
+      "tracking": "specification#25"
     },
     "stream": {
       "state": "unsupported",
@@ -23,7 +24,7 @@
       "tracking": "comline-typescript#57",
       "failing": ["format-json/decode-unknown-variant", "format-json/decode-wider-integer-overflow"]
     },
-    "format-msgpack": { "state": "unsupported", "note": "JSON and packed@1 ship" },
+    "format-msgpack": { "state": "unsupported", "note": "JSON and packed@1 ship", "tracking": "comline-typescript#182" },
     "format-packed": { "state": "supported" },
     "sizes-packed": {
       "state": "unsupported",
