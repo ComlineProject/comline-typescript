@@ -73,7 +73,11 @@ pub const SUPPORT: SupportTable = &[
     ),
     (Feature::FormatPacked, Support::supported()),
     (Feature::FormatJson, Support::supported()),
-    (Feature::FormatMsgPack, Support::unsupported("`@comline/runtime` has no MessagePack codec yet")),
+    (
+        Feature::FormatMsgPack,
+        Support::unsupported("`@comline/runtime` has no MessagePack codec yet")
+            .tracked("comline-typescript#182"),
+    ),
     // Checked on every encode and decode through each type's `Layout`, as
     // the runtime's spec 0.3 conformance vectors prove; a named bounded
     // string is a branded `string` with a checked factory.
