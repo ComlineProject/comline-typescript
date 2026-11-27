@@ -23,22 +23,24 @@ import { CONNECTION_IR_HASH, Format } from "./wire.js";
 /** The package's wire format and the digest of every schema in it, which every file of the package shares. */
 export { CONNECTION_IR_HASH, Format } from "./wire.js";
 
-/** What the accepting side provides: one field per protocol, so leaving one out doesn't type-check. */
+/**
+ * What the accepting side provides, a field per protocol: leave one out to not provide it.
+ */
 export interface Services {
-    directory: ns_account.Directory;
+    directory?: ns_account.Directory;
 }
 
 /**
- * Provide every protocol in `services` on `conn`: the peer's calls to them come here.
+ * Provide each protocol `services` holds on `conn`: the peer's calls to them come here.
  * @internal
  */
 export function provideServices(conn: Connection, services: Services): void {
-    new ns_account.DirectoryDispatcher(services.directory).provideOn(conn);
+    if (services.directory !== undefined) new ns_account.DirectoryDispatcher(services.directory).provideOn(conn);
 }
 
 /**
 * Accept a connection over `transport`: run the handshake, then provide
-* every protocol in `services` on it. The connection comes back serving,
+* the protocols in `services` on it. The connection comes back serving,
 * so the server can call the client through it.
 */
 export async function accept(transport: Transport, services: Services): Promise<Connection> {

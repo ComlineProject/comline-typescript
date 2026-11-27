@@ -50,11 +50,15 @@ export type RefusalReason =
   | "newer_consumer"
   | "unknown_protocol";
 
-/** A call `comline@2` stopped before it was sent: which, and why. */
+/**
+ * A call `comline@2` stopped before it was sent, or a protocol it wouldn't
+ * let this end provide: which, and why.
+ */
 export interface Unavailable {
-  /** `namespace::Protocol`. */
+  /** `namespace::Protocol`; `#n` for a protocol known only by its wire number (a refused `provide`). */
   readonly protocol: string;
-  readonly function: string;
+  /** The call; absent when it's the protocol that was refused to be provided. */
+  readonly function?: string;
   /** Why the connection refused the protocol; absent when the peer lacks the function. */
   readonly refused?: RefusalReason;
 }
@@ -137,9 +141,17 @@ export class RuntimeError extends Error {
     e.message = `the ${refusal.side} refused the connection: ${refusal.reason}`;
     return Object.assign(e, { refusal });
   }
-  /** A call that wasn't sent because the peer can't take it. */
+  /**
+   * A call that wasn't sent because the peer can't take it, or (no `function`)
+   * a protocol that wasn't provided because the handshake didn't accept it.
+   */
   static unavailable(unavailable: Unavailable): RuntimeError {
     const e = new RuntimeError("unavailable");
+    if (unavailable.function === undefined) {
+      const why = unavailable.refused === undefined ? "" : ` (${unavailable.refused})`;
+      e.message = `\`${unavailable.protocol}\` wasn't provided: the handshake didn't accept it${why}`;
+      return Object.assign(e, { unavailable });
+    }
     const call = `\`${unavailable.protocol}.${unavailable.function}\``;
     e.message =
       unavailable.refused === undefined

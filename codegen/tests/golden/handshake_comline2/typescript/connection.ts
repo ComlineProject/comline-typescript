@@ -18,7 +18,11 @@ import {
     Datagram3Framing,
     Comline2Handshake,
     Negotiated,
+    buildHello,
+    providedEntries,
+    accepts,
     type Peer,
+    type ProtocolEntry,
     type Transport,
 } from "@comline/runtime";
 import * as ns_conformance from "./conformance.js";
@@ -28,31 +32,29 @@ import { CONNECTION_IR_HASH, Format } from "./wire.js";
 export { CONNECTION_IR_HASH, Format } from "./wire.js";
 
 /**
- * This end's `comline@2` Hello: version 0.1.0 of package `0123456789abcdef0123456789abcdef`, as its history
- * records it. Its protocols, by wire number:
- *
- * - 0 `conformance::Chat`, line 0.1.0: `send` 1, `leave` 0
+ * This package's `comline@2` Hello up to its list of protocols: version 0.1.0 of package
+ * `0123456789abcdef0123456789abcdef`, as its history records it. {@link buildHello} adds the protocols an end
+ * provides and calls.
  *
  * @internal
  */
-export const HELLO = new Uint8Array([
+export const HELLO_HEADER = new Uint8Array([
     0x43, 0x4f, 0x02, 0x01, 0x00, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd,
     0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x00, 0x01, 0x00,
     0x00, 0x03, 0x00, 0x52, 0x18, 0x5f, 0xd6, 0x09, 0x92, 0xad, 0x43, 0x02,
     0x9c, 0xc2, 0x99, 0x62, 0xb3, 0xaf, 0xb4, 0x01, 0x4e, 0x6e, 0xde, 0x7c,
     0xc8, 0xf5, 0xaa, 0x52, 0xce, 0x16, 0x9f, 0x9e, 0x65, 0x67, 0x40, 0xe2,
     0x02, 0x58, 0x80, 0x9a, 0xaf, 0x4b, 0x47, 0xd5, 0x6c, 0x69, 0xb2, 0xc1,
-    0xfc, 0x9d, 0x43, 0x30, 0xc1, 0x01, 0x00, 0x00, 0x01, 0x00, 0x5a, 0x5a,
-    0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a,
-    0x5a, 0x5a, 0x02, 0x00, 0x01,
+    0xfc, 0x9d, 0x43, 0x30, 0xc1,
 ]);
 
 /**
- * The `comline@2` handshake, with {@link HELLO} and the parameters the package states.
+ * The `comline@2` handshake of an end that provides `provided` and calls `called`, with their
+ * Hello ({@link HELLO_HEADER}, then those protocols) and the parameters the package states.
  * @internal
  */
-export function handshake(): Comline2Handshake {
-    return new Comline2Handshake(HELLO, {
+export function handshake(provided: readonly ProtocolEntry[], called: readonly ProtocolEntry[]): Comline2Handshake {
+    return new Comline2Handshake(buildHello(HELLO_HEADER, provided, called), {
         scope: "protocol",
         newerConsumer: "refuse",
         sameVersionDiffers: "refuse",
@@ -76,26 +78,47 @@ export function warnings(conn: Peer): string[] {
     return (negotiated(conn)?.warnings ?? []).map((n) => PROTOCOLS.get(n) ?? `#${n}`);
 }
 
-/** What the accepting side provides: one field per protocol, so leaving one out doesn't type-check. */
+/**
+ * What the accepting side provides, a field per protocol: leave one out to not provide it.
+ * The Hello lists the ones given, and the protocols the dialling side provides, which this side calls.
+ */
 export interface Services {
-    chat: ns_conformance.Chat;
+    chat?: ns_conformance.Chat;
 }
 
 /**
- * Provide every protocol in `services` on `conn`: the peer's calls to them come here.
+ * The protocols the accepting side provides, as a Hello lists each, by their field in `Services`:
+ *
+ * - `chat`: 0 `conformance::Chat`, line 0.1.0: `send` 1, `leave` 0
+ *
+ * @internal
+ */
+export const SERVICES_HELLO: Record<keyof Services, ProtocolEntry> = {
+    chat: {
+        number: 0,
+        bytes: new Uint8Array([
+            0x00, 0x00, 0x01, 0x00, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a,
+            0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x5a, 0x02, 0x00, 0x01,
+        ]),
+    },
+};
+
+/**
+ * Provide each protocol `services` holds on `conn`: the peer's calls to them come here.
+ * Except any the handshake didn't accept (one the peer refused): its calls can't come, so it's skipped.
  * @internal
  */
 export function provideServices(conn: Connection, services: Services): void {
-    new ns_conformance.ChatDispatcher(services.chat).provideOn(conn);
+    if (services.chat !== undefined && accepts(conn, ns_conformance.ChatDispatcher.PROTOCOL)) new ns_conformance.ChatDispatcher(services.chat).provideOn(conn);
 }
 
 /**
 * Accept a connection over `transport`: run the handshake, then provide
-* every protocol in `services` on it. The connection comes back serving,
+* the protocols in `services` on it. The connection comes back serving,
 * so the server can call the client through it.
 */
 export async function accept(transport: Transport, services: Services): Promise<Connection> {
-    const agreed = handshake();
+    const agreed = handshake(providedEntries(SERVICES_HELLO, services), []);
     const conn = await Connection.accept(transport, Format, CONNECTION_IR_HASH, new Datagram3Framing(), agreed);
     conn.extensions.set(agreed.negotiated!);
     provideServices(conn, services);
@@ -112,7 +135,7 @@ export async function serve(transport: Transport, services: Services): Promise<v
 * through their senders.
 */
 export async function connect(transport: Transport): Promise<Connection> {
-    const agreed = handshake();
+    const agreed = handshake([], Object.values(SERVICES_HELLO));
     const conn = await Connection.connect(transport, Format, CONNECTION_IR_HASH, new Datagram3Framing(), agreed);
     conn.extensions.set(agreed.negotiated!);
     return conn;

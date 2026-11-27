@@ -10,7 +10,9 @@
  * messages and every decision are the core's, so both runtimes agree byte
  * for byte.
  *
- * Generated code embeds this end's Hello (its facts, encoded) and the
+ * Generated code embeds this package's Hello as parts (the header and one
+ * entry per protocol, its facts encoded), builds this end's Hello from the
+ * protocols it provides and calls ({@link buildHello}) and the
  * parameters its package states, runs a {@link Comline2Handshake} when a
  * connection opens, and keeps what it agreed ({@link Negotiated}) in the
  * connection's extensions, where each sender checks a call against it before
@@ -71,6 +73,36 @@ export class Negotiated {
   ) {}
 
   /**
+   * Whether the handshake accepted `protocol` on this connection: this end's
+   * Hello listed it and neither end refused it. A protocol this end's result
+   * doesn't hold (a Hello for a subset leaves protocols out) isn't accepted,
+   * nor is one it holds as refused. Those are the protocols whose calls fail
+   * locally ({@link checkCall}) and that a connection won't
+   * {@link checkProvide}.
+   */
+  accepts(protocol: number): boolean {
+    return this.protocols.get(protocol)?.accepted === true;
+  }
+
+  /**
+   * Throws `RuntimeError("unavailable")` unless this end may provide
+   * `protocol`: the handshake accepted it ({@link accepts}). The error names
+   * the protocol by its wire number (`#1`) and why, as {@link checkCall}'s
+   * does: `unknown_protocol` for one this end's Hello didn't list, the
+   * refusal's reason for one it holds as refused. A connection's `provide`
+   * runs this on what its handshake agreed.
+   *
+   * It doesn't know direction: a Hello entry says nothing about who implements
+   * the protocol, so that a side provides only what it provides is for the
+   * generated code, which knows `@provider`.
+   */
+  checkProvide(protocol: number): void {
+    const state = this.protocols.get(protocol);
+    if (state === undefined) throw RuntimeError.unavailable({ protocol: `#${protocol}`, refused: "unknown_protocol" });
+    if (!state.accepted) throw RuntimeError.unavailable({ protocol: `#${protocol}`, refused: state.reason });
+  }
+
+  /**
    * Throws `RuntimeError("unavailable")`, naming `path` and `name`, unless
    * this end may call `fn` of `protocol`: the peer lacks the function, or the
    * protocol was refused.
@@ -95,6 +127,88 @@ export function checkCall(peer: Peer, protocol: number, fn: number, path: string
   peer.extensions.get(Negotiated)?.checkCall(protocol, fn, path, name);
 }
 
+/**
+ * One protocol's entry of a Hello, encoded as the Hello carries it: its wire
+ * number, the release it last broke at, its shape hash and its function
+ * numbers, ascending. It carries no direction: an end lists a protocol it
+ * provides and one it calls the same way, and which is which is for the
+ * generated code, which knows `@provider`. A generator emits one per protocol.
+ */
+export interface ProtocolEntry {
+  /** The protocol's wire number: what orders a Hello's entries. */
+  readonly number: number;
+  /** The entry's bytes, in the Hello's protocol list. */
+  readonly bytes: Uint8Array;
+}
+
+/**
+ * Put together the `comline@2` Hello of one end that provides `provided` and
+ * calls `called`, mirroring `Hello::build` in the Rust runtime: `header` (the
+ * Hello up to its protocol list: magic, version, exchange, the package's id
+ * and version, the encodings) and exactly those protocols' entries, ascending
+ * by wire number.
+ *
+ * - **Union.** The two sets are listed together, as the wire has one list. A
+ *   protocol in both, or an entry given twice, is listed once (the first entry
+ *   given for a number).
+ * - **Called.** A generator passes every protocol of the other side unless the
+ *   application narrowed what it calls: the peer refuses the ones it doesn't
+ *   have (`unknown_protocol`), and calls to them fail locally.
+ * - **Everything.** With every protocol of the package's connection among the
+ *   two, the result is the Hello a generator used to embed whole, byte for
+ *   byte.
+ */
+export function buildHello(
+  header: Uint8Array,
+  provided: readonly ProtocolEntry[],
+  called: readonly ProtocolEntry[],
+): Uint8Array {
+  const listed = new Map<number, ProtocolEntry>();
+  for (const entry of [...provided, ...called]) {
+    if (!listed.has(entry.number)) listed.set(entry.number, entry);
+  }
+  const entries = [...listed.values()].sort((a, b) => a.number - b.number);
+  const count: number[] = [];
+  for (let n = entries.length; ; n >>>= 7) {
+    count.push(n > 0x7f ? (n & 0x7f) | 0x80 : n);
+    if (n <= 0x7f) break;
+  }
+  const out = new Uint8Array(header.length + count.length + entries.reduce((n, e) => n + e.bytes.length, 0));
+  out.set(header);
+  out.set(count, header.length);
+  let at = header.length + count.length;
+  for (const entry of entries) {
+    out.set(entry.bytes, at);
+    at += entry.bytes.length;
+  }
+  return out;
+}
+
+/**
+ * The entries of `table` that `services` holds a value for: `table` maps each
+ * field of a generated `Services` to its protocol's entry, and a field left
+ * out (or `undefined`) is a protocol this end doesn't provide. What generated
+ * `accept` / `connect` give {@link buildHello} as `provided`.
+ */
+export function providedEntries<Field extends string>(
+  table: Readonly<Record<Field, ProtocolEntry>>,
+  services: Readonly<Partial<Record<Field, unknown>>>,
+): ProtocolEntry[] {
+  return (Object.keys(table) as Field[]).flatMap((field) => (services[field] === undefined ? [] : [table[field]]));
+}
+
+/**
+ * Whether generated code should provide `protocol` on the connection `peer`
+ * is on: the handshake accepted it, or there's no `comline@2` result to check
+ * against (`comline@1`, `none`, a connection opened by hand), where everything
+ * is provided as before. What generated `provideServices` asks, so a protocol
+ * the peer refused is skipped, not an error; `Connection.provide` itself still
+ * throws for it, for code that wires a connection by hand.
+ */
+export function accepts(peer: Peer, protocol: number): boolean {
+  return peer.extensions.get(Negotiated)?.accepts(protocol) ?? true;
+}
+
 const CAP = 1 << 16;
 
 /**
@@ -107,7 +221,7 @@ export class Comline2Handshake implements Handshake {
   readonly name = HANDSHAKE_COMLINE2;
   #negotiated: Negotiated | undefined;
 
-  /** `hello` is this end's encoded Hello message, as generated code embeds it. */
+  /** `hello` is this end's encoded Hello message: {@link buildHello}'s, from what generated code embeds. */
   constructor(
     readonly hello: Uint8Array,
     readonly params: Comline2Params = {},
@@ -115,6 +229,11 @@ export class Comline2Handshake implements Handshake {
 
   /** What the connection agreed, once the handshake succeeded. */
   get negotiated(): Negotiated | undefined {
+    return this.#negotiated;
+  }
+
+  /** {@link negotiated}, as a connection asks a handshake for it ({@link Handshake.agreed}). */
+  agreed(): Negotiated | undefined {
     return this.#negotiated;
   }
 
