@@ -1,16 +1,16 @@
 {
   "artifacts": {
     "runtime/dist/index.js": {
-      "bytes": 1772,
-      "gzip_bytes": 792
+      "bytes": 1810,
+      "gzip_bytes": 817
     },
     "runtime/npm-tarball": {
-      "bytes": 367621,
-      "gzip_bytes": 367155
+      "bytes": 381160,
+      "gzip_bytes": 380721
     }
   },
-  "commit": "5aa9d9ea0ba752baf078b06b7b3d4974a83539c6",
+  "commit": "d13f4bdaa07d958ffcceb77420de366d16952863",
   "format": 1,
-  "run": "https://github.com/ComlineProject/comline-typescript/actions/runs/43933902801",
+  "run": "https://github.com/ComlineProject/comline-typescript/actions/runs/45960550843",
   "toolchain": "node v22.23.5"
 }
